@@ -1,0 +1,1242 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}{% if lead %}Edit Opportunity{% else %}Create Opportunity{% endif %} - CRM System{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+<link rel="stylesheet" href="{% static 'css/autocomplete.css' %}">
+<style>
+/* Stage Status Bar */
+.stage-statusbar {
+    position: relative;
+    display: flex;
+    align-items: center;
+    margin: 0;
+    padding: 0;
+    border: 1px solid #e5e7eb;
+    border-radius: 6px;
+    overflow: hidden;
+    background: #f9fafb;
+}
+
+.stage-item {
+    position: relative;
+    flex: 1;
+    text-align: center;
+    padding: 14px 16px;
+    font-size: 13px;
+    font-weight: 500;
+    color: #6b7280;
+    background: transparent;
+    border-right: 1px solid #e5e7eb;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.stage-item:last-child {
+    border-right: none;
+}
+
+.stage-item:hover {
+    background: #f3f4f6;
+}
+
+.stage-item.active {
+    background: #3b82f6;
+    color: white;
+    font-weight: 600;
+    position: relative;
+}
+
+.stage-item.active::after {
+    content: '';
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    height: 3px;
+    background: #1d4ed8;
+}
+
+.stage-item.completed {
+    background: #10b981;
+    color: white;
+    font-weight: 500;
+}
+
+.stage-item.closed-won.active {
+    background: #059669;
+}
+
+.stage-item.closed-lost.active {
+    background: #dc2626;
+}
+
+/* Form Section Styles */
+.form-section {
+    background: white;
+    border: 1px solid #e5e7eb;
+    border-radius: 8px;
+    margin-bottom: 16px;
+    overflow: visible;
+}
+
+.form-section-header {
+    padding: 16px 20px;
+    border-bottom: 1px solid #e5e7eb;
+    background: #f9fafb;
+    border-radius: 8px 8px 0 0;
+}
+
+.form-section-content {
+    padding: 20px;
+    overflow: visible;
+}
+
+/* Field Styles */
+.field-group {
+    margin-bottom: 16px;
+}
+
+.field-label {
+    display: block;
+    font-size: 13px;
+    font-weight: 600;
+    color: #374151;
+    margin-bottom: 4px;
+}
+
+.field-required {
+    color: #dc2626;
+}
+
+.form-field {
+    width: 100%;
+    padding: 8px 12px;
+    border: 1px solid #d1d5db;
+    border-radius: 4px;
+    font-size: 14px;
+    transition: border-color 0.2s ease;
+}
+
+.form-field:focus {
+    outline: none;
+    border-color: #3b82f6;
+    box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+}
+
+.form-textarea {
+    resize: vertical;
+    min-height: 80px;
+}
+
+/* Form Actions */
+.form-actions {
+    position: sticky;
+    bottom: 0;
+    background: white;
+    border-top: 1px solid #e5e7eb;
+    padding: 16px 20px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.btn {
+    padding: 8px 16px;
+    border-radius: 4px;
+    font-size: 14px;
+    font-weight: 500;
+    cursor: pointer;
+    border: none;
+    transition: all 0.2s ease;
+}
+
+.btn-primary {
+    background: #3b82f6;
+    color: white;
+}
+
+.btn-primary:hover {
+    background: #2563eb;
+}
+
+.btn-secondary {
+    background: #f3f4f6;
+    color: #374151;
+    border: 1px solid #d1d5db;
+}
+
+.btn-secondary:hover {
+    background: #e5e7eb;
+}
+
+.error-message {
+    color: #dc2626;
+    font-size: 12px;
+    margin-top: 4px;
+}
+
+/* Contact Tile Styles */
+.contact-tile {
+    border: 2px solid #e5e7eb;
+    border-radius: 8px;
+    padding: 12px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    background: white;
+}
+
+.contact-tile:hover {
+    border-color: #3b82f6;
+    background: #f8fafc;
+}
+
+.contact-tile.selected {
+    border-color: #3b82f6;
+    background: #eff6ff;
+    box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+}
+
+.contact-tile.favorite {
+    border-color: #f59e0b;
+}
+
+.contact-tile.favorite:hover {
+    border-color: #d97706;
+}
+
+.contact-tile .contact-name {
+    font-weight: 600;
+    color: #374151;
+    margin-bottom: 2px;
+    display: flex;
+    align-items: center;
+}
+
+.contact-tile .contact-position {
+    font-size: 12px;
+    color: #6b7280;
+    margin-bottom: 4px;
+}
+
+.contact-tile .contact-info {
+    font-size: 11px;
+    color: #9ca3af;
+}
+
+.favorite-star {
+    color: #f59e0b;
+    margin-left: 4px;
+    font-size: 12px;
+}
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="w-full px-6 py-4">
+    <!-- Breadcrumb Navigation with Opportunity Arrows -->
+    <div class="flex justify-between items-center mb-4">
+        <nav class="flex" aria-label="Breadcrumb">
+            <ol class="inline-flex items-center space-x-1 md:space-x-3">
+                <li class="inline-flex items-center">
+                    <a href="{% url 'crm:kanban_board' %}" class="inline-flex items-center text-sm font-medium text-gray-700 hover:text-indigo-600">
+                        <svg class="w-4 h-4 mr-2" fill="currentColor" viewBox="0 0 20 20">
+                            <path d="M10.707 2.293a1 1 0 00-1.414 0l-7 7a1 1 0 001.414 1.414L4 10.414V17a1 1 0 001 1h2a1 1 0 001-1v-2a1 1 0 011-1h2a1 1 0 011 1v2a1 1 0 001 1h2a1 1 0 001-1v-6.586l.293.293a1 1 0 001.414-1.414l-7-7z"></path>
+                        </svg>
+                        Pipeline
+                    </a>
+                </li>
+                <li>
+                    <div class="flex items-center">
+                        <svg class="w-6 h-6 text-gray-400" fill="currentColor" viewBox="0 0 20 20">
+                            <path fill-rule="evenodd" d="M7.293 14.707a1 1 0 010-1.414L10.586 10 7.293 6.707a1 1 0 011.414-1.414l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0z" clip-rule="evenodd"></path>
+                        </svg>
+                        <span class="ml-1 text-sm font-medium text-gray-500 md:ml-2">{% if lead %}Edit Opportunity{% else %}New Opportunity{% endif %}</span>
+                    </div>
+                </li>
+            </ol>
+        </nav>
+
+        {% if lead and total_leads_count > 0 %}
+        <!-- Opportunity Navigation Arrows -->
+        <div class="flex items-center gap-2">
+            <span class="text-sm text-gray-500">{{ current_lead_index }} / {{ total_leads_count }}</span>
+            <div class="flex items-center">
+                {% if prev_lead_id %}
+                <a href="{% url 'crm:opportunity_edit' prev_lead_id %}{{ nav_params }}"
+                   class="p-2 rounded-md border border-gray-300 bg-white hover:bg-gray-50 text-gray-700 transition-colors"
+                   title="Previous opportunity">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"></path>
+                    </svg>
+                </a>
+                {% else %}
+                <span class="p-2 rounded-md border border-gray-200 bg-gray-50 text-gray-300 cursor-not-allowed">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"></path>
+                    </svg>
+                </span>
+                {% endif %}
+
+                {% if next_lead_id %}
+                <a href="{% url 'crm:opportunity_edit' next_lead_id %}{{ nav_params }}"
+                   class="p-2 rounded-md border border-gray-300 bg-white hover:bg-gray-50 text-gray-700 transition-colors ml-1"
+                   title="Next opportunity">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path>
+                    </svg>
+                </a>
+                {% else %}
+                <span class="p-2 rounded-md border border-gray-200 bg-gray-50 text-gray-300 cursor-not-allowed ml-1">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path>
+                    </svg>
+                </span>
+                {% endif %}
+            </div>
+        </div>
+        {% endif %}
+    </div>
+
+    <form method="post" id="lead-form">
+        {% csrf_token %}
+
+        <!-- Header with stage selector -->
+        <div class="bg-white border border-gray-200 rounded-lg mb-6">
+            <!-- Stage Status Bar -->
+            <div class="px-6 py-4">
+                <div class="stage-statusbar" id="stage-statusbar">
+                    <!-- Stages will be populated by JavaScript -->
+                </div>
+                <!-- Hidden stage field -->
+                <div class="hidden">
+                    {{ form.stage }}
+                </div>
+            </div>
+        </div>
+
+        <!-- Top Horizontal Sections -->
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
+            <!-- Opportunity Information Section -->
+            <div class="form-section">
+                <div class="form-section-header">
+                    <h3 class="font-semibold text-gray-900">Opportunity Information</h3>
+                </div>
+                <div class="form-section-content">
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div class="md:col-span-2 field-group">
+                            <label class="field-label">
+                                Opportunity Name <span class="field-required">*</span>
+                            </label>
+                            {{ form.title }}
+                            {% if form.title.errors %}
+                                <div class="error-message">{{ form.title.errors.0 }}</div>
+                            {% endif %}
+                        </div>
+
+                        <div class="field-group">
+                            <label class="field-label">
+                                Customer <span class="field-required">*</span>
+                            </label>
+                            {{ form.company }}
+                            <input type="hidden" id="company-id" name="company_id" value="{% if lead and lead.company %}{{ lead.company.id }}{% endif %}">
+                            {% if form.company.errors %}
+                                <div class="error-message">{{ form.company.errors.0 }}</div>
+                            {% endif %}
+                            <p class="text-xs text-gray-500 mt-1">Type company name - select existing or create new</p>
+                        </div>
+
+                        <div class="field-group">
+                            <label class="field-label">Expected Revenue</label>
+                            {{ form.estimated_value }}
+                            {% if form.estimated_value.errors %}
+                                <div class="error-message">{{ form.estimated_value.errors.0 }}</div>
+                            {% endif %}
+                        </div>
+
+                        <div class="field-group">
+                            <label class="field-label">Probability (%)</label>
+                            {{ form.probability }}
+                            {% if form.probability.errors %}
+                                <div class="error-message">{{ form.probability.errors.0 }}</div>
+                            {% endif %}
+                        </div>
+
+                        <div class="field-group">
+                            <label class="field-label">Expected Closing</label>
+                            {{ form.expected_close_date }}
+                            {% if form.expected_close_date.errors %}
+                                <div class="error-message">{{ form.expected_close_date.errors.0 }}</div>
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Contact Information Section -->
+            <div class="form-section hidden" id="contact-information-section">
+                <!-- Contact Selection Page -->
+                <div id="contact-selection-page">
+                    <div class="form-section-header">
+                        <h3 class="font-semibold text-gray-900">Contact Information</h3>
+                        <p class="text-sm text-gray-600 mt-1">Select a contact or create new</p>
+                    </div>
+                    <div class="form-section-content">
+                        <!-- No Company Selected State -->
+                        <div id="no-company-state" class="text-center py-8">
+                            <i class="fas fa-building text-gray-400 text-3xl mb-3"></i>
+                            <p class="text-gray-600">Please select a company first to view contacts</p>
+                        </div>
+
+                        <!-- No Contacts State -->
+                        <div id="no-contacts-state" class="hidden text-center py-8">
+                            <div class="w-16 h-16 mx-auto mb-4 bg-green-100 rounded-full flex items-center justify-center">
+                                <i class="fas fa-user-plus text-green-600 text-xl"></i>
+                            </div>
+                            <h4 class="text-lg font-medium text-gray-900 mb-2">No contacts for this company</h4>
+                            <p class="text-gray-500 mb-4">Create the first contact for this company</p>
+                            <button type="button"
+                                    onclick="createNewContact()"
+                                    class="bg-green-600 hover:bg-green-700 text-white px-6 py-3 rounded-md font-medium inline-flex items-center">
+                                <i class="fas fa-user-plus mr-2"></i>Create Contact
+                            </button>
+                        </div>
+
+                        <!-- Contact Grid -->
+                        <div id="contacts-grid" class="hidden">
+                            <div class="flex justify-between items-center mb-4">
+                                <h4 class="font-medium text-gray-900">Available Contacts</h4>
+                                <button type="button"
+                                        onclick="createNewContact()"
+                                        class="bg-green-600 hover:bg-green-700 text-white px-3 py-1 rounded text-sm font-medium inline-flex items-center">
+                                    <i class="fas fa-plus mr-1"></i>New Contact
+                                </button>
+                            </div>
+                            <div id="contact-tiles" class="grid grid-cols-1 md:grid-cols-2 gap-3 mb-4">
+                                <!-- Contact tiles will be populated here -->
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Contact Details Page -->
+                <div id="contact-details-page" class="hidden">
+                    <div class="form-section-header">
+                        <div class="flex justify-between items-center">
+                            <h3 class="font-semibold text-gray-900">Contact Information</h3>
+                            <button type="button"
+                                    onclick="showContactSelection()"
+                                    class="text-blue-600 hover:text-blue-700 text-sm font-medium inline-flex items-center">
+                                <i class="fas fa-arrow-left mr-2"></i>Choose Another Contact
+                            </button>
+                        </div>
+                    </div>
+                    <div class="form-section-content">
+                        <!-- Contact Form Fields -->
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <div class="field-group">
+                                <label class="field-label">Contact Name</label>
+                                {{ form.full_name }}
+                                {% if form.full_name.errors %}
+                                    <div class="error-message">{{ form.full_name.errors.0 }}</div>
+                                {% endif %}
+                            </div>
+
+                            <div class="field-group">
+                                <label class="field-label">Job Position</label>
+                                {{ form.position }}
+                                {% if form.position.errors %}
+                                    <div class="error-message">{{ form.position.errors.0 }}</div>
+                                {% endif %}
+                            </div>
+
+                            <div class="field-group">
+                                <label class="field-label">Email</label>
+                                {{ form.email }}
+                                {% if form.email.errors %}
+                                    <div class="error-message">{{ form.email.errors.0 }}</div>
+                                {% endif %}
+                            </div>
+
+                            <div class="field-group">
+                                <label class="field-label">Phone</label>
+                                {{ form.phone }}
+                                {% if form.phone.errors %}
+                                    <div class="error-message">{{ form.phone.errors.0 }}</div>
+                                {% endif %}
+                            </div>
+                        </div>
+
+                        <!-- Hidden fields for contact management -->
+                        <input type="hidden" id="selected-contact-id" name="selected_contact_id" value="{% if selected_contact_id %}{{ selected_contact_id }}{% endif %}">
+                        <input type="hidden" id="contact-mode" name="contact_mode" value="">
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Bottom Tabs Section -->
+        <div class="bg-white border border-gray-200 rounded-lg shadow-sm">
+            <!-- Tab Navigation -->
+            <div class="border-b border-gray-200">
+                <nav class="flex space-x-8 px-6" aria-label="Tabs">
+                    <button type="button"
+                            class="tab-button active py-4 px-1 border-b-2 border-indigo-500 font-medium text-sm text-indigo-600"
+                            data-tab="notes"
+                            onclick="switchTab('notes')">
+                        Internal Notes
+                    </button>
+                    <button type="button"
+                            class="tab-button py-4 px-1 border-b-2 border-transparent font-medium text-sm text-gray-500 hover:text-gray-700 hover:border-gray-300"
+                            data-tab="other-info"
+                            onclick="switchTab('other-info')">
+                        Other Information
+                    </button>
+                    {% if lead %}
+                    <button type="button"
+                            class="tab-button py-4 px-1 border-b-2 border-transparent font-medium text-sm text-gray-500 hover:text-gray-700 hover:border-gray-300"
+                            data-tab="activities"
+                            onclick="switchTab('activities')">
+                        Activities {% if activities %}({{ activities.count }}){% endif %}
+                    </button>
+                    {% endif %}
+                </nav>
+            </div>
+
+            <!-- Tab Content -->
+            <div class="p-6">
+                <!-- Notes Tab -->
+                <div id="tab-notes" class="tab-content active">
+                    <div class="field-group">
+                        <label class="field-label">Internal Notes</label>
+                        {{ form.notes }}
+                        {% if form.notes.errors %}
+                            <div class="error-message">{{ form.notes.errors.0 }}</div>
+                        {% endif %}
+                    </div>
+                </div>
+
+                <!-- Other Information Tab -->
+                <div id="tab-other-info" class="tab-content hidden">
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <div class="field-group">
+                            <label class="field-label">Salesperson</label>
+                            {{ form.assigned_to }}
+                            <input type="hidden" id="assigned-to-id" name="assigned_to_id" value="{% if lead and lead.assigned_to %}{{ lead.assigned_to.id }}{% endif %}">
+                            {% if form.assigned_to.errors %}
+                                <div class="error-message">{{ form.assigned_to.errors.0 }}</div>
+                            {% endif %}
+                        </div>
+
+                        {% if lead %}
+                        <div class="field-group">
+                            <label class="field-label">Created</label>
+                            <p class="form-field bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg p-2.5">{{ lead.created_at|date:"M d, Y H:i" }}</p>
+                        </div>
+
+                        <div class="field-group">
+                            <label class="field-label">Created By</label>
+                            <p class="form-field bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg p-2.5">{{ lead.created_by.get_full_name|default:lead.created_by.username }}</p>
+                        </div>
+
+                        <div class="field-group">
+                            <label class="field-label">Last Updated</label>
+                            <p class="form-field bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg p-2.5">{{ lead.updated_at|date:"M d, Y H:i" }}</p>
+                        </div>
+                        {% endif %}
+                    </div>
+                </div>
+
+                <!-- Activities Tab -->
+                {% if lead %}
+                <div id="tab-activities" class="tab-content hidden">
+                    <div class="flex justify-between items-center mb-4">
+                        <h4 class="font-medium text-gray-900">Activities</h4>
+                        <div class="relative">
+                            <button type="button"
+                                    id="add-activity-btn"
+                                    onclick="toggleActivityDropdown()"
+                                    class="inline-flex items-center px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-md text-sm font-medium">
+                                <i class="fas fa-plus mr-2"></i>Add Activity
+                            </button>
+
+                            <!-- Activity Dropdown Form -->
+                            <div id="activity-dropdown"
+                                 class="hidden absolute right-0 mt-2 w-96 bg-white rounded-lg shadow-lg border border-gray-200 z-50">
+                                <div class="p-4">
+                                    <div class="flex justify-between items-center mb-4">
+                                        <h5 class="font-semibold text-gray-900">New Activity</h5>
+                                        <button type="button" onclick="toggleActivityDropdown()" class="text-gray-400 hover:text-gray-600">
+                                            <i class="fas fa-times"></i>
+                                        </button>
+                                    </div>
+
+                                    <div class="space-y-4">
+                                        <div>
+                                            <label class="block text-sm font-medium text-gray-700 mb-1">Type</label>
+                                            <select id="activity-type" class="form-field w-full">
+                                                <option value="">Select type...</option>
+                                                {% for type in activity_types %}
+                                                <option value="{{ type.id }}">{{ type.name }}</option>
+                                                {% endfor %}
+                                            </select>
+                                        </div>
+
+                                        <div>
+                                            <label class="block text-sm font-medium text-gray-700 mb-1">Title</label>
+                                            <input type="text" id="activity-title" class="form-field w-full" placeholder="Activity title...">
+                                        </div>
+
+                                        <div>
+                                            <label class="block text-sm font-medium text-gray-700 mb-1">Description</label>
+                                            <textarea id="activity-description" class="form-field w-full" rows="2" placeholder="Optional description..."></textarea>
+                                        </div>
+
+                                        <div>
+                                            <label class="block text-sm font-medium text-gray-700 mb-1">Date</label>
+                                            <input type="date" id="activity-date" class="form-field w-full">
+                                        </div>
+
+                                        <div class="flex justify-end gap-2 pt-2">
+                                            <button type="button" onclick="toggleActivityDropdown()" class="px-4 py-2 text-sm text-gray-600 hover:text-gray-800">
+                                                Cancel
+                                            </button>
+                                            <button type="button" onclick="saveQuickActivity()" class="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-md text-sm font-medium">
+                                                Save Activity
+                                            </button>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    {% if activities %}
+                    <div class="space-y-3">
+                        {% for activity in activities %}
+                        <div class="border border-gray-200 rounded-lg p-4 hover:bg-gray-50 transition-colors">
+                            <div class="flex justify-between items-start">
+                                <div class="flex-1">
+                                    <div class="flex items-center gap-2 mb-1">
+                                        <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium
+                                            {% if activity.activity_type.name == 'Call' %}bg-blue-100 text-blue-800
+                                            {% elif activity.activity_type.name == 'Meeting' %}bg-purple-100 text-purple-800
+                                            {% elif activity.activity_type.name == 'Email' %}bg-green-100 text-green-800
+                                            {% elif activity.activity_type.name == 'Task' %}bg-yellow-100 text-yellow-800
+                                            {% else %}bg-gray-100 text-gray-800{% endif %}">
+                                            <i class="fas
+                                                {% if activity.activity_type.name == 'Call' %}fa-phone
+                                                {% elif activity.activity_type.name == 'Meeting' %}fa-users
+                                                {% elif activity.activity_type.name == 'Email' %}fa-envelope
+                                                {% elif activity.activity_type.name == 'Task' %}fa-tasks
+                                                {% else %}fa-calendar{% endif %} mr-1"></i>
+                                            {{ activity.activity_type.name }}
+                                        </span>
+                                        <span class="text-xs text-gray-500">
+                                            {{ activity.scheduled_date|date:"M d, Y" }}
+                                            {% if activity.scheduled_time %}at {{ activity.scheduled_time|time:"H:i" }}{% endif %}
+                                        </span>
+                                        {% if activity.is_done %}
+                                        <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                                            <i class="fas fa-check mr-1"></i>Done
+                                        </span>
+                                        {% endif %}
+                                    </div>
+                                    <h5 class="font-medium text-gray-900">{{ activity.summary }}</h5>
+                                    {% if activity.note %}
+                                    <p class="text-sm text-gray-600 mt-1">{{ activity.note|truncatewords:30 }}</p>
+                                    {% endif %}
+                                    {% if activity.assigned_to %}
+                                    <p class="text-xs text-gray-500 mt-2">
+                                        <i class="fas fa-user mr-1"></i>{{ activity.assigned_to.get_full_name|default:activity.assigned_to.username }}
+                                    </p>
+                                    {% endif %}
+                                </div>
+                                <a href="{% url 'activities:activity_edit' activity.pk %}?from={% url 'crm:opportunity_edit' lead.pk %}&from_title={{ lead.title|urlencode }}"
+                                   class="text-gray-400 hover:text-indigo-600 ml-4">
+                                    <i class="fas fa-edit"></i>
+                                </a>
+                            </div>
+                        </div>
+                        {% endfor %}
+                    </div>
+                    {% else %}
+                    <div class="text-center py-8">
+                        <div class="w-16 h-16 mx-auto mb-4 bg-gray-100 rounded-full flex items-center justify-center">
+                            <i class="fas fa-calendar-alt text-gray-400 text-2xl"></i>
+                        </div>
+                        <h4 class="text-lg font-medium text-gray-900 mb-2">No activities yet</h4>
+                        <p class="text-gray-500">Schedule your first activity for this opportunity</p>
+                    </div>
+                    {% endif %}
+                </div>
+                {% endif %}
+            </div>
+        </div>
+
+        <!-- Form Actions -->
+        <div id="form-actions" class="form-actions mt-6 {% if lead %}hidden{% endif %}">
+            <div>
+                <a href="{% url 'crm:kanban_board' %}" class="btn btn-secondary">Discard</a>
+            </div>
+            <div class="space-x-2">
+                <button type="submit" class="btn btn-primary">
+                    {% if lead %}Save{% else %}Create{% endif %}
+                </button>
+            </div>
+        </div>
+    </form>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="{% static 'js/autocomplete.js' %}?v=2"></script>
+<script>
+// Contact management data
+const contactsByCompany = {{ contacts_by_company_json|safe }};
+let currentCompanyContacts = [];
+let selectedContact = null;
+const existingContactId = {% if selected_contact_id %}{{ selected_contact_id }}{% else %}null{% endif %};
+
+document.addEventListener('DOMContentLoaded', function() {
+    const stageField = document.getElementById('{{ form.stage.id_for_label }}');
+    const probabilityField = document.getElementById('{{ form.probability.id_for_label }}');
+    const statusBar = document.getElementById('stage-statusbar');
+    const companyIdField = document.getElementById('company-id');
+
+    // Stage data from the backend
+    const stages = [
+        {% for stage in stages %}
+        {
+            id: {{ stage.id }},
+            name: '{{ stage.name }}',
+            order: {{ stage.order }},
+            probability: {{ stage.probability }},
+            color: '{{ stage.color }}'
+        }{% if not forloop.last %},{% endif %}
+        {% endfor %}
+    ];
+
+    function renderStatusBar() {
+        const currentStageId = parseInt(stageField.value);
+        statusBar.innerHTML = '';
+
+        stages.forEach((stage, index) => {
+            const stageElement = document.createElement('div');
+            stageElement.className = 'stage-item';
+            stageElement.textContent = stage.name;
+            stageElement.dataset.stageId = stage.id;
+            stageElement.dataset.probability = stage.probability;
+
+            // Set active/completed states
+            if (stage.id === currentStageId) {
+                stageElement.classList.add('active');
+            } else if (stage.order < stages.find(s => s.id === currentStageId)?.order) {
+                stageElement.classList.add('completed');
+            }
+
+            // Special styling for closed stages
+            if (stage.name === 'Closed Won') {
+                stageElement.classList.add('closed-won');
+            } else if (stage.name === 'Closed Lost') {
+                stageElement.classList.add('closed-lost');
+            }
+
+            stageElement.addEventListener('click', function() {
+                stageField.value = stage.id;
+                probabilityField.value = stage.probability;
+                renderStatusBar();
+                checkFormChanges();
+            });
+
+            statusBar.appendChild(stageElement);
+        });
+    }
+
+    // Initial render
+    renderStatusBar();
+
+    // Update probability when stage changes
+    stageField.addEventListener('change', function() {
+        const selectedStage = stages.find(s => s.id === parseInt(this.value));
+        if (selectedStage) {
+            probabilityField.value = selectedStage.probability;
+        }
+        renderStatusBar();
+    });
+
+    // Add proper form field classes
+    const formFields = document.querySelectorAll('input, select, textarea');
+    formFields.forEach(field => {
+        if (!field.classList.contains('btn') && !field.classList.contains('autocomplete-input')) {
+            field.classList.add('form-field');
+            if (field.tagName === 'TEXTAREA') {
+                field.classList.add('form-textarea');
+            }
+        }
+    });
+
+    // Listen for autocomplete events on the company field
+    const companyInput = document.querySelector('[data-autocomplete="true"][data-model="contacts.Company"]');
+    if (companyInput) {
+        // Handle company selection
+        companyInput.addEventListener('autocomplete:select', function(e) {
+            const { id, display, item } = e.detail;
+            companyIdField.value = id;
+            updateContactSection(id);
+            checkFormChanges();
+        });
+
+        // Handle company creation request
+        companyInput.addEventListener('autocomplete:create', async function(e) {
+            const { name } = e.detail;
+            try {
+                const response = await fetch('/crm/api/company/create/', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value,
+                    },
+                    body: JSON.stringify({ name: name }),
+                });
+                const data = await response.json();
+                if (data.success) {
+                    companyIdField.value = data.company.id;
+                    companyInput.value = data.company.name;
+                    // Update the hidden ID field in the autocomplete wrapper
+                    const idInput = companyInput.closest('.autocomplete-wrapper')?.querySelector('input[type="hidden"]');
+                    if (idInput) idInput.value = data.company.id;
+                    // Update view button
+                    const viewBtn = companyInput.closest('.autocomplete-wrapper')?.querySelector('.autocomplete-view-btn');
+                    if (viewBtn) {
+                        viewBtn.href = `/contacts/companies/${data.company.id}/`;
+                        viewBtn.classList.add('visible');
+                    }
+                    updateContactSection(data.company.id);
+                }
+            } catch (error) {
+                console.error('Error creating company:', error);
+            }
+            checkFormChanges();
+        });
+
+        // Handle company clear
+        companyInput.addEventListener('autocomplete:clear', function(e) {
+            companyIdField.value = '';
+            updateContactSection(null);
+            checkFormChanges();
+        });
+
+        // Initialize with existing company
+        {% if lead and lead.company %}
+        companyIdField.value = '{{ lead.company.id }}';
+        // Set initial value in autocomplete's hidden ID field
+        setTimeout(() => {
+            const idInput = companyInput.closest('.autocomplete-wrapper')?.querySelector('input[type="hidden"]');
+            if (idInput) idInput.value = '{{ lead.company.id }}';
+            const viewBtn = companyInput.closest('.autocomplete-wrapper')?.querySelector('.autocomplete-view-btn');
+            if (viewBtn) {
+                viewBtn.href = '/contacts/companies/{{ lead.company.id }}/';
+                viewBtn.classList.add('visible');
+            }
+        }, 100);
+        {% endif %}
+    }
+
+    // Listen for autocomplete events on the assigned_to field
+    const assignedToInput = document.querySelector('[data-autocomplete="true"][data-model="core.User"]');
+    const assignedToIdField = document.getElementById('assigned-to-id');
+    if (assignedToInput && assignedToIdField) {
+        assignedToInput.addEventListener('autocomplete:select', function(e) {
+            const { id, display, item } = e.detail;
+            assignedToIdField.value = id;
+            checkFormChanges();
+        });
+
+        assignedToInput.addEventListener('autocomplete:clear', function(e) {
+            assignedToIdField.value = '';
+            checkFormChanges();
+        });
+
+        // Initialize with existing assigned_to
+        {% if lead and lead.assigned_to %}
+        assignedToIdField.value = '{{ lead.assigned_to.id }}';
+        setTimeout(() => {
+            const idInput = assignedToInput.closest('.autocomplete-wrapper')?.querySelector('input[type="hidden"]');
+            if (idInput) idInput.value = '{{ lead.assigned_to.id }}';
+        }, 100);
+        {% endif %}
+    }
+
+    // Initialize contact section
+    if (companyIdField && companyIdField.value) {
+        updateContactSection(companyIdField.value);
+        if (existingContactId) {
+            setTimeout(() => selectContactTile(existingContactId, false), 200);
+        }
+    } else {
+        updateContactSection(null);
+    }
+
+    // Capture original form values for change detection
+    captureOriginalFormValues();
+    attachChangeListeners();
+});
+
+// Update contact section based on company selection
+function updateContactSection(companyId = null) {
+    const contactSection = document.getElementById('contact-information-section');
+    const selectionPage = document.getElementById('contact-selection-page');
+    const detailsPage = document.getElementById('contact-details-page');
+    const noCompanyState = document.getElementById('no-company-state');
+    const noContactsState = document.getElementById('no-contacts-state');
+    const contactsGrid = document.getElementById('contacts-grid');
+
+    // Always show contact section and selection page
+    contactSection.classList.remove('hidden');
+    selectionPage.classList.remove('hidden');
+    detailsPage.classList.add('hidden');
+
+    // Hide all states first
+    noCompanyState.classList.add('hidden');
+    noContactsState.classList.add('hidden');
+    contactsGrid.classList.add('hidden');
+
+    if (!companyId) {
+        noCompanyState.classList.remove('hidden');
+        currentCompanyContacts = [];
+        selectedContact = null;
+        return;
+    }
+
+    // Get contacts for this company
+    currentCompanyContacts = contactsByCompany[companyId] || [];
+
+    if (currentCompanyContacts.length === 0) {
+        noContactsState.classList.remove('hidden');
+    } else {
+        contactsGrid.classList.remove('hidden');
+        renderContactTiles();
+
+        // Auto-select favorite contact if available
+        const favoriteContact = currentCompanyContacts.find(c => c.is_favorite);
+        if (favoriteContact) {
+            setTimeout(() => selectContactTile(favoriteContact.id, true), 100);
+        }
+    }
+}
+
+// Render contact tiles in the grid
+function renderContactTiles() {
+    const tilesContainer = document.getElementById('contact-tiles');
+    tilesContainer.innerHTML = '';
+
+    currentCompanyContacts.forEach(contact => {
+        const tile = document.createElement('div');
+        tile.className = `contact-tile ${contact.is_favorite ? 'favorite' : ''}`;
+        tile.dataset.contactId = contact.id;
+        tile.onclick = () => selectContactTile(contact.id);
+
+        const favoriteIcon = contact.is_favorite ? '<i class="fas fa-star favorite-star"></i>' : '';
+
+        tile.innerHTML = `
+            <div class="contact-name">
+                ${contact.name}
+                ${favoriteIcon}
+            </div>
+            <div class="contact-position">${contact.position || 'No position'}</div>
+            <div class="contact-info">
+                ${contact.email || contact.phone || contact.mobile || 'No contact info'}
+            </div>
+        `;
+
+        tilesContainer.appendChild(tile);
+    });
+}
+
+// Select a contact tile and show details
+function selectContactTile(contactId, autoSelect = false) {
+    selectedContact = currentCompanyContacts.find(c => c.id == contactId);
+    if (!selectedContact) return;
+
+    document.getElementById('selected-contact-id').value = contactId;
+    showContactDetailsPage(selectedContact, autoSelect);
+
+    if (!autoSelect) {
+        setTimeout(() => checkFormChanges(), 150);
+    }
+}
+
+// Show contact details page
+function showContactDetailsPage(contact, autoSelect = false) {
+    const selectionPage = document.getElementById('contact-selection-page');
+    const detailsPage = document.getElementById('contact-details-page');
+    const contactModeField = document.getElementById('contact-mode');
+
+    selectionPage.classList.add('hidden');
+    detailsPage.classList.remove('hidden');
+
+    populateContactFields(contact);
+    contactModeField.value = autoSelect ? 'auto-select' : 'select';
+}
+
+// Show contact selection page
+function showContactSelection() {
+    const selectionPage = document.getElementById('contact-selection-page');
+    const detailsPage = document.getElementById('contact-details-page');
+
+    selectionPage.classList.remove('hidden');
+    detailsPage.classList.add('hidden');
+
+    selectedContact = null;
+    document.getElementById('selected-contact-id').value = '';
+}
+
+// Populate contact form fields
+function populateContactFields(contact) {
+    const fullNameField = document.getElementById('{{ form.full_name.id_for_label }}');
+    const emailField = document.getElementById('{{ form.email.id_for_label }}');
+    const phoneField = document.getElementById('{{ form.phone.id_for_label }}');
+    const positionField = document.getElementById('{{ form.position.id_for_label }}');
+
+    if (fullNameField) fullNameField.value = contact.name || '';
+    if (emailField) emailField.value = contact.email || '';
+    if (phoneField) phoneField.value = contact.phone || contact.mobile || '';
+    if (positionField) positionField.value = contact.position || '';
+
+    if (isEditMode) {
+        setTimeout(() => {
+            captureOriginalFormValues();
+            checkFormChanges();
+        }, 100);
+    }
+}
+
+// Create new contact
+function createNewContact() {
+    selectedContact = null;
+    const contactModeField = document.getElementById('contact-mode');
+    const selectedContactIdField = document.getElementById('selected-contact-id');
+    const selectionPage = document.getElementById('contact-selection-page');
+    const detailsPage = document.getElementById('contact-details-page');
+
+    clearContactFields();
+    contactModeField.value = 'create';
+    selectedContactIdField.value = '';
+
+    selectionPage.classList.add('hidden');
+    detailsPage.classList.remove('hidden');
+}
+
+// Clear contact form fields
+function clearContactFields() {
+    const fullNameField = document.getElementById('{{ form.full_name.id_for_label }}');
+    const emailField = document.getElementById('{{ form.email.id_for_label }}');
+    const phoneField = document.getElementById('{{ form.phone.id_for_label }}');
+    const positionField = document.getElementById('{{ form.position.id_for_label }}');
+
+    if (fullNameField) fullNameField.value = '';
+    if (emailField) emailField.value = '';
+    if (phoneField) phoneField.value = '';
+    if (positionField) positionField.value = '';
+}
+
+// Form change detection
+let originalFormValues = {};
+const isEditMode = {% if lead %}true{% else %}false{% endif %};
+
+function captureOriginalFormValues() {
+    const form = document.getElementById('lead-form');
+    if (!form) return;
+
+    const formElements = form.querySelectorAll('input, select, textarea');
+    formElements.forEach(element => {
+        if (element.type === 'checkbox' || element.type === 'radio') {
+            originalFormValues[element.name] = element.checked;
+        } else {
+            originalFormValues[element.name] = element.value;
+        }
+    });
+}
+
+function checkFormChanges() {
+    if (!isEditMode) return;
+
+    const form = document.getElementById('lead-form');
+    if (!form) return;
+
+    const formElements = form.querySelectorAll('input, select, textarea');
+    let hasChanges = false;
+
+    for (let element of formElements) {
+        let currentValue;
+        if (element.type === 'checkbox' || element.type === 'radio') {
+            currentValue = element.checked;
+        } else {
+            currentValue = element.value;
+        }
+
+        const originalValue = originalFormValues[element.name];
+        if (currentValue !== originalValue) {
+            hasChanges = true;
+            break;
+        }
+    }
+
+    const formActions = document.getElementById('form-actions');
+    if (formActions) {
+        if (hasChanges) {
+            formActions.classList.remove('hidden');
+        } else {
+            formActions.classList.add('hidden');
+        }
+    }
+}
+
+function attachChangeListeners() {
+    const form = document.getElementById('lead-form');
+    if (!form) return;
+
+    const formElements = form.querySelectorAll('input, select, textarea');
+    formElements.forEach(element => {
+        element.addEventListener('input', checkFormChanges);
+        element.addEventListener('change', checkFormChanges);
+    });
+}
+
+// Tab switching functionality
+function switchTab(tabName) {
+    document.querySelectorAll('.tab-content').forEach(content => {
+        content.classList.add('hidden');
+        content.classList.remove('active');
+    });
+
+    document.querySelectorAll('.tab-button').forEach(button => {
+        button.classList.remove('active', 'border-indigo-500', 'text-indigo-600');
+        button.classList.add('border-transparent', 'text-gray-500');
+    });
+
+    const selectedContent = document.getElementById(`tab-${tabName}`);
+    if (selectedContent) {
+        selectedContent.classList.remove('hidden');
+        selectedContent.classList.add('active');
+    }
+
+    const selectedButton = document.querySelector(`[data-tab="${tabName}"]`);
+    if (selectedButton) {
+        selectedButton.classList.add('active', 'border-indigo-500', 'text-indigo-600');
+        selectedButton.classList.remove('border-transparent', 'text-gray-500');
+    }
+}
+
+// Activity dropdown functionality
+function toggleActivityDropdown() {
+    const dropdown = document.getElementById('activity-dropdown');
+    if (dropdown) {
+        dropdown.classList.toggle('hidden');
+
+        // Set default date to today when opening
+        if (!dropdown.classList.contains('hidden')) {
+            const dateInput = document.getElementById('activity-date');
+            if (dateInput && !dateInput.value) {
+                dateInput.value = new Date().toISOString().split('T')[0];
+            }
+        }
+    }
+}
+
+// Close dropdown when clicking outside
+document.addEventListener('click', function(event) {
+    const dropdown = document.getElementById('activity-dropdown');
+    const addButton = document.getElementById('add-activity-btn');
+
+    if (dropdown && !dropdown.contains(event.target) && event.target !== addButton && !addButton.contains(event.target)) {
+        dropdown.classList.add('hidden');
+    }
+});
+
+// Keyboard navigation for opportunities
+{% if lead and total_leads_count > 0 %}
+document.addEventListener('keydown', function(e) {
+    // Don't navigate if user is typing in an input field
+    if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' || e.target.tagName === 'SELECT') {
+        return;
+    }
+
+    // Left arrow - previous opportunity
+    if (e.key === 'ArrowLeft' && {% if prev_lead_id %}true{% else %}false{% endif %}) {
+        window.location.href = "{% if prev_lead_id %}{% url 'crm:opportunity_edit' prev_lead_id %}{{ nav_params }}{% endif %}";
+    }
+
+    // Right arrow - next opportunity
+    if (e.key === 'ArrowRight' && {% if next_lead_id %}true{% else %}false{% endif %}) {
+        window.location.href = "{% if next_lead_id %}{% url 'crm:opportunity_edit' next_lead_id %}{{ nav_params }}{% endif %}";
+    }
+});
+{% endif %}
+
+async function saveQuickActivity() {
+    const activityType = document.getElementById('activity-type').value;
+    const title = document.getElementById('activity-title').value.trim();
+    const description = document.getElementById('activity-description').value.trim();
+    const scheduledDate = document.getElementById('activity-date').value;
+
+    // Validation
+    if (!activityType) {
+        alert('Please select an activity type');
+        return;
+    }
+    if (!title) {
+        alert('Please enter a title');
+        return;
+    }
+    if (!scheduledDate) {
+        alert('Please select a date');
+        return;
+    }
+
+    const leadId = {{ lead.id }};
+
+    try {
+        const response = await fetch('{% url "crm:api_quick_activity_create" %}', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value
+            },
+            body: JSON.stringify({
+                lead_id: leadId,
+                activity_type_id: activityType,
+                title: title,
+                description: description,
+                scheduled_date: scheduledDate
+            })
+        });
+
+        const data = await response.json();
+
+        if (data.success) {
+            // Close dropdown and reset form
+            toggleActivityDropdown();
+            document.getElementById('activity-type').value = '';
+            document.getElementById('activity-title').value = '';
+            document.getElementById('activity-description').value = '';
+            document.getElementById('activity-date').value = '';
+
+            // Refresh the page to show the new activity
+            window.location.reload();
+        } else {
+            alert(data.error || 'Failed to create activity');
+        }
+    } catch (error) {
+        console.error('Error creating activity:', error);
+        alert('Failed to create activity. Please try again.');
+    }
+}
+</script>
+{% endblock %}

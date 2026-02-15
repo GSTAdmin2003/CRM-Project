@@ -1,0 +1,373 @@
+{% extends 'base.html' %}
+
+{% block title %}Dialpad - CRM System{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+<style>
+.dialpad-btn {
+    width: 80px;
+    height: 80px;
+    border-radius: 50%;
+    font-size: 1.5rem;
+    font-weight: 600;
+    transition: all 0.15s ease;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+}
+.dialpad-btn:hover {
+    transform: scale(1.05);
+}
+.dialpad-btn .letters {
+    font-size: 0.65rem;
+    font-weight: 400;
+    color: #6B7280;
+    margin-top: 2px;
+}
+.phone-display {
+    font-size: 2rem;
+    letter-spacing: 2px;
+    font-family: 'SF Mono', 'Monaco', 'Inconsolata', 'Fira Mono', monospace;
+}
+.call-status {
+    animation: pulse 2s infinite;
+}
+@keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.5; }
+}
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-6">
+    <!-- Header -->
+    <div class="mb-8">
+        <div class="flex justify-between items-start">
+            <div>
+                <nav class="mb-4">
+                    <a href="{% url 'calls:call_list' %}" class="text-indigo-600 hover:text-indigo-800">
+                        <i class="fas fa-arrow-left mr-2"></i>Back to Calls
+                    </a>
+                </nav>
+                <h1 class="text-3xl font-bold text-gray-900">Dialpad</h1>
+                <p class="mt-2 text-gray-600">Make a new call</p>
+            </div>
+        </div>
+    </div>
+
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <!-- Dialpad -->
+        <div class="lg:col-span-2">
+            <div class="bg-white shadow rounded-lg p-8">
+                <!-- Phone Display -->
+                <div class="text-center mb-8">
+                    <input type="text" id="phone-number" class="phone-display w-full text-center border-0 focus:ring-0 bg-transparent" placeholder="Enter number" autocomplete="off">
+
+                    <!-- Call Status (hidden by default) -->
+                    <div id="call-status" class="hidden mt-4">
+                        <div class="call-status inline-flex items-center px-4 py-2 rounded-full bg-green-100 text-green-800">
+                            <span class="w-2 h-2 bg-green-500 rounded-full mr-2 animate-pulse"></span>
+                            <span id="status-text">Calling...</span>
+                        </div>
+                        <div id="call-timer" class="text-2xl font-mono text-gray-600 mt-2">00:00</div>
+                    </div>
+                </div>
+
+                <!-- Dialpad Grid -->
+                <div id="dialpad-grid" class="flex flex-col items-center space-y-4">
+                    <div class="flex space-x-4">
+                        <button onclick="dialNumber('1')" class="dialpad-btn bg-gray-100 hover:bg-gray-200 text-gray-900">
+                            1
+                        </button>
+                        <button onclick="dialNumber('2')" class="dialpad-btn bg-gray-100 hover:bg-gray-200 text-gray-900">
+                            2
+                            <span class="letters">ABC</span>
+                        </button>
+                        <button onclick="dialNumber('3')" class="dialpad-btn bg-gray-100 hover:bg-gray-200 text-gray-900">
+                            3
+                            <span class="letters">DEF</span>
+                        </button>
+                    </div>
+                    <div class="flex space-x-4">
+                        <button onclick="dialNumber('4')" class="dialpad-btn bg-gray-100 hover:bg-gray-200 text-gray-900">
+                            4
+                            <span class="letters">GHI</span>
+                        </button>
+                        <button onclick="dialNumber('5')" class="dialpad-btn bg-gray-100 hover:bg-gray-200 text-gray-900">
+                            5
+                            <span class="letters">JKL</span>
+                        </button>
+                        <button onclick="dialNumber('6')" class="dialpad-btn bg-gray-100 hover:bg-gray-200 text-gray-900">
+                            6
+                            <span class="letters">MNO</span>
+                        </button>
+                    </div>
+                    <div class="flex space-x-4">
+                        <button onclick="dialNumber('7')" class="dialpad-btn bg-gray-100 hover:bg-gray-200 text-gray-900">
+                            7
+                            <span class="letters">PQRS</span>
+                        </button>
+                        <button onclick="dialNumber('8')" class="dialpad-btn bg-gray-100 hover:bg-gray-200 text-gray-900">
+                            8
+                            <span class="letters">TUV</span>
+                        </button>
+                        <button onclick="dialNumber('9')" class="dialpad-btn bg-gray-100 hover:bg-gray-200 text-gray-900">
+                            9
+                            <span class="letters">WXYZ</span>
+                        </button>
+                    </div>
+                    <div class="flex space-x-4">
+                        <button onclick="dialNumber('*')" class="dialpad-btn bg-gray-100 hover:bg-gray-200 text-gray-900">
+                            *
+                        </button>
+                        <button onclick="dialNumber('0')" class="dialpad-btn bg-gray-100 hover:bg-gray-200 text-gray-900">
+                            0
+                            <span class="letters">+</span>
+                        </button>
+                        <button onclick="dialNumber('#')" class="dialpad-btn bg-gray-100 hover:bg-gray-200 text-gray-900">
+                            #
+                        </button>
+                    </div>
+
+                    <!-- Action Buttons -->
+                    <div class="flex space-x-4 mt-6">
+                        <button onclick="clearNumber()" class="dialpad-btn bg-gray-200 hover:bg-gray-300 text-gray-700">
+                            <i class="fas fa-backspace"></i>
+                        </button>
+                        <button id="call-btn" onclick="makeCall()" class="dialpad-btn bg-green-500 hover:bg-green-600 text-white">
+                            <i class="fas fa-phone"></i>
+                        </button>
+                        <button id="hangup-btn" onclick="hangupCall()" class="dialpad-btn bg-red-500 hover:bg-red-600 text-white hidden">
+                            <i class="fas fa-phone-slash"></i>
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Recent Contacts -->
+        <div class="space-y-6">
+            <div class="bg-white shadow rounded-lg p-6">
+                <h2 class="text-lg font-medium text-gray-900 mb-4">
+                    <i class="fas fa-clock mr-2 text-gray-500"></i>Recent Contacts
+                </h2>
+
+                {% if recent_contacts %}
+                <div class="space-y-3">
+                    {% for contact in recent_contacts %}
+                    <button onclick="quickDial('{{ contact.phone|default:contact.mobile }}')" class="w-full flex items-center p-3 hover:bg-gray-50 rounded-lg transition-colors text-left">
+                        <div class="h-10 w-10 rounded-full bg-gray-200 flex items-center justify-center mr-3">
+                            <span class="text-gray-600 font-medium">{{ contact.name|first|upper }}</span>
+                        </div>
+                        <div class="flex-1 min-w-0">
+                            <p class="text-sm font-medium text-gray-900 truncate">{{ contact.name }}</p>
+                            <p class="text-sm text-gray-500 truncate">{{ contact.phone|default:contact.mobile|default:"No phone" }}</p>
+                        </div>
+                        <i class="fas fa-phone text-green-500"></i>
+                    </button>
+                    {% endfor %}
+                </div>
+                {% else %}
+                <p class="text-gray-500 text-sm">No recent contacts</p>
+                {% endif %}
+            </div>
+
+            <!-- Active Calls -->
+            <div class="bg-white shadow rounded-lg p-6">
+                <h2 class="text-lg font-medium text-gray-900 mb-4">
+                    <i class="fas fa-phone-volume mr-2 text-green-500"></i>Active Calls
+                </h2>
+
+                <div id="active-calls-list">
+                    <p class="text-gray-500 text-sm">No active calls</p>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+let currentCallId = null;
+let callTimer = null;
+let callSeconds = 0;
+
+// Get number from URL if provided
+const urlParams = new URLSearchParams(window.location.search);
+const prefilledNumber = urlParams.get('number');
+if (prefilledNumber) {
+    document.getElementById('phone-number').value = prefilledNumber;
+}
+
+function dialNumber(digit) {
+    const input = document.getElementById('phone-number');
+    input.value += digit;
+}
+
+function clearNumber() {
+    const input = document.getElementById('phone-number');
+    input.value = input.value.slice(0, -1);
+}
+
+function quickDial(number) {
+    if (number && number !== 'No phone') {
+        document.getElementById('phone-number').value = number;
+        makeCall();
+    }
+}
+
+function makeCall() {
+    const phoneNumber = document.getElementById('phone-number').value.trim();
+
+    if (!phoneNumber) {
+        alert('Please enter a phone number');
+        return;
+    }
+
+    // Update UI for calling state
+    document.getElementById('call-status').classList.remove('hidden');
+    document.getElementById('status-text').textContent = 'Calling...';
+    document.getElementById('call-btn').classList.add('hidden');
+    document.getElementById('hangup-btn').classList.remove('hidden');
+
+    // Make API call
+    const formData = new FormData();
+    formData.append('to_number', phoneNumber);
+
+    fetch('{% url "calls:initiate_call" %}', {
+        method: 'POST',
+        body: formData,
+        headers: {
+            'X-CSRFToken': '{{ csrf_token }}',
+        },
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            currentCallId = data.call_id;
+            pollCallStatus();
+        } else {
+            alert('Failed to initiate call: ' + data.error);
+            resetDialpad();
+        }
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        alert('Failed to initiate call');
+        resetDialpad();
+    });
+}
+
+function hangupCall() {
+    if (!currentCallId) return;
+
+    fetch(`/calls/${currentCallId}/hangup/`, {
+        method: 'POST',
+        headers: {
+            'X-CSRFToken': '{{ csrf_token }}',
+        },
+    })
+    .then(response => response.json())
+    .then(data => {
+        resetDialpad();
+    });
+}
+
+function pollCallStatus() {
+    if (!currentCallId) return;
+
+    fetch(`/calls/${currentCallId}/status/`)
+    .then(response => response.json())
+    .then(data => {
+        updateCallStatus(data.status);
+
+        if (['ended', 'failed', 'busy', 'no_answer'].includes(data.status)) {
+            setTimeout(resetDialpad, 2000);
+        } else {
+            setTimeout(pollCallStatus, 1000);
+        }
+    });
+}
+
+function updateCallStatus(status) {
+    const statusText = document.getElementById('status-text');
+    const statusMap = {
+        'initiated': 'Calling...',
+        'ringing': 'Ringing...',
+        'answered': 'Connected',
+        'ended': 'Call Ended',
+        'failed': 'Call Failed',
+        'busy': 'Line Busy',
+        'no_answer': 'No Answer'
+    };
+
+    statusText.textContent = statusMap[status] || status;
+
+    if (status === 'answered' && !callTimer) {
+        startTimer();
+    }
+}
+
+function startTimer() {
+    callSeconds = 0;
+    callTimer = setInterval(() => {
+        callSeconds++;
+        const minutes = Math.floor(callSeconds / 60);
+        const seconds = callSeconds % 60;
+        document.getElementById('call-timer').textContent =
+            String(minutes).padStart(2, '0') + ':' + String(seconds).padStart(2, '0');
+    }, 1000);
+}
+
+function resetDialpad() {
+    currentCallId = null;
+    if (callTimer) {
+        clearInterval(callTimer);
+        callTimer = null;
+    }
+    callSeconds = 0;
+
+    document.getElementById('call-status').classList.add('hidden');
+    document.getElementById('call-timer').textContent = '00:00';
+    document.getElementById('call-btn').classList.remove('hidden');
+    document.getElementById('hangup-btn').classList.add('hidden');
+}
+
+// Keyboard support
+document.getElementById('phone-number').addEventListener('keypress', function(e) {
+    if (e.key === 'Enter') {
+        makeCall();
+    }
+});
+
+// Load active calls
+function loadActiveCalls() {
+    fetch('{% url "calls:active_calls" %}')
+    .then(response => response.json())
+    .then(data => {
+        const container = document.getElementById('active-calls-list');
+        if (data.calls && data.calls.length > 0) {
+            container.innerHTML = data.calls.map(call => `
+                <div class="flex items-center justify-between p-3 bg-green-50 rounded-lg mb-2">
+                    <div>
+                        <p class="font-medium text-gray-900">${call.direction === 'inbound' ? call.from_number : call.to_number}</p>
+                        <p class="text-sm text-gray-500">${call.status}</p>
+                    </div>
+                    <a href="/calls/${call.id}/" class="text-indigo-600 hover:text-indigo-800">
+                        <i class="fas fa-external-link-alt"></i>
+                    </a>
+                </div>
+            `).join('');
+        } else {
+            container.innerHTML = '<p class="text-gray-500 text-sm">No active calls</p>';
+        }
+    });
+}
+
+// Load active calls on page load and periodically
+loadActiveCalls();
+setInterval(loadActiveCalls, 5000);
+</script>
+{% endblock %}

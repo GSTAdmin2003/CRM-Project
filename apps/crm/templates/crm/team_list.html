@@ -1,0 +1,124 @@
+{% extends 'base.html' %}
+
+{% block title %}Sales Teams - CRM System{% endblock %}
+
+{% block content %}
+<div class="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
+    <!-- Page header -->
+    <div class="mb-8">
+        <div class="flex justify-between items-center">
+            <div>
+                <h1 class="text-3xl font-bold tracking-tight text-gray-900">Sales Teams</h1>
+                <p class="mt-2 text-sm text-gray-600">
+                    Manage sales teams and team members
+                </p>
+            </div>
+            <div class="flex space-x-3">
+                <a href="{% url 'crm:dashboard' %}" class="bg-gray-600 hover:bg-gray-700 text-white px-4 py-2 rounded-md text-sm font-medium transition-colors">
+                    Back to CRM
+                </a>
+                {% if user.is_sales_manager or user.is_sales_executive %}
+                <a href="{% url 'crm:team_create' %}" class="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-md text-sm font-medium transition-colors">
+                    Create Team
+                </a>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+
+    <!-- Teams grid -->
+    {% if teams %}
+        <div class="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
+            {% for team in teams %}
+            <div class="bg-white overflow-hidden shadow rounded-lg border border-gray-200 hover:shadow-md transition-shadow">
+                <div class="px-6 py-4">
+                    <div class="flex items-center justify-between">
+                        <h3 class="text-lg font-semibold text-gray-900">
+                            <a href="{% url 'crm:team_detail' team.pk %}" class="hover:text-indigo-600">
+                                {{ team.name }}
+                            </a>
+                        </h3>
+                        {% if team.is_active %}
+                            <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                                Active
+                            </span>
+                        {% else %}
+                            <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800">
+                                Inactive
+                            </span>
+                        {% endif %}
+                    </div>
+                    
+                    {% if team.description %}
+                    <p class="mt-2 text-sm text-gray-600">{{ team.description }}</p>
+                    {% endif %}
+                    
+                    <div class="mt-4 space-y-2">
+                        {% if team.manager %}
+                        <div class="flex items-center text-sm text-gray-600">
+                            <svg class="mr-2 h-4 w-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"></path>
+                            </svg>
+                            Manager: {{ team.manager.get_full_name|default:team.manager.username }}
+                        </div>
+                        {% endif %}
+                        
+                        <div class="flex items-center text-sm text-gray-600">
+                            <svg class="mr-2 h-4 w-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z"></path>
+                            </svg>
+                            Members: {{ team.get_team_members.count }}
+                        </div>
+                        
+                        <div class="flex items-center text-sm text-gray-600">
+                            <svg class="mr-2 h-4 w-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"></path>
+                            </svg>
+                            Active Opportunities: {{ team.get_team_leads.count }}
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="bg-gray-50 px-6 py-3">
+                    <div class="flex justify-between items-center">
+                        <span class="text-xs text-gray-500">
+                            Created {{ team.created_at|date:"M d, Y" }}
+                        </span>
+                        <div class="flex space-x-2">
+                            <a href="{% url 'crm:team_detail' team.pk %}" class="text-indigo-600 hover:text-indigo-500 text-sm font-medium">
+                                View
+                            </a>
+                            {% if user.is_sales_manager or user.is_sales_executive %}
+                            <span class="text-gray-300">|</span>
+                            <a href="{% url 'crm:team_edit' team.pk %}" class="text-indigo-600 hover:text-indigo-500 text-sm font-medium">
+                                Edit
+                            </a>
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+    {% else %}
+        <!-- Empty state -->
+        <div class="text-center py-12">
+            <svg class="mx-auto h-12 w-12 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z"></path>
+            </svg>
+            <h3 class="mt-4 text-lg font-medium text-gray-900">No sales teams</h3>
+            <p class="mt-2 text-sm text-gray-500">Get started by creating your first sales team.</p>
+            {% if user.is_sales_manager or user.is_sales_executive %}
+            <div class="mt-6">
+                <a href="{% url 'crm:team_create' %}" class="inline-flex items-center px-4 py-2 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500">
+                    <svg class="-ml-1 mr-2 h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path>
+                    </svg>
+                    Create Team
+                </a>
+            </div>
+            {% endif %}
+        </div>
+    {% endif %}
+</div>
+{% endblock %}

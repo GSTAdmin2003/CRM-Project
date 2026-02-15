@@ -1,0 +1,159 @@
+/* Settings App Specific Styles */
+
+/* Form Controls */
+.form-control {
+    @apply block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm;
+}
+
+.form-select {
+    @apply block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm;
+}
+
+.form-check-input {
+    @apply h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500;
+}
+
+/* Settings Sidebar */
+.settings-sidebar {
+    @apply sticky top-6;
+}
+
+.settings-sidebar nav {
+    @apply space-y-1;
+}
+
+/* Collapsible sections */
+.settings-nav-section.collapsed .nav-chevron {
+    @apply transform rotate-0;
+}
+
+.settings-nav-section:not(.collapsed) .nav-chevron {
+    @apply transform rotate-90;
+}
+
+/* Active states */
+.settings-nav-item.active {
+    @apply bg-gray-200 text-gray-900;
+}
+
+.settings-nav-item:not(.active) {
+    @apply text-gray-600 hover:bg-gray-50 hover:text-gray-900;
+}
+
+/* Settings content area */
+.settings-content {
+    @apply space-y-6;
+}
+
+/* Card styles */
+.settings-card {
+    @apply bg-white shadow rounded-lg p-6;
+}
+
+.settings-card-header {
+    @apply mb-6;
+}
+
+.settings-card-title {
+    @apply text-lg font-medium text-gray-900;
+}
+
+.settings-card-description {
+    @apply mt-1 text-sm text-gray-500;
+}
+
+/* Form sections */
+.settings-form-section {
+    @apply space-y-6;
+}
+
+.settings-form-group {
+    @apply space-y-1;
+}
+
+.settings-form-label {
+    @apply block text-sm font-medium text-gray-700;
+}
+
+.settings-form-help {
+    @apply mt-2 text-sm text-gray-500;
+}
+
+.settings-form-error {
+    @apply mt-1 text-sm text-red-600;
+}
+
+/* Button styles */
+.settings-btn-primary {
+    @apply bg-indigo-600 py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500;
+}
+
+.settings-btn-secondary {
+    @apply bg-white py-2 px-4 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500;
+}
+
+/* Status indicators */
+.settings-status-good {
+    @apply inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800;
+}
+
+.settings-status-warning {
+    @apply inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800;
+}
+
+.settings-status-error {
+    @apply inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800;
+}
+
+/* Stats cards */
+.settings-stats-grid {
+    @apply grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4;
+}
+
+.settings-stat-card {
+    @apply bg-white border border-gray-200 rounded-lg p-4;
+}
+
+.settings-stat-icon {
+    @apply flex-shrink-0 h-8 w-8;
+}
+
+/* Mobile responsiveness */
+@media (max-width: 768px) {
+    .settings-sidebar {
+        @apply relative top-0 mb-6;
+    }
+    
+    .settings-nav-section .nav-submenu {
+        @apply pl-0;
+    }
+    
+    .settings-stats-grid {
+        @apply grid-cols-1;
+    }
+}
+
+/* Animation for collapsible sections */
+.nav-submenu {
+    @apply transition-all duration-200 ease-in-out;
+}
+
+.nav-chevron {
+    @apply transition-transform duration-200 ease-in-out;
+}
+
+/* Focus states for accessibility */
+.settings-nav-item:focus,
+.settings-btn-primary:focus,
+.settings-btn-secondary:focus {
+    @apply outline-none ring-2 ring-offset-2 ring-indigo-500;
+}
+
+/* Form validation states */
+.form-control.is-valid {
+    @apply border-green-300 focus:border-green-500 focus:ring-green-500;
+}
+
+.form-control.is-invalid {
+    @apply border-red-300 focus:border-red-500 focus:ring-red-500;
+}

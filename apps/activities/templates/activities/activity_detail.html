@@ -1,0 +1,117 @@
+{% extends 'base.html' %}
+
+{% block title %}{{ activity.title }} - CRM System{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+{% endblock %}
+
+{% block content %}
+<div class="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-6">
+    <!-- Back Button -->
+    <button onclick="history.back()" class="inline-flex items-center text-sm font-medium text-gray-600 hover:text-gray-900 mb-4">
+        <i class="fas fa-arrow-left mr-2"></i>
+        Back
+    </button>
+
+    <!-- Header -->
+    <div class="flex justify-between items-start mb-8">
+        <div class="flex items-start space-x-4">
+            <div class="h-12 w-12 rounded-full flex items-center justify-center" style="background-color: {{ activity.activity_type.color }}20;">
+                <i class="{{ activity.activity_type.icon }} text-2xl" style="color: {{ activity.activity_type.color }};"></i>
+            </div>
+            <div>
+                <h1 class="text-3xl font-bold text-gray-900">{{ activity.title }}</h1>
+                <p class="mt-1 text-sm text-gray-500">
+                    <span class="px-2 py-1 text-xs font-medium rounded {% if activity.status == 'completed' %}bg-green-100 text-green-800{% elif activity.status == 'cancelled' %}bg-red-100 text-red-800{% else %}bg-yellow-100 text-yellow-800{% endif %}">
+                        {{ activity.get_status_display }}
+                    </span>
+                </p>
+            </div>
+        </div>
+        <div class="flex gap-2">
+            {% if activity.can_be_edited_by user %}
+            <a href="{% url 'activities:activity_edit' activity.pk %}" class="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-md text-sm font-medium">
+                <i class="fas fa-edit mr-2"></i>Edit
+            </a>
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- Activity Details -->
+    <div class="max-w-3xl">
+        <div class="bg-white shadow rounded-lg overflow-hidden">
+            <!-- Activity Information -->
+            <div class="px-4 py-5 sm:p-6 border-b border-gray-200">
+                <h3 class="text-lg font-medium text-gray-900 mb-4">Activity Information</h3>
+                <dl class="grid grid-cols-1 gap-x-4 gap-y-6 sm:grid-cols-2">
+                    <div class="sm:col-span-1">
+                        <dt class="text-sm font-medium text-gray-500">Type</dt>
+                        <dd class="mt-1 text-sm text-gray-900">{{ activity.activity_type.name }}</dd>
+                    </div>
+                    <div class="sm:col-span-1">
+                        <dt class="text-sm font-medium text-gray-500">Scheduled Date</dt>
+                        <dd class="mt-1 text-sm text-gray-900">{{ activity.scheduled_date|date:"F j, Y" }}</dd>
+                    </div>
+                    <div class="sm:col-span-2">
+                        <dt class="text-sm font-medium text-gray-500">Opportunity</dt>
+                        <dd class="mt-1 text-sm text-gray-900">
+                            <a href="{% url 'crm:opportunity_edit' activity.lead.pk %}" class="text-indigo-600 hover:text-indigo-800">
+                                {{ activity.lead.title }}
+                            </a>
+                        </dd>
+                    </div>
+                    <div class="sm:col-span-1">
+                        <dt class="text-sm font-medium text-gray-500">Assigned To</dt>
+                        <dd class="mt-1 text-sm text-gray-900">{{ activity.assigned_to.get_full_name }}</dd>
+                    </div>
+                    <div class="sm:col-span-1">
+                        <dt class="text-sm font-medium text-gray-500">Status</dt>
+                        <dd class="mt-1 text-sm text-gray-900">{{ activity.get_status_display }}</dd>
+                    </div>
+                    {% if activity.description %}
+                    <div class="sm:col-span-2">
+                        <dt class="text-sm font-medium text-gray-500">Description</dt>
+                        <dd class="mt-1 text-sm text-gray-900">{{ activity.description }}</dd>
+                    </div>
+                    {% endif %}
+                </dl>
+            </div>
+
+            <!-- Outcome (only shown for completed activities) -->
+            {% if activity.status == 'completed' %}
+            <div class="px-4 py-5 sm:p-6 border-b border-gray-200">
+                <h3 class="text-lg font-medium text-gray-900 mb-4">Outcome</h3>
+                {% if activity.outcome %}
+                <p class="text-sm text-gray-900">{{ activity.outcome }}</p>
+                {% else %}
+                <p class="text-sm text-gray-500 italic">No outcome notes added</p>
+                {% endif %}
+                {% if activity.completed_at %}
+                <p class="mt-2 text-xs text-gray-500">Completed on {{ activity.completed_at|date:"F j, Y \a\t g:i A" }}</p>
+                {% endif %}
+            </div>
+            {% endif %}
+
+            <!-- Metadata -->
+            <div class="px-4 py-5 sm:p-6 bg-gray-50">
+                <h3 class="text-sm font-medium text-gray-500 mb-4">Metadata</h3>
+                <dl class="grid grid-cols-1 gap-x-4 gap-y-6 sm:grid-cols-2 text-xs">
+                    <div class="sm:col-span-1">
+                        <dt class="font-medium text-gray-500">Created By</dt>
+                        <dd class="mt-1 text-gray-900">{{ activity.created_by.get_full_name }}</dd>
+                    </div>
+                    <div class="sm:col-span-1">
+                        <dt class="font-medium text-gray-500">Created At</dt>
+                        <dd class="mt-1 text-gray-900">{{ activity.created_at|date:"F j, Y \a\t g:i A" }}</dd>
+                    </div>
+                    <div class="sm:col-span-1">
+                        <dt class="font-medium text-gray-500">Last Updated</dt>
+                        <dd class="mt-1 text-gray-900">{{ activity.updated_at|date:"F j, Y \a\t g:i A" }}</dd>
+                    </div>
+                </dl>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

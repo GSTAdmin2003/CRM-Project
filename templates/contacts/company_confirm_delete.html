@@ -1,0 +1,100 @@
+{% extends 'base.html' %}
+
+{% block title %}Delete {{ company.display_name }} - CRM System{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+{% endblock %}
+
+{% block content %}
+<div class="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-6">
+    <!-- Header -->
+    <div class="mb-8">
+        <nav class="flex mb-2">
+            <a href="{% url 'contacts:dashboard_home' %}" class="text-indigo-600 hover:text-indigo-900">Contacts</a>
+            <span class="mx-2 text-gray-400">/</span>
+            <a href="{% url 'contacts:company_list' %}" class="text-indigo-600 hover:text-indigo-900">Companies</a>
+            <span class="mx-2 text-gray-400">/</span>
+            <a href="{% url 'contacts:company_detail' company.pk %}" class="text-indigo-600 hover:text-indigo-900">{{ company.display_name }}</a>
+            <span class="mx-2 text-gray-400">/</span>
+            <span class="text-gray-500">Delete</span>
+        </nav>
+        <h1 class="text-3xl font-bold text-gray-900">Delete Company</h1>
+        <p class="mt-2 text-gray-600">This action cannot be undone.</p>
+    </div>
+
+    <!-- Confirmation -->
+    <div class="max-w-2xl">
+        <div class="bg-white shadow rounded-lg">
+            <div class="px-4 py-5 sm:p-6">
+                <div class="flex">
+                    <div class="flex-shrink-0">
+                        <i class="fas fa-exclamation-triangle text-red-400 text-2xl"></i>
+                    </div>
+                    <div class="ml-3">
+                        <h3 class="text-lg font-medium text-gray-900">Delete Company</h3>
+                        <div class="mt-2">
+                            <p class="text-sm text-gray-500">
+                                Are you sure you want to delete <strong>{{ company.display_name }}</strong>? 
+                                This will also delete all {{ company.contacts.count }} contact{{ company.contacts.count|pluralize }} associated with this company.
+                            </p>
+                        </div>
+                        
+                        <!-- Company Info -->
+                        <div class="mt-4 bg-gray-50 border border-gray-200 rounded-lg p-4">
+                            <dl class="grid grid-cols-1 gap-x-4 gap-y-3 sm:grid-cols-2">
+                                <div>
+                                    <dt class="text-sm font-medium text-gray-500">Legal Name</dt>
+                                    <dd class="text-sm text-gray-900">{{ company.legal_name }}</dd>
+                                </div>
+                                <div>
+                                    <dt class="text-sm font-medium text-gray-500">Legal ID</dt>
+                                    <dd class="text-sm text-gray-900">{{ company.legal_id }}</dd>
+                                </div>
+                                <div>
+                                    <dt class="text-sm font-medium text-gray-500">Contacts</dt>
+                                    <dd class="text-sm text-gray-900">{{ company.contacts.count }} contact{{ company.contacts.count|pluralize }}</dd>
+                                </div>
+                                {% if company.industry %}
+                                <div>
+                                    <dt class="text-sm font-medium text-gray-500">Industry</dt>
+                                    <dd class="text-sm text-gray-900">{{ company.industry }}</dd>
+                                </div>
+                                {% endif %}
+                            </dl>
+                        </div>
+
+                        <!-- Warning -->
+                        <div class="mt-4 bg-red-50 border border-red-200 rounded-lg p-4">
+                            <div class="flex">
+                                <div class="flex-shrink-0">
+                                    <i class="fas fa-exclamation-circle text-red-400"></i>
+                                </div>
+                                <div class="ml-3">
+                                    <h4 class="text-sm font-medium text-red-800">Warning</h4>
+                                    <div class="mt-1 text-sm text-red-700">
+                                        <p>This action is permanent and cannot be undone. All data associated with this company will be lost.</p>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Actions -->
+                        <div class="mt-6 flex items-center justify-between">
+                            <a href="{% url 'contacts:company_detail' company.pk %}" class="bg-gray-300 hover:bg-gray-400 text-gray-700 px-4 py-2 rounded-md text-sm font-medium">
+                                Cancel
+                            </a>
+                            <form method="post" class="inline">
+                                {% csrf_token %}
+                                <button type="submit" class="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-md text-sm font-medium">
+                                    <i class="fas fa-trash mr-2"></i>Delete Company
+                                </button>
+                            </form>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

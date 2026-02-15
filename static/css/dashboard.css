@@ -1,0 +1,78 @@
+/* Custom CSS for dashboard */
+
+.app-card {
+    transition: all 0.3s ease;
+    background: white;
+    border-radius: 12px;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+    padding: 1.5rem;
+    text-align: center;
+    cursor: pointer;
+    border: 2px solid transparent;
+}
+
+.app-card:hover {
+    transform: translateY(-4px);
+    box-shadow: 0 8px 25px rgba(0, 0, 0, 0.15);
+    border-color: rgba(99, 102, 241, 0.2);
+}
+
+.app-card-icon {
+    width: 64px;
+    height: 64px;
+    margin: 0 auto 1rem auto;
+    border-radius: 12px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 2rem;
+    color: white;
+}
+
+.app-card-title {
+    font-size: 1rem;
+    font-weight: 600;
+    color: #374151;
+    margin: 0;
+}
+
+/* Icon colors - matching the screenshot style */
+.icon-orange { background: linear-gradient(135deg, #FF6B35, #F7931E); }
+.icon-red { background: linear-gradient(135deg, #DC3545, #C82333); }
+.icon-green { background: linear-gradient(135deg, #10B981, #059669); }
+.icon-blue { background: linear-gradient(135deg, #3B82F6, #2563EB); }
+.icon-purple { background: linear-gradient(135deg, #8B5CF6, #7C3AED); }
+.icon-pink { background: linear-gradient(135deg, #EC4899, #DB2777); }
+.icon-yellow { background: linear-gradient(135deg, #F59E0B, #D97706); }
+.icon-indigo { background: linear-gradient(135deg, #6366F1, #4F46E5); }
+.icon-cyan { background: linear-gradient(135deg, #06B6D4, #0891B2); }
+.icon-gray { background: linear-gradient(135deg, #6B7280, #4B5563); }
+
+/* Dashboard background */
+.dashboard-bg {
+    background: linear-gradient(135deg, #E5E7EB 0%, #D1D5DB 100%);
+    min-height: calc(100vh - 4rem);
+}
+
+/* Grid responsive adjustments */
+@media (max-width: 640px) {
+    .app-grid {
+        grid-template-columns: repeat(2, 1fr) !important;
+    }
+}
+
+@media (max-width: 480px) {
+    .app-grid {
+        grid-template-columns: repeat(1, 1fr) !important;
+    }
+    
+    .app-card {
+        padding: 1rem;
+    }
+    
+    .app-card-icon {
+        width: 48px;
+        height: 48px;
+        font-size: 1.5rem;
+    }
+}

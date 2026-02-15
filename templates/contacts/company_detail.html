@@ -1,0 +1,211 @@
+{% extends 'base.html' %}
+
+{% block title %}{{ company.display_name }} - CRM System{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+{% endblock %}
+
+{% block content %}
+<div class="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-6">
+    <!-- Header -->
+    <div class="mb-8">
+        <div class="flex justify-between items-start">
+            <div>
+                <nav class="flex mb-2">
+                    <a href="{% url 'contacts:dashboard_home' %}" class="text-indigo-600 hover:text-indigo-900">Contacts</a>
+                    <span class="mx-2 text-gray-400">/</span>
+                    <a href="{% url 'contacts:company_list' %}" class="text-indigo-600 hover:text-indigo-900">Companies</a>
+                    <span class="mx-2 text-gray-400">/</span>
+                    <span class="text-gray-500">{{ company.display_name }}</span>
+                </nav>
+                <h1 class="text-3xl font-bold text-gray-900">{{ company.display_name }}</h1>
+                <p class="mt-2 text-gray-600">{{ company.legal_name }} ({{ company.legal_id }})</p>
+            </div>
+            <div class="flex space-x-2">
+                <a href="{% url 'contacts:company_edit' company.pk %}" class="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-md text-sm font-medium">
+                    <i class="fas fa-edit mr-2"></i>Edit
+                </a>
+                <a href="{% url 'contacts:company_delete' company.pk %}" class="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-md text-sm font-medium">
+                    <i class="fas fa-trash mr-2"></i>Delete
+                </a>
+            </div>
+        </div>
+    </div>
+
+    <div class="grid grid-cols-1 gap-6 lg:grid-cols-3">
+        <!-- Company Information -->
+        <div class="lg:col-span-1">
+            <div class="bg-white shadow rounded-lg">
+                <div class="px-4 py-5 sm:p-6">
+                    <h3 class="text-lg leading-6 font-medium text-gray-900 mb-4">Company Information</h3>
+                    <dl class="space-y-3">
+                        <div>
+                            <dt class="text-sm font-medium text-gray-500">Legal Name</dt>
+                            <dd class="mt-1 text-sm text-gray-900">{{ company.legal_name }}</dd>
+                        </div>
+                        <div>
+                            <dt class="text-sm font-medium text-gray-500">Legal ID</dt>
+                            <dd class="mt-1 text-sm text-gray-900">{{ company.legal_id }}</dd>
+                        </div>
+                        {% if company.brand_name %}
+                        <div>
+                            <dt class="text-sm font-medium text-gray-500">Brand Name</dt>
+                            <dd class="mt-1 text-sm text-gray-900">{{ company.brand_name }}</dd>
+                        </div>
+                        {% endif %}
+                        {% if company.industry %}
+                        <div>
+                            <dt class="text-sm font-medium text-gray-500">Industry</dt>
+                            <dd class="mt-1 text-sm text-gray-900">{{ company.industry }}</dd>
+                        </div>
+                        {% endif %}
+                        {% if company.category %}
+                        <div>
+                            <dt class="text-sm font-medium text-gray-500">Category</dt>
+                            <dd class="mt-1 text-sm text-gray-900">{{ company.category }}</dd>
+                        </div>
+                        {% endif %}
+                    </dl>
+                </div>
+            </div>
+
+            <!-- Contact Information -->
+            {% if company.company_email or company.company_phone or company.company_mobile %}
+            <div class="bg-white shadow rounded-lg mt-6">
+                <div class="px-4 py-5 sm:p-6">
+                    <h3 class="text-lg leading-6 font-medium text-gray-900 mb-4">Contact Information</h3>
+                    <dl class="space-y-3">
+                        {% if company.company_email %}
+                        <div>
+                            <dt class="text-sm font-medium text-gray-500">Email</dt>
+                            <dd class="mt-1 text-sm text-gray-900">
+                                <a href="mailto:{{ company.company_email }}" class="text-indigo-600 hover:text-indigo-900">
+                                    {{ company.company_email }}
+                                </a>
+                            </dd>
+                        </div>
+                        {% endif %}
+                        {% if company.company_phone %}
+                        <div>
+                            <dt class="text-sm font-medium text-gray-500">Phone</dt>
+                            <dd class="mt-1 text-sm text-gray-900">
+                                <a href="tel:{{ company.company_phone }}" class="text-indigo-600 hover:text-indigo-900">
+                                    {{ company.company_phone }}
+                                </a>
+                            </dd>
+                        </div>
+                        {% endif %}
+                        {% if company.company_mobile %}
+                        <div>
+                            <dt class="text-sm font-medium text-gray-500">Mobile</dt>
+                            <dd class="mt-1 text-sm text-gray-900">
+                                <a href="tel:{{ company.company_mobile }}" class="text-indigo-600 hover:text-indigo-900">
+                                    {{ company.company_mobile }}
+                                </a>
+                            </dd>
+                        </div>
+                        {% endif %}
+                    </dl>
+                </div>
+            </div>
+            {% endif %}
+        </div>
+
+        <!-- Contacts List -->
+        <div class="lg:col-span-2">
+            <div class="bg-white shadow rounded-lg">
+                <div class="px-4 py-5 sm:p-6">
+                    <div class="flex justify-between items-center mb-4">
+                        <h3 class="text-lg leading-6 font-medium text-gray-900">
+                            Contacts ({{ contacts.count }})
+                        </h3>
+                        <a href="{% url 'contacts:contact_create' company.pk %}" class="bg-green-600 hover:bg-green-700 text-white px-3 py-1 rounded-md text-sm font-medium">
+                            <i class="fas fa-plus mr-1"></i>Add Contact
+                        </a>
+                    </div>
+
+                    {% if contacts %}
+                    <div class="flow-root">
+                        <ul class="-my-3 divide-y divide-gray-200">
+                            {% for contact in contacts %}
+                            <li class="py-4">
+                                <div class="flex items-center space-x-4">
+                                    <div class="flex-shrink-0">
+                                        <div class="h-10 w-10 rounded-full bg-gray-300 flex items-center justify-center">
+                                            <i class="fas fa-user text-gray-600"></i>
+                                        </div>
+                                    </div>
+                                    <a href="{% url 'contacts:contact_detail' contact.pk %}" class="flex-1 min-w-0 hover:bg-gray-50 p-2 rounded-md transition-colors cursor-pointer">
+                                        <p class="text-sm font-medium text-gray-900 truncate">
+                                            {{ contact.name }}
+                                        </p>
+                                        <p class="text-sm text-gray-500 truncate">
+                                            {{ contact.position }}
+                                        </p>
+                                        <div class="mt-1 flex items-center space-x-4 text-xs text-gray-500">
+                                            {% if contact.email %}
+                                            <span class="hover:text-indigo-600">
+                                                <i class="fas fa-envelope mr-1"></i>{{ contact.email }}
+                                            </span>
+                                            {% endif %}
+                                            {% if contact.phone %}
+                                            <span class="hover:text-indigo-600">
+                                                <i class="fas fa-phone mr-1"></i>{{ contact.phone }}
+                                            </span>
+                                            {% endif %}
+                                            {% if contact.mobile %}
+                                            <span class="hover:text-indigo-600">
+                                                <i class="fas fa-mobile-alt mr-1"></i>{{ contact.mobile }}
+                                            </span>
+                                            {% endif %}
+                                        </div>
+                                    </a>
+                                    <div class="flex-shrink-0 flex space-x-2 items-center">
+                                        <!-- Favorite Star -->
+                                        <form method="post" action="{% url 'contacts:toggle_favorite_contact' company.pk contact.pk %}" class="inline">
+                                            {% csrf_token %}
+                                            <button type="submit" class="text-lg hover:scale-110 transition-transform" 
+                                                    {% if company.favorite_contact == contact and contacts.count == 1 %}
+                                                        title="Cannot unfavorite - this is the only contact"
+                                                    {% elif company.favorite_contact == contact %}
+                                                        title="Click to remove from favorites (will set another contact as favorite)"
+                                                    {% else %}
+                                                        title="Click to set as favorite contact"
+                                                    {% endif %}>
+                                                {% if company.favorite_contact == contact %}
+                                                    <i class="fas fa-star text-yellow-400"></i>
+                                                {% else %}
+                                                    <i class="far fa-star text-gray-400 hover:text-yellow-400"></i>
+                                                {% endif %}
+                                            </button>
+                                        </form>
+                                        <!-- Action Buttons -->
+                                        <a href="{% url 'contacts:contact_edit' contact.pk %}" class="text-indigo-600 hover:text-indigo-900" title="Edit">
+                                            <i class="fas fa-edit"></i>
+                                        </a>
+                                        <a href="{% url 'contacts:contact_delete' contact.pk %}" class="text-red-600 hover:text-red-900" title="Delete">
+                                            <i class="fas fa-trash"></i>
+                                        </a>
+                                    </div>
+                                </div>
+                            </li>
+                            {% endfor %}
+                        </ul>
+                    </div>
+                    {% else %}
+                    <div class="text-center py-8">
+                        <i class="fas fa-users text-gray-400 text-4xl mb-4"></i>
+                        <h3 class="text-lg font-medium text-gray-900 mb-2">No contacts yet</h3>
+                        <p class="text-gray-500 mb-4">Get started by adding the first contact for this company.</p>
+                        <a href="{% url 'contacts:contact_create' company.pk %}" class="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-md text-sm font-medium">
+                            <i class="fas fa-user-plus mr-2"></i>Add First Contact
+                        </a>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

@@ -1,0 +1,155 @@
+{% extends 'base.html' %}
+
+{% block title %}Companies - CRM System{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+<style>
+.form-control {
+    display: block;
+    width: 100%;
+    padding: 0.5rem 0.75rem;
+    font-size: 0.875rem;
+    line-height: 1.5;
+    color: #374151;
+    background-color: #fff;
+    background-clip: padding-box;
+    border: 1px solid #d1d5db;
+    border-radius: 0.375rem;
+    transition: border-color 0.15s ease-in-out, box-shadow 0.15s ease-in-out;
+}
+.form-control:focus {
+    border-color: #6366f1;
+    outline: 0;
+    box-shadow: 0 0 0 0.2rem rgba(99, 102, 241, 0.25);
+}
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-6">
+    <!-- Header -->
+    <div class="mb-8">
+        <div class="flex justify-between items-start">
+            <div>
+                <h1 class="text-3xl font-bold text-gray-900">Companies</h1>
+                <p class="mt-2 text-gray-600">{{ total_companies }} total companies</p>
+            </div>
+            <div class="flex gap-3">
+                <a href="{% url 'contacts:company_import' %}" class="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-md text-sm font-medium">
+                    <i class="fas fa-file-import mr-2"></i>Import
+                </a>
+                <a href="{% url 'contacts:company_create' %}" class="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-md text-sm font-medium">
+                    <i class="fas fa-plus mr-2"></i>Add Company
+                </a>
+            </div>
+        </div>
+    </div>
+
+    <!-- Search -->
+    <div class="bg-white shadow rounded-lg p-6 mb-6">
+        <form method="get" class="flex gap-4">
+            <div class="flex-1">
+                <input type="text" name="search" value="{{ search_query }}" placeholder="Search companies by name, legal ID, industry, or category..." class="form-control">
+            </div>
+            <button type="submit" class="bg-gray-600 hover:bg-gray-700 text-white px-6 py-2 rounded-md text-sm font-medium">
+                <i class="fas fa-search"></i>
+            </button>
+            {% if search_query %}
+            <a href="{% url 'contacts:company_list' %}" class="bg-gray-300 hover:bg-gray-400 text-gray-700 px-6 py-2 rounded-md text-sm font-medium">
+                Clear
+            </a>
+            {% endif %}
+        </form>
+    </div>
+
+    <!-- Companies List -->
+    {% if companies %}
+    <div class="bg-white shadow overflow-hidden sm:rounded-md">
+        <ul class="divide-y divide-gray-200">
+            {% for company in companies %}
+            <li>
+                <a href="{% url 'contacts:company_detail' company.pk %}" class="block hover:bg-gray-50">
+                    <div class="px-4 py-4 sm:px-6">
+                        <div class="flex items-center justify-between">
+                            <div class="flex-1">
+                                <div class="flex items-center">
+                                    <div class="flex-shrink-0 mr-4">
+                                        <div class="h-10 w-10 rounded-full bg-gray-300 flex items-center justify-center">
+                                            <i class="fas fa-building text-gray-600"></i>
+                                        </div>
+                                    </div>
+                                    <div class="flex-1">
+                                        <div class="flex items-center justify-between">
+                                            <p class="text-sm font-medium text-indigo-600 truncate">
+                                                {{ company.display_name }}
+                                            </p>
+                                            <div class="ml-2 flex-shrink-0 flex">
+                                                <p class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-green-100 text-green-800">
+                                                    {{ company.contacts.count }} contact{{ company.contacts.count|pluralize }}
+                                                </p>
+                                            </div>
+                                        </div>
+                                        <div class="mt-2">
+                                            <div class="flex items-center text-sm text-gray-500">
+                                                <p class="mr-6"><strong>Legal ID:</strong> {{ company.legal_id }}</p>
+                                                {% if company.industry %}
+                                                <p class="mr-6"><strong>Industry:</strong> {{ company.industry }}</p>
+                                                {% endif %}
+                                                {% if company.category %}
+                                                <p><strong>Category:</strong> {{ company.category }}</p>
+                                                {% endif %}
+                                            </div>
+                                            {% if company.company_email or company.company_phone %}
+                                            <div class="mt-2 flex items-center text-sm text-gray-500">
+                                                {% if company.company_email %}
+                                                <p class="mr-6"><i class="fas fa-envelope mr-1"></i>{{ company.company_email }}</p>
+                                                {% endif %}
+                                                {% if company.company_phone %}
+                                                <p class="mr-6"><i class="fas fa-phone mr-1"></i>{{ company.company_phone }}</p>
+                                                {% endif %}
+                                            </div>
+                                            {% endif %}
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="flex-shrink-0">
+                                <i class="fas fa-chevron-right text-gray-400"></i>
+                            </div>
+                        </div>
+                    </div>
+                </a>
+            </li>
+            {% endfor %}
+        </ul>
+    </div>
+    {% else %}
+    <!-- Empty State -->
+    <div class="bg-white shadow rounded-lg">
+        <div class="text-center py-12">
+            <i class="fas fa-building text-gray-400 text-6xl mb-4"></i>
+            <h3 class="text-lg font-medium text-gray-900 mb-2">
+                {% if search_query %}
+                    No companies found
+                {% else %}
+                    No companies yet
+                {% endif %}
+            </h3>
+            <p class="text-gray-500 mb-6">
+                {% if search_query %}
+                    Try adjusting your search criteria.
+                {% else %}
+                    Get started by creating your first company.
+                {% endif %}
+            </p>
+            {% if not search_query %}
+            <a href="{% url 'contacts:company_create' %}" class="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-md text-sm font-medium">
+                <i class="fas fa-plus mr-2"></i>Add First Company
+            </a>
+            {% endif %}
+        </div>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}

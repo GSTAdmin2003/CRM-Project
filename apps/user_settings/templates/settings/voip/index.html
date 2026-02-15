@@ -1,0 +1,112 @@
+{% extends 'settings/base.html' %}
+
+{% block page_title %}VoIP Settings{% endblock %}
+{% block page_description %}Configure your SIP credentials for making calls{% endblock %}
+
+{% block settings_content %}
+<div class="space-y-6">
+    <!-- UDP Notice -->
+    <div class="bg-amber-50 border-l-4 border-amber-400 p-4 rounded-r-lg">
+        <div class="flex">
+            <div class="flex-shrink-0">
+                <svg class="h-5 w-5 text-amber-400" viewBox="0 0 20 20" fill="currentColor">
+                    <path fill-rule="evenodd" d="M8.485 2.495c.673-1.167 2.357-1.167 3.03 0l6.28 10.875c.673 1.167-.17 2.625-1.516 2.625H3.72c-1.347 0-2.189-1.458-1.515-2.625L8.485 2.495zM10 5a.75.75 0 01.75.75v3.5a.75.75 0 01-1.5 0v-3.5A.75.75 0 0110 5zm0 9a1 1 0 100-2 1 1 0 000 2z" clip-rule="evenodd" />
+                </svg>
+            </div>
+            <div class="ml-3">
+                <h3 class="text-sm font-medium text-amber-800">UDP Transport Only</h3>
+                <div class="mt-2 text-sm text-amber-700">
+                    <p>This system currently only supports <strong>UDP</strong> transport for SIP connections. TCP and TLS are not supported at this time. Make sure your SIP provider supports UDP on port 5060.</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- SIP Configuration Card -->
+    <div class="bg-white border border-gray-200 rounded-lg overflow-hidden">
+        <div class="px-4 py-5 sm:px-6 border-b border-gray-200">
+            <div class="flex items-center justify-between">
+                <div>
+                    <h3 class="text-lg leading-6 font-medium text-gray-900">
+                        SIP Credentials
+                    </h3>
+                    <p class="mt-1 max-w-2xl text-sm text-gray-500">
+                        Your SIP trunk credentials for making and receiving calls.
+                    </p>
+                </div>
+                <a href="{% url 'settings:voip:sip_credentials' %}" class="bg-indigo-600 py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500">
+                    <i class="fas fa-edit mr-2"></i>
+                    {% if sip_settings %}Edit{% else %}Configure{% endif %}
+                </a>
+            </div>
+        </div>
+
+        {% if sip_settings %}
+        <div class="px-4 py-5 sm:p-6">
+            <dl class="grid grid-cols-1 gap-x-4 gap-y-6 sm:grid-cols-2">
+                <div>
+                    <dt class="text-sm font-medium text-gray-500">Server</dt>
+                    <dd class="mt-1 text-sm text-gray-900 font-mono">{{ sip_settings.server_ip }}:{{ sip_settings.server_port }}</dd>
+                </div>
+                <div>
+                    <dt class="text-sm font-medium text-gray-500">Username</dt>
+                    <dd class="mt-1 text-sm text-gray-900 font-mono">{{ sip_settings.username }}</dd>
+                </div>
+                <div>
+                    <dt class="text-sm font-medium text-gray-500">Caller ID</dt>
+                    <dd class="mt-1 text-sm text-gray-900 font-mono">{{ sip_settings.caller_id }}</dd>
+                </div>
+                <div>
+                    <dt class="text-sm font-medium text-gray-500">Status</dt>
+                    <dd class="mt-1">
+                        {% if sip_settings.is_active %}
+                            <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                                <span class="w-2 h-2 mr-1.5 bg-green-400 rounded-full"></span>
+                                Active
+                            </span>
+                        {% else %}
+                            <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-800">
+                                <span class="w-2 h-2 mr-1.5 bg-gray-400 rounded-full"></span>
+                                Disabled
+                            </span>
+                        {% endif %}
+                    </dd>
+                </div>
+            </dl>
+        </div>
+        {% else %}
+        <div class="text-center py-12">
+            <svg class="mx-auto h-12 w-12 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" />
+            </svg>
+            <h3 class="mt-2 text-sm font-medium text-gray-900">No SIP credentials configured</h3>
+            <p class="mt-1 text-sm text-gray-500">Get started by adding your SIP trunk credentials.</p>
+            <div class="mt-6">
+                <a href="{% url 'settings:voip:sip_credentials' %}" class="inline-flex items-center px-4 py-2 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700">
+                    <i class="fas fa-plus mr-2"></i>
+                    Add SIP Credentials
+                </a>
+            </div>
+        </div>
+        {% endif %}
+    </div>
+
+    <!-- Help Section -->
+    <div class="bg-gray-50 border border-gray-200 rounded-lg p-6">
+        <h3 class="text-lg font-medium text-gray-900 mb-4">
+            <i class="fas fa-question-circle text-gray-400 mr-2"></i>
+            Getting Started
+        </h3>
+        <div class="prose prose-sm text-gray-500">
+            <p>To make calls through this CRM, you need SIP trunk credentials from a VoIP provider. Here's what you need:</p>
+            <ul class="mt-3 space-y-2">
+                <li><strong>Server IP/Host:</strong> The SIP server address provided by your provider</li>
+                <li><strong>Port:</strong> Usually 5060 for UDP connections</li>
+                <li><strong>Username:</strong> Your SIP account username (often your phone number)</li>
+                <li><strong>Password:</strong> Your SIP account password</li>
+                <li><strong>Caller ID:</strong> The number shown to people you call</li>
+            </ul>
+        </div>
+    </div>
+</div>
+{% endblock %}

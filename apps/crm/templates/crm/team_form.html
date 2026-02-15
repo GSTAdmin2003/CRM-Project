@@ -1,0 +1,292 @@
+{% extends 'base.html' %}
+
+{% block title %}{% if team %}Edit Team{% else %}Create Team{% endif %} - CRM System{% endblock %}
+
+{% block extra_css %}
+<style>
+/* Form Section Styles */
+.form-section {
+    background: white;
+    border: 1px solid #e5e7eb;
+    border-radius: 8px;
+    overflow: hidden;
+    margin-bottom: 16px;
+}
+
+.form-section-header {
+    padding: 16px 20px;
+    border-bottom: 1px solid #e5e7eb;
+    background: #f9fafb;
+    border-radius: 8px 8px 0 0;
+}
+
+.form-section-content {
+    padding: 20px;
+}
+
+/* Field Styles */
+.field-group {
+    margin-bottom: 16px;
+}
+
+.field-label {
+    display: block;
+    font-size: 13px;
+    font-weight: 600;
+    color: #374151;
+    margin-bottom: 4px;
+}
+
+.field-required {
+    color: #dc2626;
+}
+
+.form-field {
+    width: 100%;
+    padding: 8px 12px;
+    border: 1px solid #d1d5db;
+    border-radius: 4px;
+    font-size: 14px;
+    transition: border-color 0.2s ease;
+}
+
+.form-field:focus {
+    outline: none;
+    border-color: #3b82f6;
+    box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+}
+
+.form-textarea {
+    resize: vertical;
+    min-height: 80px;
+}
+
+/* Form Actions */
+.form-actions {
+    position: sticky;
+    bottom: 0;
+    background: white;
+    border-top: 1px solid #e5e7eb;
+    padding: 16px 20px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.btn {
+    padding: 8px 16px;
+    border-radius: 4px;
+    font-size: 14px;
+    font-weight: 500;
+    cursor: pointer;
+    border: none;
+    transition: all 0.2s ease;
+}
+
+.btn-primary {
+    background: #3b82f6;
+    color: white;
+}
+
+.btn-primary:hover {
+    background: #2563eb;
+}
+
+.btn-secondary {
+    background: #e5e7eb;
+    color: #374151;
+}
+
+.btn-secondary:hover {
+    background: #d1d5db;
+}
+
+.error-message {
+    color: #dc2626;
+    font-size: 12px;
+    margin-top: 4px;
+}
+
+/* Member List */
+.member-card {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 12px;
+    border: 1px solid #e5e7eb;
+    border-radius: 6px;
+    margin-bottom: 8px;
+}
+
+.member-avatar {
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    background: #3b82f6;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: white;
+    font-size: 12px;
+    font-weight: 600;
+}
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="w-full px-6 py-4">
+    <!-- Breadcrumb Navigation -->
+    <nav class="flex mb-4" aria-label="Breadcrumb">
+        <ol class="inline-flex items-center space-x-1 md:space-x-3">
+            <li class="inline-flex items-center">
+                <a href="{% url 'crm:dashboard' %}" class="inline-flex items-center text-sm font-medium text-gray-700 hover:text-indigo-600">
+                    <svg class="w-4 h-4 mr-2" fill="currentColor" viewBox="0 0 20 20">
+                        <path d="M10.707 2.293a1 1 0 00-1.414 0l-7 7a1 1 0 001.414 1.414L4 10.414V17a1 1 0 001 1h2a1 1 0 001-1v-2a1 1 0 011-1h2a1 1 0 011 1v2a1 1 0 001 1h2a1 1 0 001-1v-6.586l.293.293a1 1 0 001.414-1.414l-7-7z"></path>
+                    </svg>
+                    CRM
+                </a>
+            </li>
+            <li>
+                <div class="flex items-center">
+                    <svg class="w-6 h-6 text-gray-400" fill="currentColor" viewBox="0 0 20 20">
+                        <path fill-rule="evenodd" d="M7.293 14.707a1 1 0 010-1.414L10.586 10 7.293 6.707a1 1 0 011.414-1.414l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0z" clip-rule="evenodd"></path>
+                    </svg>
+                    <a href="{% url 'crm:team_list' %}" class="ml-1 text-sm font-medium text-gray-700 hover:text-indigo-600 md:ml-2">Teams</a>
+                </div>
+            </li>
+            <li>
+                <div class="flex items-center">
+                    <svg class="w-6 h-6 text-gray-400" fill="currentColor" viewBox="0 0 20 20">
+                        <path fill-rule="evenodd" d="M7.293 14.707a1 1 0 010-1.414L10.586 10 7.293 6.707a1 1 0 011.414-1.414l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0z" clip-rule="evenodd"></path>
+                    </svg>
+                    <span class="ml-1 text-sm font-medium text-gray-500 md:ml-2">{% if team %}Edit Team{% else %}Create Team{% endif %}</span>
+                </div>
+            </li>
+        </ol>
+    </nav>
+
+    <form method="post" id="team-form">
+        {% csrf_token %}
+
+        <!-- Form Sections Grid -->
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
+            <!-- Team Information Section -->
+            <div class="form-section">
+                <div class="form-section-header">
+                    <h3 class="font-semibold text-gray-900">Team Information</h3>
+                </div>
+                <div class="form-section-content">
+                    <!-- Team Name -->
+                    <div class="field-group">
+                        <label for="id_name" class="field-label">
+                            Team Name <span class="field-required">*</span>
+                        </label>
+                        <input type="text" name="name" id="id_name"
+                               class="form-field"
+                               value="{% if team %}{{ team.name }}{% endif %}" required>
+                        <p class="mt-1 text-sm text-gray-500">Choose a descriptive name for your sales team</p>
+                    </div>
+
+                    <!-- Description -->
+                    <div class="field-group">
+                        <label for="id_description" class="field-label">
+                            Description
+                        </label>
+                        <textarea name="description" id="id_description" rows="4"
+                                  class="form-field form-textarea"
+                                  placeholder="Brief description of the team's focus or responsibilities">{% if team %}{{ team.description }}{% endif %}</textarea>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Team Settings Section -->
+            <div class="form-section">
+                <div class="form-section-header">
+                    <h3 class="font-semibold text-gray-900">Team Settings</h3>
+                </div>
+                <div class="form-section-content">
+                    <!-- Manager -->
+                    <div class="field-group">
+                        <label for="id_manager" class="field-label">
+                            Team Manager
+                        </label>
+                        <select name="manager" id="id_manager" class="form-field">
+                            <option value="">Select a manager...</option>
+                            {% for user in users %}
+                            <option value="{{ user.id }}"
+                                    {% if team and team.manager.id == user.id %}selected{% endif %}>
+                                {{ user.get_full_name|default:user.username }} ({{ user.email }})
+                            </option>
+                            {% endfor %}
+                        </select>
+                        <p class="mt-1 text-sm text-gray-500">Choose a team manager to oversee this sales team</p>
+                    </div>
+
+                    <!-- Is Active -->
+                    <div class="field-group">
+                        <div class="flex items-center">
+                            <input type="checkbox" name="is_active" id="id_is_active"
+                                   class="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300 rounded"
+                                   {% if not team or team.is_active %}checked{% endif %}>
+                            <label for="id_is_active" class="ml-2 block text-sm text-gray-900">
+                                Active Team
+                            </label>
+                        </div>
+                        <p class="mt-1 text-sm text-gray-500">Inactive teams will not appear in team selections and reports</p>
+                    </div>
+                </div>
+            </div>
+
+            {% if team %}
+            <!-- Team Members Section (for existing teams) -->
+            <div class="form-section lg:col-span-2">
+                <div class="form-section-header">
+                    <h3 class="font-semibold text-gray-900">Current Team Members</h3>
+                </div>
+                <div class="form-section-content">
+                    {% if team.get_team_members %}
+                        <div>
+                            {% for member in team.get_team_members %}
+                            <div class="member-card">
+                                <div class="flex items-center space-x-3">
+                                    <div class="member-avatar">
+                                        {{ member.first_name|first|default:member.username|first }}{{ member.last_name|first }}
+                                    </div>
+                                    <div>
+                                        <p class="text-sm font-medium text-gray-900">
+                                            {{ member.get_full_name|default:member.username }}
+                                        </p>
+                                        <p class="text-xs text-gray-500">{{ member.email }}</p>
+                                    </div>
+                                </div>
+                                <div class="text-right">
+                                    <p class="text-xs text-gray-500">
+                                        {{ member.assigned_leads.count }} leads
+                                    </p>
+                                </div>
+                            </div>
+                            {% endfor %}
+                        </div>
+                    {% else %}
+                        <p class="text-sm text-gray-500">No members assigned to this team yet.</p>
+                    {% endif %}
+                    <p class="mt-3 text-sm text-gray-500">
+                        To add or remove team members, edit individual user profiles in the admin panel.
+                    </p>
+                </div>
+            </div>
+            {% endif %}
+        </div>
+
+        <!-- Form Actions -->
+        <div class="form-actions">
+            <a href="{% url 'crm:team_list' %}" class="btn btn-secondary">
+                Cancel
+            </a>
+            <button type="submit" class="btn btn-primary">
+                {% if team %}Update Team{% else %}Create Team{% endif %}
+            </button>
+        </div>
+    </form>
+</div>
+{% endblock %}

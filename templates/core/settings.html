@@ -1,0 +1,65 @@
+{% extends 'base.html' %}
+
+{% block title %}Settings - CRM System{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+{% endblock %}
+
+{% block content %}
+<div class="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-6">
+    <div class="lg:grid lg:grid-cols-12 lg:gap-x-5">
+        <!-- Sidebar Navigation -->
+        <aside class="py-6 px-2 sm:px-6 lg:col-span-3 lg:py-0 lg:px-0">
+            <nav class="space-y-1">
+                <!-- Profile -->
+                <a href="/settings/profile/" class="text-gray-600 hover:bg-gray-50 hover:text-gray-900 group flex items-center px-2 py-2 text-sm font-medium rounded-md">
+                    <i class="fas fa-user text-gray-400 mr-3 flex-shrink-0 h-6 w-6"></i>
+                    Profile
+                </a>
+
+                <!-- General (Admin Only) -->
+                {% if user.is_staff %}
+                <a href="/settings/general/" class="text-gray-600 hover:bg-gray-50 hover:text-gray-900 group flex items-center px-2 py-2 text-sm font-medium rounded-md">
+                    <i class="fas fa-cog text-gray-400 mr-3 flex-shrink-0 h-6 w-6"></i>
+                    General
+                </a>
+                {% endif %}
+
+                <!-- VoIP -->
+                <a href="/settings/voip/" class="text-gray-600 hover:bg-gray-50 hover:text-gray-900 group flex items-center px-2 py-2 text-sm font-medium rounded-md">
+                    <i class="fas fa-phone-alt text-gray-400 mr-3 flex-shrink-0 h-6 w-6"></i>
+                    VoIP
+                </a>
+            </nav>
+        </aside>
+
+        <!-- Main content -->
+        <div class="space-y-6 sm:px-6 lg:col-span-9 lg:px-0">
+            <!-- Page header -->
+            <div class="bg-white shadow">
+                <div class="px-4 py-5 sm:px-6">
+                    <div class="flex items-center justify-between">
+                        <div>
+                            <h1 class="text-lg font-medium text-gray-900">Settings Dashboard</h1>
+                            <p class="mt-1 text-sm text-gray-500">Quick overview of your settings and system status</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Page content -->
+            <div class="bg-white shadow rounded-lg">
+                <div class="px-4 py-5 sm:p-6">
+                    <div class="text-center py-12">
+                        <i class="fas fa-cog text-gray-400 text-6xl mb-4"></i>
+                        <h3 class="text-lg font-medium text-gray-900 mb-2">Settings</h3>
+                        <p class="text-gray-500">Select a section from the sidebar to manage your settings.</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+{% endblock %}

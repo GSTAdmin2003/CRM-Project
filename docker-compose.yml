@@ -1,0 +1,95 @@
+services:
+  db:
+    image: postgres:15
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    ports:
+      - "5433:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+  web:
+    build: .
+    ports:
+      - "8000:8000"
+    volumes:
+      - .:/app
+      - asterisk_recordings:/var/spool/asterisk/recording
+      - asterisk_config:/etc/asterisk/dynamic
+    environment:
+      - DEBUG=${DEBUG:-0}
+      - SECRET_KEY=${SECRET_KEY}
+      - DATABASE_URL=postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}
+      - ASTERISK_ARI_URL=http://asterisk:8088
+      - ASTERISK_ARI_USER=${ARI_USER:-crm}
+      - ASTERISK_ARI_PASSWORD=${ARI_PASSWORD}
+      - ASTERISK_RECORDINGS_PATH=/var/spool/asterisk/recording
+      - CELERY_BROKER_URL=redis://redis:6379/0
+      - CELERY_RESULT_BACKEND=redis://redis:6379/0
+    depends_on:
+      - db
+      - redis
+      - asterisk
+    command: sh -c "python manage.py migrate && python manage.py runserver 0.0.0.0:8000"
+
+  asterisk:
+    build: ./docker/asterisk
+    ports:
+      - "5060:5060/udp"    # SIP
+      - "8088:8088"        # ARI HTTP/WebSocket
+      - "10000-10100:10000-10100/udp"  # RTP media
+    volumes:
+      - asterisk_recordings:/var/spool/asterisk/recording
+      - asterisk_config:/etc/asterisk/dynamic
+    environment:
+      - ARI_PASSWORD=${ARI_PASSWORD}
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+
+  celery:
+    build: .
+    command: celery -A core worker -l info
+    volumes:
+      - .:/app
+      - asterisk_recordings:/var/spool/asterisk/recording
+    environment:
+      - DEBUG=${DEBUG:-0}
+      - SECRET_KEY=${SECRET_KEY}
+      - DATABASE_URL=postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}
+      - ASTERISK_ARI_URL=http://asterisk:8088
+      - ASTERISK_ARI_USER=${ARI_USER:-crm}
+      - ASTERISK_ARI_PASSWORD=${ARI_PASSWORD}
+      - ASTERISK_RECORDINGS_PATH=/var/spool/asterisk/recording
+      - CELERY_BROKER_URL=redis://redis:6379/0
+      - CELERY_RESULT_BACKEND=redis://redis:6379/0
+    depends_on:
+      - db
+      - redis
+      - asterisk
+
+  celery-beat:
+    build: .
+    command: celery -A core beat -l info
+    volumes:
+      - .:/app
+    environment:
+      - DEBUG=${DEBUG:-0}
+      - SECRET_KEY=${SECRET_KEY}
+      - DATABASE_URL=postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}
+      - CELERY_BROKER_URL=redis://redis:6379/0
+      - CELERY_RESULT_BACKEND=redis://redis:6379/0
+    depends_on:
+      - redis
+
+volumes:
+  postgres_data:
+  asterisk_recordings:
+  asterisk_config:
+  redis_data:

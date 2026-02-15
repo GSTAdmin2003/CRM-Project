@@ -1,0 +1,264 @@
+{% extends 'base.html' %}
+
+{% block title %}Calls - CRM System{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+<style>
+.form-control {
+    display: block;
+    width: 100%;
+    padding: 0.5rem 0.75rem;
+    font-size: 0.875rem;
+    line-height: 1.5;
+    color: #374151;
+    background-color: #fff;
+    background-clip: padding-box;
+    border: 1px solid #d1d5db;
+    border-radius: 0.375rem;
+    transition: border-color 0.15s ease-in-out, box-shadow 0.15s ease-in-out;
+}
+.form-control:focus {
+    border-color: #6366f1;
+    outline: 0;
+    box-shadow: 0 0 0 0.2rem rgba(99, 102, 241, 0.25);
+}
+.status-badge {
+    padding: 0.25rem 0.75rem;
+    border-radius: 9999px;
+    font-size: 0.75rem;
+    font-weight: 600;
+    text-transform: uppercase;
+}
+.status-initiated { background-color: #FEF3C7; color: #92400E; }
+.status-ringing { background-color: #DBEAFE; color: #1E40AF; }
+.status-answered { background-color: #D1FAE5; color: #065F46; }
+.status-ended { background-color: #F3F4F6; color: #374151; }
+.status-failed { background-color: #FEE2E2; color: #991B1B; }
+.status-busy { background-color: #FED7AA; color: #9A3412; }
+.status-no_answer { background-color: #E5E7EB; color: #6B7280; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-6">
+    <!-- Header -->
+    <div class="mb-8">
+        <div class="flex justify-between items-start">
+            <div>
+                <h1 class="text-3xl font-bold text-gray-900">Calls</h1>
+                <p class="mt-2 text-gray-600">{{ calls.paginator.count }} total calls</p>
+            </div>
+            <div class="flex gap-3">
+                <a href="{% url 'calls:dialpad' %}" class="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-md text-sm font-medium">
+                    <i class="fas fa-phone mr-2"></i>Make Call
+                </a>
+            </div>
+        </div>
+    </div>
+
+    <!-- Filters -->
+    <div class="bg-white shadow rounded-lg p-6 mb-6">
+        <form method="get" class="flex flex-wrap gap-4">
+            <div class="flex-1 min-w-64">
+                <input type="text" name="search" value="{{ search }}" placeholder="Search by phone number, contact..." class="form-control">
+            </div>
+            <div>
+                <select name="direction" class="form-control">
+                    <option value="">All Directions</option>
+                    <option value="inbound" {% if direction_filter == 'inbound' %}selected{% endif %}>Inbound</option>
+                    <option value="outbound" {% if direction_filter == 'outbound' %}selected{% endif %}>Outbound</option>
+                </select>
+            </div>
+            <div>
+                <select name="status" class="form-control">
+                    <option value="">All Statuses</option>
+                    <option value="answered" {% if status_filter == 'answered' %}selected{% endif %}>Answered</option>
+                    <option value="ended" {% if status_filter == 'ended' %}selected{% endif %}>Ended</option>
+                    <option value="failed" {% if status_filter == 'failed' %}selected{% endif %}>Failed</option>
+                    <option value="busy" {% if status_filter == 'busy' %}selected{% endif %}>Busy</option>
+                    <option value="no_answer" {% if status_filter == 'no_answer' %}selected{% endif %}>No Answer</option>
+                </select>
+            </div>
+            <div>
+                <select name="user" class="form-control">
+                    <option value="">All Users</option>
+                    <option value="me" {% if user_filter == 'me' %}selected{% endif %}>My Calls</option>
+                </select>
+            </div>
+            <button type="submit" class="bg-gray-600 hover:bg-gray-700 text-white px-6 py-2 rounded-md text-sm font-medium">
+                <i class="fas fa-filter mr-2"></i>Filter
+            </button>
+            {% if search or direction_filter or status_filter or user_filter %}
+            <a href="{% url 'calls:call_list' %}" class="bg-gray-300 hover:bg-gray-400 text-gray-700 px-6 py-2 rounded-md text-sm font-medium">
+                Clear
+            </a>
+            {% endif %}
+        </form>
+    </div>
+
+    <!-- Calls List -->
+    {% if calls %}
+    <div class="bg-white shadow overflow-hidden sm:rounded-md">
+        <ul class="divide-y divide-gray-200">
+            {% for call in calls %}
+            <li>
+                <a href="{% url 'calls:call_detail' call.pk %}" class="block hover:bg-gray-50">
+                    <div class="px-4 py-4 sm:px-6">
+                        <div class="flex items-center justify-between">
+                            <div class="flex-1">
+                                <div class="flex items-center">
+                                    <div class="flex-shrink-0 mr-4">
+                                        <div class="h-10 w-10 rounded-full {% if call.direction == 'inbound' %}bg-green-100{% else %}bg-blue-100{% endif %} flex items-center justify-center">
+                                            <i class="fas {% if call.direction == 'inbound' %}fa-phone-volume{% else %}fa-phone-arrow-up-right{% endif %} {% if call.direction == 'inbound' %}text-green-600{% else %}text-blue-600{% endif %}"></i>
+                                        </div>
+                                    </div>
+                                    <div class="flex-1">
+                                        <div class="flex items-center justify-between">
+                                            <div>
+                                                <p class="text-sm font-medium text-gray-900">
+                                                    {% if call.direction == 'inbound' %}
+                                                        {{ call.from_number }}
+                                                        <span class="text-gray-400 mx-1"><i class="fas fa-arrow-right text-xs"></i></span>
+                                                        {{ call.to_number|default:"Your Line" }}
+                                                    {% else %}
+                                                        {{ call.from_number|default:"Your Line" }}
+                                                        <span class="text-gray-400 mx-1"><i class="fas fa-arrow-right text-xs"></i></span>
+                                                        {{ call.to_number }}
+                                                    {% endif %}
+                                                </p>
+                                                {% if call.contact %}
+                                                <p class="text-sm text-indigo-600">
+                                                    <i class="fas fa-user mr-1"></i>{{ call.contact.name }}
+                                                    {% if call.contact.company %}
+                                                        - {{ call.contact.company.display_name }}
+                                                    {% endif %}
+                                                </p>
+                                                {% endif %}
+                                            </div>
+                                            <div class="ml-2 flex-shrink-0 flex items-center space-x-2">
+                                                <span class="status-badge status-{{ call.status }}">
+                                                    {{ call.get_status_display }}
+                                                </span>
+                                                {% if call.recording %}
+                                                <span class="text-gray-400" title="Has recording">
+                                                    <i class="fas fa-microphone"></i>
+                                                </span>
+                                                {% endif %}
+                                            </div>
+                                        </div>
+                                        <div class="mt-2">
+                                            <div class="flex items-center text-sm text-gray-500 space-x-4">
+                                                <p>
+                                                    <i class="fas fa-clock mr-1"></i>
+                                                    {{ call.created_at|date:"M d, Y H:i" }}
+                                                </p>
+                                                {% if call.duration %}
+                                                <p>
+                                                    <i class="fas fa-stopwatch mr-1"></i>
+                                                    {{ call.duration_formatted }}
+                                                </p>
+                                                {% endif %}
+                                                {% if call.user %}
+                                                <p>
+                                                    <i class="fas fa-user-tie mr-1"></i>
+                                                    {{ call.user.username }}
+                                                </p>
+                                                {% endif %}
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="flex-shrink-0 ml-4">
+                                <i class="fas fa-chevron-right text-gray-400"></i>
+                            </div>
+                        </div>
+                    </div>
+                </a>
+            </li>
+            {% endfor %}
+        </ul>
+    </div>
+
+    <!-- Pagination -->
+    {% if calls.has_other_pages %}
+    <div class="bg-white px-4 py-3 flex items-center justify-between border-t border-gray-200 sm:px-6 mt-4 rounded-lg shadow">
+        <div class="flex-1 flex justify-between sm:hidden">
+            {% if calls.has_previous %}
+            <a href="?page={{ calls.previous_page_number }}{% if search %}&search={{ search }}{% endif %}{% if direction_filter %}&direction={{ direction_filter }}{% endif %}{% if status_filter %}&status={{ status_filter }}{% endif %}{% if user_filter %}&user={{ user_filter }}{% endif %}" class="relative inline-flex items-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50">
+                Previous
+            </a>
+            {% endif %}
+            {% if calls.has_next %}
+            <a href="?page={{ calls.next_page_number }}{% if search %}&search={{ search }}{% endif %}{% if direction_filter %}&direction={{ direction_filter }}{% endif %}{% if status_filter %}&status={{ status_filter }}{% endif %}{% if user_filter %}&user={{ user_filter }}{% endif %}" class="ml-3 relative inline-flex items-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50">
+                Next
+            </a>
+            {% endif %}
+        </div>
+        <div class="hidden sm:flex-1 sm:flex sm:items-center sm:justify-between">
+            <div>
+                <p class="text-sm text-gray-700">
+                    Showing
+                    <span class="font-medium">{{ calls.start_index }}</span>
+                    to
+                    <span class="font-medium">{{ calls.end_index }}</span>
+                    of
+                    <span class="font-medium">{{ calls.paginator.count }}</span>
+                    results
+                </p>
+            </div>
+            <div>
+                <nav class="relative z-0 inline-flex rounded-md shadow-sm -space-x-px">
+                    {% if calls.has_previous %}
+                    <a href="?page={{ calls.previous_page_number }}{% if search %}&search={{ search }}{% endif %}{% if direction_filter %}&direction={{ direction_filter }}{% endif %}{% if status_filter %}&status={{ status_filter }}{% endif %}{% if user_filter %}&user={{ user_filter }}{% endif %}" class="relative inline-flex items-center px-2 py-2 rounded-l-md border border-gray-300 bg-white text-sm font-medium text-gray-500 hover:bg-gray-50">
+                        <i class="fas fa-chevron-left"></i>
+                    </a>
+                    {% endif %}
+                    {% for num in calls.paginator.page_range %}
+                        {% if calls.number == num %}
+                        <span class="relative inline-flex items-center px-4 py-2 border border-gray-300 bg-indigo-50 text-sm font-medium text-indigo-600">{{ num }}</span>
+                        {% elif num > calls.number|add:'-3' and num < calls.number|add:'3' %}
+                        <a href="?page={{ num }}{% if search %}&search={{ search }}{% endif %}{% if direction_filter %}&direction={{ direction_filter }}{% endif %}{% if status_filter %}&status={{ status_filter }}{% endif %}{% if user_filter %}&user={{ user_filter }}{% endif %}" class="relative inline-flex items-center px-4 py-2 border border-gray-300 bg-white text-sm font-medium text-gray-700 hover:bg-gray-50">{{ num }}</a>
+                        {% endif %}
+                    {% endfor %}
+                    {% if calls.has_next %}
+                    <a href="?page={{ calls.next_page_number }}{% if search %}&search={{ search }}{% endif %}{% if direction_filter %}&direction={{ direction_filter }}{% endif %}{% if status_filter %}&status={{ status_filter }}{% endif %}{% if user_filter %}&user={{ user_filter }}{% endif %}" class="relative inline-flex items-center px-2 py-2 rounded-r-md border border-gray-300 bg-white text-sm font-medium text-gray-500 hover:bg-gray-50">
+                        <i class="fas fa-chevron-right"></i>
+                    </a>
+                    {% endif %}
+                </nav>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
+    {% else %}
+    <!-- Empty State -->
+    <div class="bg-white shadow rounded-lg">
+        <div class="text-center py-12">
+            <i class="fas fa-phone text-gray-400 text-6xl mb-4"></i>
+            <h3 class="text-lg font-medium text-gray-900 mb-2">
+                {% if search or direction_filter or status_filter or user_filter %}
+                    No calls found
+                {% else %}
+                    No calls yet
+                {% endif %}
+            </h3>
+            <p class="text-gray-500 mb-6">
+                {% if search or direction_filter or status_filter or user_filter %}
+                    Try adjusting your filter criteria.
+                {% else %}
+                    Get started by making your first call.
+                {% endif %}
+            </p>
+            {% if not search and not direction_filter and not status_filter and not user_filter %}
+            <a href="{% url 'calls:dialpad' %}" class="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-md text-sm font-medium">
+                <i class="fas fa-phone mr-2"></i>Make First Call
+            </a>
+            {% endif %}
+        </div>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}

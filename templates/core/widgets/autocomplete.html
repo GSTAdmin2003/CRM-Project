@@ -1,0 +1,47 @@
+{% load static %}
+{#
+Autocomplete Widget Template
+
+Renders an autocomplete input with dropdown container, hidden ID field, and view button.
+The JavaScript component (autocomplete.js) handles the interactive functionality.
+
+Context variables:
+  - widget.name: Field name
+  - widget.value: Current display value
+  - widget.attrs: Input attributes (including data-* attributes)
+  - widget.model_name: Model being searched
+  - widget.allow_create: Whether "Create new" option is shown
+  - widget.view_url_name: URL name for view button
+  - widget.placeholder: Input placeholder text
+#}
+<div class="autocomplete-wrapper">
+    <div class="autocomplete-container">
+        {# Main input field #}
+        <input type="text"
+               name="{{ widget.name }}"
+               {% if widget.value %}value="{{ widget.value }}"{% endif %}
+               {% for name, value in widget.attrs.items %}
+               {{ name }}{% if value != True %}="{{ value }}"{% endif %}
+               {% endfor %}
+        >
+
+        {# Dropdown container - populated by JavaScript #}
+        <div class="autocomplete-dropdown"></div>
+
+        {# Hidden field to store selected ID #}
+        <input type="hidden"
+               name="{{ widget.name }}_id"
+               class="autocomplete-id-input"
+               value="">
+    </div>
+
+    {# View button - shown when item is selected #}
+    {% if widget.view_url_name %}
+    <a href="#"
+       class="autocomplete-view-btn"
+       title="View Details"
+       target="_blank">
+        <i class="fas fa-eye"></i>
+    </a>
+    {% endif %}
+</div>

@@ -1,0 +1,296 @@
+{% extends 'base.html' %}
+
+{% block title %}{% if stage %}Edit Stage{% else %}Create Stage{% endif %} for {{ team.name }} - CRM System{% endblock %}
+
+{% block extra_css %}
+<style>
+/* Form Section Styles */
+.form-section {
+    background: white;
+    border: 1px solid #e5e7eb;
+    border-radius: 8px;
+    overflow: hidden;
+    margin-bottom: 16px;
+}
+
+.form-section-header {
+    padding: 16px 20px;
+    border-bottom: 1px solid #e5e7eb;
+    background: #f9fafb;
+    border-radius: 8px 8px 0 0;
+}
+
+.form-section-content {
+    padding: 20px;
+}
+
+/* Field Styles */
+.field-group {
+    margin-bottom: 16px;
+}
+
+.field-label {
+    display: block;
+    font-size: 13px;
+    font-weight: 600;
+    color: #374151;
+    margin-bottom: 4px;
+}
+
+.field-required {
+    color: #dc2626;
+}
+
+.form-field {
+    width: 100%;
+    padding: 8px 12px;
+    border: 1px solid #d1d5db;
+    border-radius: 4px;
+    font-size: 14px;
+    transition: border-color 0.2s ease;
+}
+
+.form-field:focus {
+    outline: none;
+    border-color: #3b82f6;
+    box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+}
+
+.form-textarea {
+    resize: vertical;
+    min-height: 80px;
+}
+
+/* Color Input */
+.color-input {
+    width: 60px;
+    height: 40px;
+    padding: 0;
+    border: 1px solid #d1d5db;
+    border-radius: 4px;
+    cursor: pointer;
+}
+
+/* Checkbox */
+.checkbox-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-top: 8px;
+}
+
+/* Form Actions */
+.form-actions {
+    position: sticky;
+    bottom: 0;
+    background: white;
+    border-top: 1px solid #e5e7eb;
+    padding: 16px 20px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.btn {
+    padding: 8px 16px;
+    border-radius: 4px;
+    font-size: 14px;
+    font-weight: 500;
+    cursor: pointer;
+    border: none;
+    text-decoration: none;
+    display: inline-block;
+    transition: all 0.2s ease;
+}
+
+.btn-primary {
+    background: #3b82f6;
+    color: white;
+}
+
+.btn-primary:hover {
+    background: #2563eb;
+}
+
+.btn-secondary {
+    background: #e5e7eb;
+    color: #374151;
+}
+
+.btn-secondary:hover {
+    background: #d1d5db;
+}
+
+.help-text {
+    color: #6b7280;
+    font-size: 12px;
+    margin-top: 4px;
+}
+
+.error-message {
+    color: #dc2626;
+    font-size: 12px;
+    margin-top: 4px;
+}
+
+/* Team Info Banner */
+.team-info {
+    background: #f0f9ff;
+    border: 1px solid #bae6fd;
+    border-radius: 6px;
+    padding: 12px;
+    margin-bottom: 16px;
+}
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="w-full px-6 py-4">
+    <!-- Breadcrumb Navigation -->
+    <nav class="flex mb-4" aria-label="Breadcrumb">
+        <ol class="inline-flex items-center space-x-1 md:space-x-3">
+            <li class="inline-flex items-center">
+                <a href="{% url 'crm:dashboard' %}" class="inline-flex items-center text-sm font-medium text-gray-700 hover:text-indigo-600">
+                    <svg class="w-4 h-4 mr-2" fill="currentColor" viewBox="0 0 20 20">
+                        <path d="M10.707 2.293a1 1 0 00-1.414 0l-7 7a1 1 0 001.414 1.414L4 10.414V17a1 1 0 001 1h2a1 1 0 001-1v-2a1 1 0 011-1h2a1 1 0 011 1v2a1 1 0 001 1h2a1 1 0 001-1v-6.586l.293.293a1 1 0 001.414-1.414l-7-7z"></path>
+                    </svg>
+                    CRM
+                </a>
+            </li>
+            <li>
+                <div class="flex items-center">
+                    <svg class="w-6 h-6 text-gray-400" fill="currentColor" viewBox="0 0 20 20">
+                        <path fill-rule="evenodd" d="M7.293 14.707a1 1 0 010-1.414L10.586 10 7.293 6.707a1 1 0 011.414-1.414l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0z" clip-rule="evenodd"></path>
+                    </svg>
+                    <a href="{% url 'crm:team_list' %}" class="ml-1 text-sm font-medium text-gray-700 hover:text-indigo-600 md:ml-2">Teams</a>
+                </div>
+            </li>
+            <li>
+                <div class="flex items-center">
+                    <svg class="w-6 h-6 text-gray-400" fill="currentColor" viewBox="0 0 20 20">
+                        <path fill-rule="evenodd" d="M7.293 14.707a1 1 0 010-1.414L10.586 10 7.293 6.707a1 1 0 011.414-1.414l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0z" clip-rule="evenodd"></path>
+                    </svg>
+                    <a href="{% url 'crm:team_detail' team.pk %}" class="ml-1 text-sm font-medium text-gray-700 hover:text-indigo-600 md:ml-2">{{ team.name }}</a>
+                </div>
+            </li>
+            <li>
+                <div class="flex items-center">
+                    <svg class="w-6 h-6 text-gray-400" fill="currentColor" viewBox="0 0 20 20">
+                        <path fill-rule="evenodd" d="M7.293 14.707a1 1 0 010-1.414L10.586 10 7.293 6.707a1 1 0 011.414-1.414l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0z" clip-rule="evenodd"></path>
+                    </svg>
+                    <span class="ml-1 text-sm font-medium text-gray-500 md:ml-2">{% if stage %}Edit Stage{% else %}Create Stage{% endif %}</span>
+                </div>
+            </li>
+        </ol>
+    </nav>
+
+    <!-- Team Info Banner -->
+    <div class="team-info">
+        <div class="flex items-center space-x-3">
+            <div class="flex-shrink-0">
+                <svg class="w-5 h-5 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                          d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z"></path>
+                </svg>
+            </div>
+            <div>
+                <h3 class="text-sm font-medium text-blue-900">Team: {{ team.name }}</h3>
+                <p class="text-xs text-blue-700">
+                    This stage will be specific to {{ team.name }} and won't affect other teams
+                </p>
+            </div>
+        </div>
+    </div>
+
+    <form method="post" id="team-stage-form">
+        {% csrf_token %}
+
+        <!-- Form Sections Grid -->
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
+            <!-- Stage Information Section -->
+            <div class="form-section">
+                <div class="form-section-header">
+                    <h3 class="font-semibold text-gray-900">Stage Information</h3>
+                </div>
+                <div class="form-section-content">
+                    <!-- Stage Name -->
+                    <div class="field-group">
+                        <label class="field-label">
+                            Stage Name <span class="field-required">*</span>
+                        </label>
+                        <input type="text" name="name" class="form-field"
+                               value="{% if stage %}{{ stage.name }}{% endif %}"
+                               placeholder="e.g., Prospecting, Negotiation, Closed Won"
+                               required>
+                        <div class="help-text">
+                            A descriptive name for this stage in {{ team.name }}'s pipeline
+                        </div>
+                    </div>
+
+                    <!-- Description -->
+                    <div class="field-group">
+                        <label class="field-label">Description</label>
+                        <textarea name="description" class="form-field form-textarea"
+                                  placeholder="Optional description of what happens in this stage">{% if stage %}{{ stage.description }}{% endif %}</textarea>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Stage Settings Section -->
+            <div class="form-section">
+                <div class="form-section-header">
+                    <h3 class="font-semibold text-gray-900">Stage Settings</h3>
+                </div>
+                <div class="form-section-content">
+                    <!-- Stage Color -->
+                    <div class="field-group">
+                        <label class="field-label">Stage Color</label>
+                        <input type="color" name="color" class="color-input"
+                               value="{% if stage %}{{ stage.color }}{% else %}#6B7280{% endif %}">
+                        <div class="help-text">
+                            Color used to represent this stage in the pipeline
+                        </div>
+                    </div>
+
+                    <!-- Default Probability -->
+                    <div class="field-group">
+                        <label class="field-label">Default Probability (%)</label>
+                        <input type="number" name="probability" class="form-field"
+                               min="0" max="100"
+                               value="{% if stage %}{{ stage.probability }}{% else %}0{% endif %}"
+                               placeholder="0">
+                        <div class="help-text">
+                            Default win probability for opportunities in this stage (0-100)
+                        </div>
+                    </div>
+
+                    <!-- Closed Stage Checkbox -->
+                    <div class="field-group">
+                        <div class="checkbox-item">
+                            <input type="checkbox" name="is_closed_stage" id="is_closed_stage"
+                                   class="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300 rounded"
+                                   {% if stage.is_closed_stage %}checked{% endif %}>
+                            <label for="is_closed_stage" class="field-label mb-0">
+                                This is a closed stage
+                            </label>
+                        </div>
+                        <div class="help-text">
+                            Mark this stage as closed (e.g., "Closed Won" or "Closed Lost")
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Form Actions -->
+        <div class="form-actions">
+            <a href="{% url 'crm:team_detail' team.pk %}" class="btn btn-secondary">
+                Cancel
+            </a>
+            <button type="submit" class="btn btn-primary">
+                {% if stage %}Update Stage{% else %}Create Stage{% endif %}
+            </button>
+        </div>
+    </form>
+</div>
+{% endblock %}

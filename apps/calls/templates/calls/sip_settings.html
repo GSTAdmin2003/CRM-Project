@@ -1,0 +1,230 @@
+{% extends 'base.html' %}
+
+{% block title %}VoIP Settings - CRM System{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+<style>
+.form-control {
+    display: block;
+    width: 100%;
+    padding: 0.5rem 0.75rem;
+    font-size: 0.875rem;
+    line-height: 1.5;
+    color: #374151;
+    background-color: #fff;
+    background-clip: padding-box;
+    border: 1px solid #d1d5db;
+    border-radius: 0.375rem;
+    transition: border-color 0.15s ease-in-out, box-shadow 0.15s ease-in-out;
+}
+.form-control:focus {
+    border-color: #6366f1;
+    outline: 0;
+    box-shadow: 0 0 0 0.2rem rgba(99, 102, 241, 0.25);
+}
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-6">
+    <div class="lg:grid lg:grid-cols-12 lg:gap-x-5">
+        <!-- Sidebar Navigation -->
+        <aside class="py-6 px-2 sm:px-6 lg:col-span-3 lg:py-0 lg:px-0">
+            <nav class="space-y-1">
+                <!-- Profile -->
+                <a href="/settings/profile/" class="text-gray-600 hover:bg-gray-50 hover:text-gray-900 group flex items-center px-2 py-2 text-sm font-medium rounded-md">
+                    <i class="fas fa-user text-gray-400 mr-3 flex-shrink-0 h-6 w-6"></i>
+                    Profile
+                </a>
+
+                <!-- General (Admin Only) -->
+                {% if user.is_staff %}
+                <a href="/settings/general/" class="text-gray-600 hover:bg-gray-50 hover:text-gray-900 group flex items-center px-2 py-2 text-sm font-medium rounded-md">
+                    <i class="fas fa-cog text-gray-400 mr-3 flex-shrink-0 h-6 w-6"></i>
+                    General
+                </a>
+                {% endif %}
+
+                <!-- VoIP -->
+                <a href="/settings/voip/" class="bg-gray-200 text-gray-900 group flex items-center px-2 py-2 text-sm font-medium rounded-md">
+                    <i class="fas fa-phone-alt text-gray-400 mr-3 flex-shrink-0 h-6 w-6"></i>
+                    VoIP
+                </a>
+            </nav>
+        </aside>
+
+        <!-- Main content -->
+        <div class="space-y-6 sm:px-6 lg:col-span-9 lg:px-0">
+            <!-- Page header -->
+            <div class="bg-white shadow">
+                <div class="px-4 py-5 sm:px-6">
+                    <div>
+                        <h1 class="text-lg font-medium text-gray-900">VoIP Settings</h1>
+                        <p class="mt-1 text-sm text-gray-500">Configure your SIP credentials for making calls</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Messages -->
+            {% if messages %}
+            {% for message in messages %}
+            <div class="{% if message.tags == 'success' %}bg-green-50 border-green-200 text-green-700{% else %}bg-red-50 border-red-200 text-red-700{% endif %} border rounded-md p-4">
+                <div class="text-sm">{{ message }}</div>
+            </div>
+            {% endfor %}
+            {% endif %}
+
+            <!-- UDP Notice -->
+            <div class="bg-amber-50 border-l-4 border-amber-400 p-4 rounded-r-lg">
+                <div class="flex">
+                    <div class="flex-shrink-0">
+                        <svg class="h-5 w-5 text-amber-400" viewBox="0 0 20 20" fill="currentColor">
+                            <path fill-rule="evenodd" d="M8.485 2.495c.673-1.167 2.357-1.167 3.03 0l6.28 10.875c.673 1.167-.17 2.625-1.516 2.625H3.72c-1.347 0-2.189-1.458-1.515-2.625L8.485 2.495zM10 5a.75.75 0 01.75.75v3.5a.75.75 0 01-1.5 0v-3.5A.75.75 0 0110 5zm0 9a1 1 0 100-2 1 1 0 000 2z" clip-rule="evenodd" />
+                        </svg>
+                    </div>
+                    <div class="ml-3">
+                        <h3 class="text-sm font-medium text-amber-800">UDP Transport Only</h3>
+                        <p class="mt-1 text-sm text-amber-700">This system only supports <strong>UDP</strong> transport for SIP connections. TCP and TLS are not supported. Make sure your SIP provider supports UDP on the specified port.</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- SIP Credentials Form -->
+            <div class="bg-white shadow rounded-lg">
+                <div class="px-4 py-5 sm:p-6">
+                    <form method="post">
+                        {% csrf_token %}
+
+                        <!-- Server Configuration -->
+                        <h3 class="text-lg font-medium text-gray-900 mb-6">
+                            <i class="fas fa-server text-gray-400 mr-2"></i>
+                            Server Configuration
+                        </h3>
+                        <div class="grid grid-cols-1 gap-6 sm:grid-cols-2 mb-8">
+                            <div>
+                                <label for="id_server_ip" class="block text-sm font-medium text-gray-700">
+                                    Server IP / Hostname <span class="text-red-500">*</span>
+                                </label>
+                                <div class="mt-1">
+                                    <input type="text" name="server_ip" id="id_server_ip"
+                                           value="{{ form.server_ip.value|default:'' }}"
+                                           class="form-control {% if form.server_ip.errors %}border-red-300{% endif %}"
+                                           placeholder="e.g., sip.provider.com or 192.168.1.100">
+                                </div>
+                                {% if form.server_ip.errors %}
+                                <p class="mt-1 text-sm text-red-600">{{ form.server_ip.errors.0 }}</p>
+                                {% endif %}
+                                <p class="mt-1 text-xs text-gray-500">The IP address or hostname of your SIP trunk provider</p>
+                            </div>
+                            <div>
+                                <label for="id_server_port" class="block text-sm font-medium text-gray-700">
+                                    Port <span class="text-red-500">*</span>
+                                </label>
+                                <div class="mt-1">
+                                    <input type="number" name="server_port" id="id_server_port"
+                                           value="{{ form.server_port.value|default:'5060' }}"
+                                           class="form-control {% if form.server_port.errors %}border-red-300{% endif %}"
+                                           placeholder="5060">
+                                </div>
+                                {% if form.server_port.errors %}
+                                <p class="mt-1 text-sm text-red-600">{{ form.server_port.errors.0 }}</p>
+                                {% endif %}
+                                <p class="mt-1 text-xs text-gray-500">Default SIP port is 5060 (UDP only)</p>
+                            </div>
+                        </div>
+
+                        <!-- Authentication -->
+                        <h3 class="text-lg font-medium text-gray-900 mb-6">
+                            <i class="fas fa-key text-gray-400 mr-2"></i>
+                            Authentication
+                        </h3>
+                        <div class="grid grid-cols-1 gap-6 sm:grid-cols-2 mb-8">
+                            <div>
+                                <label for="id_username" class="block text-sm font-medium text-gray-700">
+                                    Username <span class="text-red-500">*</span>
+                                </label>
+                                <div class="mt-1">
+                                    <input type="text" name="username" id="id_username"
+                                           value="{{ form.username.value|default:'' }}"
+                                           class="form-control {% if form.username.errors %}border-red-300{% endif %}"
+                                           placeholder="Your SIP username">
+                                </div>
+                                {% if form.username.errors %}
+                                <p class="mt-1 text-sm text-red-600">{{ form.username.errors.0 }}</p>
+                                {% endif %}
+                                <p class="mt-1 text-xs text-gray-500">Your SIP account username (often your phone number)</p>
+                            </div>
+                            <div>
+                                <label for="id_password" class="block text-sm font-medium text-gray-700">
+                                    Password {% if not sip_settings %}<span class="text-red-500">*</span>{% endif %}
+                                </label>
+                                <div class="mt-1">
+                                    <input type="password" name="password" id="id_password"
+                                           class="form-control {% if form.password.errors %}border-red-300{% endif %}"
+                                           placeholder="{% if sip_settings %}Leave blank to keep current{% else %}Your SIP password{% endif %}"
+                                           autocomplete="new-password">
+                                </div>
+                                {% if form.password.errors %}
+                                <p class="mt-1 text-sm text-red-600">{{ form.password.errors.0 }}</p>
+                                {% endif %}
+                            </div>
+                        </div>
+
+                        <!-- Caller ID -->
+                        <h3 class="text-lg font-medium text-gray-900 mb-6">
+                            <i class="fas fa-phone text-gray-400 mr-2"></i>
+                            Caller ID & Status
+                        </h3>
+                        <div class="grid grid-cols-1 gap-6 sm:grid-cols-2 mb-8">
+                            <div>
+                                <label for="id_caller_id" class="block text-sm font-medium text-gray-700">
+                                    Caller ID Number <span class="text-red-500">*</span>
+                                </label>
+                                <div class="mt-1">
+                                    <input type="text" name="caller_id" id="id_caller_id"
+                                           value="{{ form.caller_id.value|default:'' }}"
+                                           class="form-control {% if form.caller_id.errors %}border-red-300{% endif %}"
+                                           placeholder="e.g., +1234567890">
+                                </div>
+                                {% if form.caller_id.errors %}
+                                <p class="mt-1 text-sm text-red-600">{{ form.caller_id.errors.0 }}</p>
+                                {% endif %}
+                                <p class="mt-1 text-xs text-gray-500">The number shown to people you call</p>
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700">Status</label>
+                                <div class="mt-3">
+                                    <label class="inline-flex items-center">
+                                        <input type="checkbox" name="is_active" id="id_is_active"
+                                               {% if form.is_active.value %}checked{% endif %}
+                                               class="rounded border-gray-300 text-indigo-600 shadow-sm focus:border-indigo-300 focus:ring focus:ring-indigo-200 focus:ring-opacity-50">
+                                        <span class="ml-2 text-sm text-gray-700">Enable SIP calling</span>
+                                    </label>
+                                </div>
+                                <p class="mt-1 text-xs text-gray-500">When disabled, calls will not use this SIP account</p>
+                            </div>
+                        </div>
+
+                        <!-- Actions -->
+                        <div class="flex justify-between pt-4 border-t border-gray-200">
+                            {% if sip_settings %}
+                            <button type="submit" name="delete" value="1"
+                                    onclick="return confirm('Are you sure you want to delete your SIP credentials?')"
+                                    class="bg-red-50 py-2 px-4 border border-red-300 rounded-md shadow-sm text-sm font-medium text-red-700 hover:bg-red-100">
+                                <i class="fas fa-trash mr-2"></i>Delete Credentials
+                            </button>
+                            {% else %}
+                            <div></div>
+                            {% endif %}
+                            <button type="submit" class="bg-indigo-600 py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500">
+                                <i class="fas fa-save mr-2"></i>Save Credentials
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

@@ -1,0 +1,174 @@
+/**
+ * Autocomplete Component Styles
+ *
+ * Provides styling for the reusable autocomplete widget.
+ */
+
+/* Wrapper for autocomplete input + view button */
+.autocomplete-wrapper {
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+}
+
+.autocomplete-wrapper .autocomplete-container {
+    flex: 1;
+}
+
+/* Container for input + dropdown */
+.autocomplete-container {
+    position: relative;
+}
+
+/* Input styling is inherited from form-field class */
+.autocomplete-input {
+    width: 100%;
+}
+
+/* Dropdown menu */
+.autocomplete-dropdown {
+    position: absolute;
+    top: 100%;
+    left: 0;
+    right: 0;
+    background: white;
+    border: 1px solid #d1d5db;
+    border-top: none;
+    border-radius: 0 0 6px 6px;
+    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+    max-height: 240px;
+    overflow-y: auto;
+    z-index: 9999;
+    display: none;
+}
+
+.autocomplete-dropdown.visible {
+    display: block;
+}
+
+/* Individual result items */
+.autocomplete-item {
+    padding: 10px 12px;
+    cursor: pointer;
+    border-bottom: 1px solid #f3f4f6;
+    transition: background-color 0.15s ease;
+}
+
+.autocomplete-item:hover,
+.autocomplete-item.highlighted {
+    background-color: #f3f4f6;
+}
+
+.autocomplete-item:last-child {
+    border-bottom: none;
+}
+
+/* Primary display text */
+.autocomplete-item-primary {
+    font-weight: 500;
+    color: #374151;
+    font-size: 14px;
+}
+
+/* Secondary display text */
+.autocomplete-item-secondary {
+    font-size: 12px;
+    color: #6b7280;
+    margin-top: 2px;
+}
+
+/* Create new option styling */
+.autocomplete-create-new {
+    background-color: #f0f9ff;
+    border-left: 3px solid #3b82f6;
+    color: #1e40af;
+    font-weight: 500;
+}
+
+.autocomplete-create-new:hover {
+    background-color: #e0f2fe;
+}
+
+.autocomplete-create-new .autocomplete-item-primary {
+    color: #1e40af;
+}
+
+.autocomplete-create-new i {
+    margin-right: 6px;
+}
+
+/* View button */
+.autocomplete-view-btn {
+    display: none;
+    width: 40px;
+    height: 40px;
+    flex-shrink: 0;
+    background: #3b82f6;
+    border-radius: 6px;
+    align-items: center;
+    justify-content: center;
+    color: white;
+    cursor: pointer;
+    transition: background-color 0.2s ease;
+    text-decoration: none;
+    border: none;
+}
+
+.autocomplete-view-btn:hover {
+    background: #2563eb;
+    color: white;
+}
+
+.autocomplete-view-btn:focus {
+    outline: none;
+    box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.4);
+}
+
+.autocomplete-view-btn.visible {
+    display: flex;
+}
+
+.autocomplete-view-btn i {
+    font-size: 14px;
+}
+
+/* Loading state */
+.autocomplete-loading {
+    padding: 12px;
+    text-align: center;
+    color: #6b7280;
+    font-size: 14px;
+}
+
+.autocomplete-loading::before {
+    content: '';
+    display: inline-block;
+    width: 16px;
+    height: 16px;
+    border: 2px solid #e5e7eb;
+    border-top-color: #3b82f6;
+    border-radius: 50%;
+    animation: autocomplete-spin 0.6s linear infinite;
+    margin-right: 8px;
+    vertical-align: middle;
+}
+
+@keyframes autocomplete-spin {
+    to {
+        transform: rotate(360deg);
+    }
+}
+
+/* No results state */
+.autocomplete-no-results {
+    padding: 12px;
+    text-align: center;
+    color: #6b7280;
+    font-size: 14px;
+    font-style: italic;
+}
+
+/* Hidden ID input */
+.autocomplete-id-input {
+    display: none;
+}

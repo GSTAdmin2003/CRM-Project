@@ -1,0 +1,124 @@
+{% extends 'base.html' %}
+
+{% block title %}{{ contact.name }} - CRM System{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+{% endblock %}
+
+{% block content %}
+<div class="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-6">
+    <!-- Header -->
+    <div class="mb-8">
+        <div class="flex justify-between items-start">
+            <div>
+                <nav class="flex mb-2">
+                    <a href="{% url 'contacts:dashboard_home' %}" class="text-indigo-600 hover:text-indigo-900">Contacts</a>
+                    <span class="mx-2 text-gray-400">/</span>
+                    <a href="{% url 'contacts:company_list' %}" class="text-indigo-600 hover:text-indigo-900">Companies</a>
+                    <span class="mx-2 text-gray-400">/</span>
+                    <a href="{% url 'contacts:company_detail' company.pk %}" class="text-indigo-600 hover:text-indigo-900">{{ company.display_name }}</a>
+                    <span class="mx-2 text-gray-400">/</span>
+                    <span class="text-gray-500">{{ contact.name }}</span>
+                </nav>
+                <h1 class="text-3xl font-bold text-gray-900">{{ contact.name }}</h1>
+                <p class="mt-2 text-gray-600">{{ contact.position }} at {{ company.display_name }}</p>
+            </div>
+            <div class="flex space-x-2">
+                <a href="{% url 'contacts:contact_edit' contact.pk %}" class="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-md text-sm font-medium">
+                    <i class="fas fa-edit mr-2"></i>Edit
+                </a>
+                <a href="{% url 'contacts:contact_delete' contact.pk %}" class="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-md text-sm font-medium">
+                    <i class="fas fa-trash mr-2"></i>Delete
+                </a>
+            </div>
+        </div>
+    </div>
+
+    <div class="grid grid-cols-1 gap-6 lg:grid-cols-2">
+        <!-- Contact Information -->
+        <div class="bg-white shadow rounded-lg">
+            <div class="px-4 py-5 sm:p-6">
+                <h3 class="text-lg leading-6 font-medium text-gray-900 mb-4">Contact Information</h3>
+                <dl class="space-y-3">
+                    <div>
+                        <dt class="text-sm font-medium text-gray-500">Name</dt>
+                        <dd class="mt-1 text-sm text-gray-900">{{ contact.name }}</dd>
+                    </div>
+                    <div>
+                        <dt class="text-sm font-medium text-gray-500">Position</dt>
+                        <dd class="mt-1 text-sm text-gray-900">{{ contact.position }}</dd>
+                    </div>
+                    {% if contact.email %}
+                    <div>
+                        <dt class="text-sm font-medium text-gray-500">Email</dt>
+                        <dd class="mt-1 text-sm text-gray-900">
+                            <a href="mailto:{{ contact.email }}" class="text-indigo-600 hover:text-indigo-900">
+                                {{ contact.email }}
+                            </a>
+                        </dd>
+                    </div>
+                    {% endif %}
+                    {% if contact.phone %}
+                    <div>
+                        <dt class="text-sm font-medium text-gray-500">Phone</dt>
+                        <dd class="mt-1 text-sm text-gray-900">
+                            <a href="tel:{{ contact.phone }}" class="text-indigo-600 hover:text-indigo-900">
+                                {{ contact.phone }}
+                            </a>
+                        </dd>
+                    </div>
+                    {% endif %}
+                    {% if contact.mobile %}
+                    <div>
+                        <dt class="text-sm font-medium text-gray-500">Mobile</dt>
+                        <dd class="mt-1 text-sm text-gray-900">
+                            <a href="tel:{{ contact.mobile }}" class="text-indigo-600 hover:text-indigo-900">
+                                {{ contact.mobile }}
+                            </a>
+                        </dd>
+                    </div>
+                    {% endif %}
+                </dl>
+            </div>
+        </div>
+
+        <!-- Company Information -->
+        <div class="bg-white shadow rounded-lg">
+            <div class="px-4 py-5 sm:p-6">
+                <h3 class="text-lg leading-6 font-medium text-gray-900 mb-4">Company Information</h3>
+                <dl class="space-y-3">
+                    <div>
+                        <dt class="text-sm font-medium text-gray-500">Company</dt>
+                        <dd class="mt-1 text-sm text-gray-900">
+                            <a href="{% url 'contacts:company_detail' company.pk %}" class="text-indigo-600 hover:text-indigo-900">
+                                {{ company.display_name }}
+                            </a>
+                        </dd>
+                    </div>
+                    <div>
+                        <dt class="text-sm font-medium text-gray-500">Legal Name</dt>
+                        <dd class="mt-1 text-sm text-gray-900">{{ company.legal_name }}</dd>
+                    </div>
+                    <div>
+                        <dt class="text-sm font-medium text-gray-500">Legal ID</dt>
+                        <dd class="mt-1 text-sm text-gray-900">{{ company.legal_id }}</dd>
+                    </div>
+                    {% if company.industry %}
+                    <div>
+                        <dt class="text-sm font-medium text-gray-500">Industry</dt>
+                        <dd class="mt-1 text-sm text-gray-900">{{ company.industry }}</dd>
+                    </div>
+                    {% endif %}
+                    {% if company.category %}
+                    <div>
+                        <dt class="text-sm font-medium text-gray-500">Category</dt>
+                        <dd class="mt-1 text-sm text-gray-900">{{ company.category }}</dd>
+                    </div>
+                    {% endif %}
+                </dl>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

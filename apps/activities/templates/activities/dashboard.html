@@ -1,0 +1,338 @@
+{% extends 'base.html' %}
+
+{% block title %}Activities - CRM System{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+<style>
+.filter-statusbar {
+    position: relative;
+    display: flex;
+    align-items: center;
+    margin: 0;
+    padding: 0;
+    border: 1px solid #e5e7eb;
+    border-radius: 6px;
+    overflow: hidden;
+    background: #f9fafb;
+}
+
+.filter-item {
+    position: relative;
+    flex: 1;
+    text-align: center;
+    padding: 14px 16px;
+    font-size: 13px;
+    font-weight: 500;
+    color: #6b7280;
+    background: transparent;
+    border-right: 1px solid #e5e7eb;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    text-decoration: none;
+    display: block;
+}
+
+.filter-item:last-child {
+    border-right: none;
+}
+
+.filter-item:hover {
+    background: #f3f4f6;
+}
+
+.filter-item.active {
+    background: #3b82f6;
+    color: white;
+    font-weight: 600;
+    position: relative;
+}
+
+.filter-item.active::after {
+    content: '';
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    height: 3px;
+    background: #1d4ed8;
+}
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-6">
+    <!-- Header -->
+    <div class="mb-8">
+        <h1 class="text-3xl font-bold text-gray-900">Activities</h1>
+        <p class="mt-2 text-gray-600">View and manage activities. Create new activities from the opportunity detail pages.</p>
+    </div>
+
+    <!-- Filters Bar -->
+    <div class="bg-white shadow rounded-lg p-6 mb-6">
+        <!-- View and Team Selection -->
+        <div class="flex flex-wrap gap-4 mb-4">
+            <!-- View Selector -->
+            <div class="flex-1 min-w-[200px]">
+                <label class="block text-sm font-medium text-gray-700 mb-1">View</label>
+                <select id="view-select" class="form-select block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500">
+                    <option value="personal" {% if view_context == 'personal' %}selected{% endif %}>My Activities</option>
+                    {% if user.is_sales_manager or user.is_sales_executive %}
+                    <option value="team" {% if view_context == 'team' %}selected{% endif %}>Team Activities</option>
+                    {% endif %}
+                </select>
+            </div>
+
+            <!-- Team Selector (Executives Only) -->
+            {% if user.is_sales_executive %}
+            <div class="flex-1 min-w-[200px]" id="team-selector-container" {% if view_context != 'team' %}style="display:none;"{% endif %}>
+                <label class="block text-sm font-medium text-gray-700 mb-1">Team</label>
+                <select id="team-select" class="form-select block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500">
+                    <option value="all" {% if selected_team_id == 'all' %}selected{% endif %}>All Teams</option>
+                    {% for team in available_teams %}
+                    <option value="{{ team.id }}" {% if selected_team_id|stringformat:"s" == team.id|stringformat:"s" %}selected{% endif %}>{{ team.name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            {% endif %}
+        </div>
+
+        <!-- Date Filter Status Bar -->
+        <div class="mb-4">
+            <label class="block text-sm font-medium text-gray-700 mb-2">Date Filter</label>
+            <div class="filter-statusbar">
+                <a href="?view={{ view_context }}&team={{ selected_team_id }}&filter=today"
+                   class="filter-item {% if date_filter == 'today' %}active{% endif %}">
+                    Today
+                </a>
+                <a href="?view={{ view_context }}&team={{ selected_team_id }}&filter=week"
+                   class="filter-item {% if date_filter == 'week' %}active{% endif %}">
+                    This Week
+                </a>
+                <a href="?view={{ view_context }}&team={{ selected_team_id }}&filter=next_week"
+                   class="filter-item {% if date_filter == 'next_week' %}active{% endif %}">
+                    Next Week
+                </a>
+                <a href="?view={{ view_context }}&team={{ selected_team_id }}&filter=future"
+                   class="filter-item {% if date_filter == 'future' %}active{% endif %}">
+                    Future
+                </a>
+                <a href="?view={{ view_context }}&team={{ selected_team_id }}&filter=past"
+                   class="filter-item {% if date_filter == 'past' %}active{% endif %}">
+                    Past
+                </a>
+            </div>
+        </div>
+
+        <!-- Advanced Date Filters -->
+        <div class="flex flex-wrap gap-3 pt-4 border-t border-gray-200">
+            <!-- Custom Date Picker -->
+            <div class="flex items-center gap-2">
+                <label class="text-sm font-medium text-gray-700">Specific Date:</label>
+                <input type="date" id="custom-date" value="{{ custom_date }}" class="form-input rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 text-sm">
+                <button onclick="filterByDate()" class="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-md text-sm font-medium">
+                    Go
+                </button>
+            </div>
+
+            <!-- Date Range -->
+            <div class="flex items-center gap-2">
+                <label class="text-sm font-medium text-gray-700">Date Range:</label>
+                <input type="date" id="start-date" value="{{ start_date }}" class="form-input rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 text-sm" placeholder="Start">
+                <span class="text-gray-500">to</span>
+                <input type="date" id="end-date" value="{{ end_date }}" class="form-input rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 text-sm" placeholder="End">
+                <button onclick="filterByRange()" class="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-md text-sm font-medium">
+                    Go
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Activities List -->
+    {% if activities %}
+    <div class="space-y-4">
+        {% regroup activities by scheduled_date as activities_by_date %}
+        {% for date_group in activities_by_date %}
+        <div class="bg-white shadow rounded-lg overflow-hidden">
+            <!-- Date Header -->
+            <div class="bg-gray-50 px-6 py-3 border-b border-gray-200">
+                <h3 class="text-lg font-medium text-gray-900">
+                    {{ date_group.grouper|date:"l, F j, Y" }}
+                    {% if date_group.grouper == today %}
+                    <span class="ml-2 px-2 py-1 text-xs font-medium bg-indigo-100 text-indigo-800 rounded">Today</span>
+                    {% endif %}
+                </h3>
+            </div>
+
+            <!-- Activities for this date -->
+            <div class="divide-y divide-gray-200">
+                {% for activity in date_group.list %}
+                <div class="px-6 py-4 hover:bg-gray-50 transition">
+                    <div class="flex items-start justify-between">
+                        <div class="flex items-start space-x-4 flex-1">
+                            <!-- Activity Type Icon -->
+                            <div class="flex-shrink-0">
+                                <div class="h-10 w-10 rounded-full flex items-center justify-center" style="background-color: {{ activity.activity_type.color }}20;">
+                                    <i class="{{ activity.activity_type.icon }} text-lg" style="color: {{ activity.activity_type.color }};"></i>
+                                </div>
+                            </div>
+
+                            <!-- Activity Details -->
+                            <div class="flex-1 min-w-0">
+                                <div class="flex items-center gap-2 mb-1">
+                                    <a href="{% url 'activities:activity_edit' activity.pk %}" class="text-base font-medium text-gray-900 hover:text-indigo-600">{{ activity.title }}</a>
+                                    <span class="px-2 py-1 text-xs font-medium rounded {% if activity.status == 'completed' %}bg-green-100 text-green-800{% elif activity.status == 'cancelled' %}bg-red-100 text-red-800{% else %}bg-yellow-100 text-yellow-800{% endif %}">
+                                        {{ activity.get_status_display }}
+                                    </span>
+                                </div>
+                                <p class="text-sm text-gray-600 mb-2">
+                                    <i class="fas fa-briefcase mr-1"></i>
+                                    <a href="{% url 'crm:opportunity_edit' activity.lead.pk %}" class="text-indigo-600 hover:text-indigo-800">{{ activity.lead.title }}</a>
+                                </p>
+                                {% if activity.description %}
+                                <p class="text-sm text-gray-600">{{ activity.description|truncatewords:20 }}</p>
+                                {% endif %}
+                                {% if view_context == 'team' and activity.assigned_to %}
+                                <p class="text-xs text-gray-500 mt-1">
+                                    <i class="fas fa-user mr-1"></i>Assigned to: {{ activity.assigned_to.get_full_name }}
+                                </p>
+                                {% endif %}
+                            </div>
+                        </div>
+
+                        <!-- Actions -->
+                        <div class="flex items-center gap-2 ml-4">
+                            {% if activity.status == 'planned' %}
+                            <button onclick="openCompleteModal({{ activity.pk }}, '{{ activity.title|escapejs }}')"
+                                    class="px-3 py-1 bg-green-600 hover:bg-green-700 text-white rounded-md text-sm">
+                                <i class="fas fa-check mr-1"></i>Complete
+                            </button>
+                            {% endif %}
+                            <a href="{% url 'activities:activity_delete' activity.pk %}"
+                               class="px-3 py-1 bg-red-600 hover:bg-red-700 text-white rounded-md text-sm">
+                                <i class="fas fa-trash"></i>
+                            </a>
+                        </div>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+    {% else %}
+    <!-- Empty State -->
+    <div class="bg-white shadow rounded-lg text-center py-12">
+        <i class="fas fa-calendar-alt text-gray-400 text-6xl mb-4"></i>
+        <h3 class="text-lg font-medium text-gray-900 mb-2">No activities found</h3>
+        <p class="text-gray-600 mb-4">Try adjusting your filters or create activities from opportunity detail pages.</p>
+    </div>
+    {% endif %}
+</div>
+
+<!-- Complete Activity Modal -->
+<div id="complete-modal" class="fixed inset-0 bg-gray-500 bg-opacity-75 flex items-center justify-center hidden z-50">
+    <div class="bg-white rounded-lg p-6 max-w-md w-full mx-4">
+        <h3 class="text-lg font-medium text-gray-900 mb-4">Complete Activity</h3>
+        <p class="text-sm text-gray-600 mb-4" id="modal-activity-title"></p>
+        <form id="complete-form" method="post">
+            {% csrf_token %}
+            <textarea name="outcome" rows="4" class="form-textarea block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 mb-4" placeholder="What was the outcome of this activity?"></textarea>
+            <div class="flex gap-2 justify-end">
+                <button type="button" onclick="closeCompleteModal()" class="px-4 py-2 bg-gray-200 hover:bg-gray-300 text-gray-700 rounded-md text-sm font-medium">
+                    Cancel
+                </button>
+                <button type="submit" class="px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-md text-sm font-medium">
+                    Mark Complete
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    // View and team selection
+    const viewSelect = document.getElementById('view-select');
+    const teamSelect = document.getElementById('team-select');
+    const teamContainer = document.getElementById('team-selector-container');
+
+    if (viewSelect) {
+        viewSelect.addEventListener('change', function() {
+            const view = this.value;
+            const urlParams = new URLSearchParams(window.location.search);
+            urlParams.set('view', view);
+
+            if (view === 'team' && teamSelect) {
+                if (teamContainer) teamContainer.style.display = 'block';
+                const teamId = teamSelect.value || 'all';
+                urlParams.set('team', teamId);
+            } else {
+                if (teamContainer) teamContainer.style.display = 'none';
+                urlParams.delete('team');
+            }
+
+            window.location.search = urlParams.toString();
+        });
+    }
+
+    if (teamSelect) {
+        teamSelect.addEventListener('change', function() {
+            const urlParams = new URLSearchParams(window.location.search);
+            urlParams.set('team', this.value);
+            window.location.search = urlParams.toString();
+        });
+    }
+
+    // Custom date filtering
+    function filterByDate() {
+        const date = document.getElementById('custom-date').value;
+        if (date) {
+            const urlParams = new URLSearchParams(window.location.search);
+            urlParams.set('filter', 'custom');
+            urlParams.set('date', date);
+            window.location.search = urlParams.toString();
+        }
+    }
+
+    function filterByRange() {
+        const startDate = document.getElementById('start-date').value;
+        const endDate = document.getElementById('end-date').value;
+        if (startDate && endDate) {
+            const urlParams = new URLSearchParams(window.location.search);
+            urlParams.set('filter', 'range');
+            urlParams.set('start_date', startDate);
+            urlParams.set('end_date', endDate);
+            window.location.search = urlParams.toString();
+        }
+    }
+
+    // Complete modal
+    function openCompleteModal(activityId, activityTitle) {
+        const modal = document.getElementById('complete-modal');
+        const form = document.getElementById('complete-form');
+        const titleEl = document.getElementById('modal-activity-title');
+
+        titleEl.textContent = activityTitle;
+        form.action = `/activities/${activityId}/complete/`;
+        modal.classList.remove('hidden');
+    }
+
+    function closeCompleteModal() {
+        const modal = document.getElementById('complete-modal');
+        modal.classList.add('hidden');
+    }
+
+    // Close modal on escape key
+    document.addEventListener('keydown', function(e) {
+        if (e.key === 'Escape') {
+            closeCompleteModal();
+        }
+    });
+</script>
+{% endblock %}

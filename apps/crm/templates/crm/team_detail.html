@@ -1,0 +1,274 @@
+{% extends 'base.html' %}
+
+{% block title %}{{ team.name }} - Sales Teams - CRM System{% endblock %}
+
+{% block content %}
+<div class="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
+    <!-- Page header -->
+    <div class="mb-8">
+        <div class="flex justify-between items-center">
+            <div>
+                <div class="flex items-center space-x-3">
+                    <h1 class="text-3xl font-bold tracking-tight text-gray-900">{{ team.name }}</h1>
+                    {% if team.is_active %}
+                        <span class="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-green-100 text-green-800">
+                            Active
+                        </span>
+                    {% else %}
+                        <span class="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-red-100 text-red-800">
+                            Inactive
+                        </span>
+                    {% endif %}
+                </div>
+                {% if team.description %}
+                <p class="mt-2 text-sm text-gray-600">{{ team.description }}</p>
+                {% endif %}
+            </div>
+            <div class="flex space-x-3">
+                <a href="{% url 'crm:team_list' %}" class="bg-gray-600 hover:bg-gray-700 text-white px-4 py-2 rounded-md text-sm font-medium transition-colors">
+                    Back to Teams
+                </a>
+                {% if user.is_sales_manager or user.is_sales_executive %}
+                <a href="{% url 'crm:team_edit' team.pk %}" class="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-md text-sm font-medium transition-colors">
+                    Edit Team
+                </a>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+
+    <!-- Team info and stats -->
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
+        <!-- Team Information -->
+        <div class="lg:col-span-2 space-y-6">
+            <!-- Team Members -->
+            <div class="bg-white shadow rounded-lg">
+                <div class="px-6 py-4 border-b border-gray-200">
+                    <h3 class="text-lg font-medium text-gray-900">Team Members ({{ team.get_team_members.count }})</h3>
+                </div>
+                <div class="px-6 py-4">
+                    {% if team.get_team_members %}
+                        <div class="space-y-4">
+                            {% for member in team.get_team_members %}
+                            <div class="flex items-center justify-between p-4 border border-gray-200 rounded-lg">
+                                <div class="flex items-center space-x-4">
+                                    <div class="w-10 h-10 rounded-full bg-indigo-500 flex items-center justify-center">
+                                        <span class="text-sm font-medium text-white">
+                                            {{ member.first_name|first|default:member.username|first }}{{ member.last_name|first }}
+                                        </span>
+                                    </div>
+                                    <div>
+                                        <h4 class="text-sm font-medium text-gray-900">
+                                            {{ member.get_full_name|default:member.username }}
+                                        </h4>
+                                        <p class="text-sm text-gray-500">{{ member.email }}</p>
+                                        {% if member.get_roles %}
+                                        <div class="flex flex-wrap gap-1 mt-1">
+                                            {% for role in member.get_roles %}
+                                            <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-blue-100 text-blue-800">
+                                                {{ role.role.name }}
+                                            </span>
+                                            {% endfor %}
+                                        </div>
+                                        {% endif %}
+                                    </div>
+                                </div>
+                                <div class="text-right">
+                                    <p class="text-sm text-gray-500">
+                                        Opportunities: {{ member.assigned_leads.count }}
+                                    </p>
+                                    <p class="text-sm text-gray-500">
+                                        Joined: {{ member.date_joined|date:"M Y" }}
+                                    </p>
+                                </div>
+                            </div>
+                            {% endfor %}
+                        </div>
+                    {% else %}
+                        <p class="text-sm text-gray-500 text-center py-8">No team members assigned yet.</p>
+                    {% endif %}
+                </div>
+            </div>
+
+            <!-- Pipeline Stages -->
+            <div class="bg-white shadow rounded-lg">
+                <div class="px-6 py-4 border-b border-gray-200">
+                    <div class="flex justify-between items-center">
+                        <h3 class="text-lg font-medium text-gray-900">Pipeline Stages</h3>
+                        {% if user.is_sales_manager or user.is_sales_executive %}
+                        <div class="flex space-x-2">
+                            <a href="{% url 'crm:team_stage_create' team.pk %}" class="text-indigo-600 hover:text-indigo-500 text-sm font-medium">
+                                Add Stage
+                            </a>
+                        </div>
+                        {% endif %}
+                    </div>
+                </div>
+                <div class="px-6 py-4">
+                    {% with team_stages=team.custom_stages.all %}
+                    {% if team_stages %}
+                        <div class="space-y-3">
+                            {% for stage in team_stages %}
+                            <div class="flex items-center justify-between p-3 border border-gray-200 rounded-lg">
+                                <div class="flex items-center space-x-3">
+                                    <div class="w-4 h-4 rounded-full" style="background-color: {{ stage.color }};"></div>
+                                    <div>
+                                        <h4 class="text-sm font-medium text-gray-900">{{ stage.name }}</h4>
+                                        {% if stage.description %}
+                                        <p class="text-xs text-gray-500">{{ stage.description }}</p>
+                                        {% endif %}
+                                    </div>
+                                </div>
+                                <div class="flex items-center space-x-4">
+                                    <div class="text-right">
+                                        <p class="text-xs text-gray-500">{{ stage.probability }}% probability</p>
+                                        <p class="text-xs text-gray-500">Order: {{ stage.order }}</p>
+                                    </div>
+                                    {% if user.is_sales_manager or user.is_sales_executive %}
+                                    <div class="flex space-x-1">
+                                        <a href="{% url 'crm:team_stage_edit' team.pk stage.pk %}" class="text-indigo-600 hover:text-indigo-500 text-xs">
+                                            Edit
+                                        </a>
+                                        <span class="text-gray-300">|</span>
+                                        <a href="{% url 'crm:team_stage_delete' team.pk stage.pk %}" class="text-red-600 hover:text-red-500 text-xs" 
+                                           onclick="return confirm('Delete this stage?')">
+                                            Delete
+                                        </a>
+                                    </div>
+                                    {% endif %}
+                                </div>
+                            </div>
+                            {% endfor %}
+                        </div>
+                    {% else %}
+                        <div class="text-center py-8">
+                            <div class="text-gray-400 mb-2">
+                                <svg class="mx-auto h-12 w-12" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1" 
+                                          d="M9 5H7a2 2 0 00-2 2v10a2 2 0 002 2h8a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"></path>
+                                </svg>
+                            </div>
+                            <h4 class="text-sm font-medium text-gray-900 mb-1">No Custom Pipeline Stages</h4>
+                            <p class="text-sm text-gray-500 mb-4">This team is using the global default pipeline stages.</p>
+                            {% if user.is_sales_manager or user.is_sales_executive %}
+                            <a href="{% url 'crm:team_stage_create' team.pk %}" class="inline-flex items-center px-3 py-2 border border-transparent text-sm font-medium rounded-md text-indigo-700 bg-indigo-100 hover:bg-indigo-200">
+                                Create Custom Stages
+                            </a>
+                            {% endif %}
+                        </div>
+                    {% endif %}
+                    {% endwith %}
+                </div>
+            </div>
+
+            <!-- Recent Team Opportunities -->
+            <div class="bg-white shadow rounded-lg">
+                <div class="px-6 py-4 border-b border-gray-200">
+                    <div class="flex justify-between items-center">
+                        <h3 class="text-lg font-medium text-gray-900">Recent Team Opportunities</h3>
+                        <a href="{% url 'crm:kanban_board' %}?view=team" class="text-indigo-600 hover:text-indigo-500 text-sm font-medium">
+                            View all in Kanban
+                        </a>
+                    </div>
+                </div>
+                <div class="px-6 py-4">
+                    {% if team.get_team_leads %}
+                        <div class="space-y-3">
+                            {% for lead in team.get_team_leads|slice:":5" %}
+                            <div class="flex items-center justify-between p-3 border border-gray-100 rounded-lg hover:bg-gray-50">
+                                <div>
+                                    <h4 class="text-sm font-medium text-gray-900">{{ lead.title }}</h4>
+                                    <p class="text-sm text-gray-500">
+                                        {{ lead.full_name }} • {{ lead.company.legal_name|default:lead.company_name }}
+                                    </p>
+                                    <div class="flex items-center space-x-2 mt-1">
+                                        <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium" style="background-color: {{ lead.stage.color }}20; color: {{ lead.stage.color }}">
+                                            {{ lead.stage.name }}
+                                        </span>
+                                        {% if lead.assigned_to %}
+                                        <span class="text-xs text-gray-500">
+                                            Assigned to: {{ lead.assigned_to.get_full_name|default:lead.assigned_to.username }}
+                                        </span>
+                                        {% endif %}
+                                    </div>
+                                </div>
+                                <div class="text-right">
+                                    <p class="text-sm font-medium text-gray-900">${{ lead.estimated_value|floatformat:0 }}</p>
+                                    <p class="text-xs text-gray-500">{{ lead.probability }}% probability</p>
+                                </div>
+                            </div>
+                            {% endfor %}
+                        </div>
+                    {% else %}
+                        <p class="text-sm text-gray-500 text-center py-8">No opportunities assigned to this team yet.</p>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+
+        <!-- Sidebar - Team Stats -->
+        <div class="space-y-6">
+            <!-- Team Overview -->
+            <div class="bg-white shadow rounded-lg">
+                <div class="px-6 py-4 border-b border-gray-200">
+                    <h3 class="text-lg font-medium text-gray-900">Team Overview</h3>
+                </div>
+                <div class="px-6 py-4 space-y-4">
+                    {% if team.manager %}
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700">Manager</label>
+                        <p class="mt-1 text-sm text-gray-900">{{ team.manager.get_full_name|default:team.manager.username }}</p>
+                    </div>
+                    {% endif %}
+                    
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700">Created</label>
+                        <p class="mt-1 text-sm text-gray-900">{{ team.created_at|date:"F d, Y" }}</p>
+                    </div>
+                    
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700">Last Updated</label>
+                        <p class="mt-1 text-sm text-gray-900">{{ team.updated_at|date:"F d, Y" }}</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Team Statistics -->
+            <div class="bg-white shadow rounded-lg">
+                <div class="px-6 py-4 border-b border-gray-200">
+                    <h3 class="text-lg font-medium text-gray-900">Statistics</h3>
+                </div>
+                <div class="px-6 py-4 space-y-4">
+                    <div class="flex justify-between">
+                        <span class="text-sm text-gray-600">Total Members</span>
+                        <span class="text-sm font-medium text-gray-900">{{ team.get_team_members.count }}</span>
+                    </div>
+                    
+                    <div class="flex justify-between">
+                        <span class="text-sm text-gray-600">Active Opportunities</span>
+                        <span class="text-sm font-medium text-gray-900">{{ team.get_team_leads.count }}</span>
+                    </div>
+                    
+                    {% with team_value=team.get_team_leads.aggregate.estimated_value__sum %}
+                    <div class="flex justify-between">
+                        <span class="text-sm text-gray-600">Pipeline Value</span>
+                        <span class="text-sm font-medium text-gray-900">${{ team_value|default:0|floatformat:0 }}</span>
+                    </div>
+                    {% endwith %}
+                    
+                    <div class="border-t pt-4">
+                        <div class="flex justify-between">
+                            <span class="text-sm text-gray-600">Status</span>
+                            {% if team.is_active %}
+                                <span class="text-sm font-medium text-green-600">Active</span>
+                            {% else %}
+                                <span class="text-sm font-medium text-red-600">Inactive</span>
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

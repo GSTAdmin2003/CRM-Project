@@ -1,0 +1,298 @@
+{% extends 'settings/base.html' %}
+{% load static %}
+
+{% block title %}Global Pipeline Stages - Settings{% endblock %}
+
+{% block extra_css %}
+<style>
+.stage-item {
+    border: 1px solid #e5e7eb;
+    border-radius: 8px;
+    margin-bottom: 12px;
+    transition: all 0.2s ease;
+}
+
+.stage-item:hover {
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+.stage-color {
+    width: 20px;
+    height: 20px;
+    border-radius: 50%;
+    margin-right: 12px;
+}
+
+.stage-form {
+    background: #f9fafb;
+    border: 1px solid #e5e7eb;
+    border-radius: 8px;
+    padding: 20px;
+    margin-bottom: 20px;
+}
+
+.form-field {
+    width: 100%;
+    padding: 8px 12px;
+    border: 1px solid #d1d5db;
+    border-radius: 4px;
+    font-size: 14px;
+    transition: border-color 0.2s ease;
+}
+
+.form-field:focus {
+    outline: none;
+    border-color: #3b82f6;
+    box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+}
+
+.color-input {
+    width: 60px;
+    height: 40px;
+    padding: 0;
+    border: 1px solid #d1d5db;
+    border-radius: 4px;
+    cursor: pointer;
+}
+
+.btn {
+    padding: 8px 16px;
+    border-radius: 4px;
+    font-size: 14px;
+    font-weight: 500;
+    cursor: pointer;
+    border: none;
+    text-decoration: none;
+    display: inline-block;
+    transition: all 0.2s ease;
+}
+
+.btn-primary {
+    background: #3b82f6;
+    color: white;
+}
+
+.btn-primary:hover {
+    background: #2563eb;
+}
+
+.btn-secondary {
+    background: #f3f4f6;
+    color: #374151;
+    border: 1px solid #d1d5db;
+}
+
+.btn-secondary:hover {
+    background: #e5e7eb;
+}
+
+.btn-danger {
+    background: #dc2626;
+    color: white;
+}
+
+.btn-danger:hover {
+    background: #b91c1c;
+}
+
+.btn-sm {
+    padding: 4px 8px;
+    font-size: 12px;
+}
+
+.edit-form {
+    display: none;
+    background: #fffbeb;
+    border: 1px solid #f59e0b;
+    border-radius: 6px;
+    padding: 16px;
+    margin-top: 12px;
+}
+
+.edit-form.show {
+    display: block;
+}
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="max-w-4xl mx-auto">
+    <div class="mb-6">
+        <h1 class="text-2xl font-bold text-gray-900">Global Pipeline Stages</h1>
+        <p class="mt-2 text-sm text-gray-600">
+            Configure the default pipeline stages used by teams that don't have custom stages
+        </p>
+    </div>
+
+    <!-- Create New Stage Form -->
+    <div class="stage-form">
+        <h3 class="text-lg font-medium text-gray-900 mb-4">Add New Global Stage</h3>
+        <form method="post">
+            {% csrf_token %}
+            <input type="hidden" name="action" value="create">
+            
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-4">
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Stage Name *</label>
+                    <input type="text" name="name" class="form-field" placeholder="e.g., Prospecting" required>
+                </div>
+                
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Probability (%)</label>
+                    <input type="number" name="probability" class="form-field" min="0" max="100" value="0">
+                </div>
+                
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Color</label>
+                    <input type="color" name="color" class="color-input" value="#6B7280">
+                </div>
+                
+                <div class="flex items-end">
+                    <button type="submit" class="btn btn-primary w-full">Add Stage</button>
+                </div>
+            </div>
+            
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Description</label>
+                    <input type="text" name="description" class="form-field" placeholder="Optional description">
+                </div>
+                
+                <div class="flex items-center mt-6">
+                    <input type="checkbox" name="is_closed_stage" id="new_is_closed_stage" class="mr-2">
+                    <label for="new_is_closed_stage" class="text-sm text-gray-700">This is a closed stage</label>
+                </div>
+            </div>
+        </form>
+    </div>
+
+    <!-- Existing Stages -->
+    <div class="space-y-4">
+        <h3 class="text-lg font-medium text-gray-900">Current Global Stages</h3>
+        
+        {% for stage in global_stages %}
+        <div class="stage-item">
+            <div class="p-4">
+                <div class="flex items-center justify-between">
+                    <div class="flex items-center space-x-3">
+                        <div class="stage-color" style="background-color: {{ stage.color }};"></div>
+                        <div>
+                            <h4 class="text-sm font-medium text-gray-900">{{ stage.name }}</h4>
+                            <div class="flex items-center space-x-4 text-xs text-gray-500">
+                                <span>{{ stage.probability }}% probability</span>
+                                <span>Order: {{ stage.order }}</span>
+                                {% if stage.is_closed_stage %}
+                                <span class="text-red-600 font-medium">Closed Stage</span>
+                                {% endif %}
+                            </div>
+                            {% if stage.description %}
+                            <p class="text-xs text-gray-600 mt-1">{{ stage.description }}</p>
+                            {% endif %}
+                        </div>
+                    </div>
+                    
+                    <div class="flex space-x-2">
+                        <button onclick="toggleEdit('stage-{{ stage.id }}')" class="btn btn-secondary btn-sm">
+                            Edit
+                        </button>
+                        <form method="post" style="display: inline;" 
+                              onsubmit="return confirm('Delete this stage? This action cannot be undone.')">
+                            {% csrf_token %}
+                            <input type="hidden" name="action" value="delete">
+                            <input type="hidden" name="stage_id" value="{{ stage.id }}">
+                            <button type="submit" class="btn btn-danger btn-sm">Delete</button>
+                        </form>
+                    </div>
+                </div>
+                
+                <!-- Edit Form -->
+                <div id="stage-{{ stage.id }}-edit" class="edit-form">
+                    <form method="post">
+                        {% csrf_token %}
+                        <input type="hidden" name="action" value="update">
+                        <input type="hidden" name="stage_id" value="{{ stage.id }}">
+                        
+                        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-4">
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-1">Stage Name *</label>
+                                <input type="text" name="name" class="form-field" value="{{ stage.name }}" required>
+                            </div>
+                            
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-1">Probability (%)</label>
+                                <input type="number" name="probability" class="form-field" min="0" max="100" value="{{ stage.probability }}">
+                            </div>
+                            
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-1">Color</label>
+                                <input type="color" name="color" class="color-input" value="{{ stage.color }}">
+                            </div>
+                            
+                            <div class="flex items-end space-x-2">
+                                <button type="submit" class="btn btn-primary">Save</button>
+                                <button type="button" onclick="toggleEdit('stage-{{ stage.id }}')" class="btn btn-secondary">Cancel</button>
+                            </div>
+                        </div>
+                        
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-1">Description</label>
+                                <input type="text" name="description" class="form-field" value="{{ stage.description|default:'' }}">
+                            </div>
+                            
+                            <div class="flex items-center mt-6">
+                                <input type="checkbox" name="is_closed_stage" id="edit_is_closed_stage_{{ stage.id }}" 
+                                       {% if stage.is_closed_stage %}checked{% endif %} class="mr-2">
+                                <label for="edit_is_closed_stage_{{ stage.id }}" class="text-sm text-gray-700">This is a closed stage</label>
+                            </div>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+        {% empty %}
+        <div class="text-center py-12 bg-gray-50 rounded-lg border-2 border-dashed border-gray-300">
+            <svg class="mx-auto h-12 w-12 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1" 
+                      d="M9 5H7a2 2 0 00-2 2v10a2 2 0 002 2h8a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"></path>
+            </svg>
+            <h3 class="mt-2 text-sm font-medium text-gray-900">No Global Stages</h3>
+            <p class="mt-1 text-sm text-gray-500">Get started by creating your first global pipeline stage.</p>
+        </div>
+        {% endfor %}
+    </div>
+
+    <!-- Info Section -->
+    <div class="mt-8 bg-blue-50 border border-blue-200 rounded-lg p-4">
+        <div class="flex">
+            <div class="flex-shrink-0">
+                <svg class="w-5 h-5 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" 
+                          d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                </svg>
+            </div>
+            <div class="ml-3">
+                <h3 class="text-sm font-medium text-blue-800">About Global Pipeline Stages</h3>
+                <div class="mt-2 text-sm text-blue-700">
+                    <p>Global pipeline stages serve as the default stages for all sales teams. When a team doesn't have custom stages configured, they will use these global stages. Teams can create their own custom stages from their team management page.</p>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+function toggleEdit(stageId) {
+    const editForm = document.getElementById(stageId + '-edit');
+    if (editForm.classList.contains('show')) {
+        editForm.classList.remove('show');
+    } else {
+        // Hide all other edit forms
+        document.querySelectorAll('.edit-form.show').forEach(form => {
+            form.classList.remove('show');
+        });
+        editForm.classList.add('show');
+    }
+}
+</script>
+{% endblock %}

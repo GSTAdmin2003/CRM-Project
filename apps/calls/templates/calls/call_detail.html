@@ -1,0 +1,339 @@
+{% extends 'base.html' %}
+
+{% block title %}Call Details - CRM System{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+<style>
+.status-badge {
+    padding: 0.25rem 0.75rem;
+    border-radius: 9999px;
+    font-size: 0.75rem;
+    font-weight: 600;
+    text-transform: uppercase;
+}
+.status-initiated { background-color: #FEF3C7; color: #92400E; }
+.status-ringing { background-color: #DBEAFE; color: #1E40AF; }
+.status-answered { background-color: #D1FAE5; color: #065F46; }
+.status-ended { background-color: #F3F4F6; color: #374151; }
+.status-failed { background-color: #FEE2E2; color: #991B1B; }
+.status-busy { background-color: #FED7AA; color: #9A3412; }
+.status-no_answer { background-color: #E5E7EB; color: #6B7280; }
+
+.log-event {
+    padding: 0.5rem 1rem;
+    border-left: 3px solid #6366F1;
+    background-color: #F9FAFB;
+    margin-bottom: 0.5rem;
+}
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-6">
+    <!-- Header -->
+    <div class="mb-8">
+        <div class="flex justify-between items-start">
+            <div>
+                <nav class="mb-4">
+                    <a href="{% url 'calls:call_list' %}" class="text-indigo-600 hover:text-indigo-800">
+                        <i class="fas fa-arrow-left mr-2"></i>Back to Calls
+                    </a>
+                </nav>
+                <h1 class="text-3xl font-bold text-gray-900">
+                    {{ call.get_direction_display }} Call
+                </h1>
+                <p class="mt-2 text-gray-600">
+                    {{ call.created_at|date:"F d, Y \a\t H:i" }}
+                </p>
+            </div>
+            <div class="flex gap-3">
+                {% if call.status in 'initiated,ringing,answered' %}
+                <button onclick="hangupCall()" class="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-md text-sm font-medium">
+                    <i class="fas fa-phone-slash mr-2"></i>Hang Up
+                </button>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <!-- Main Info -->
+        <div class="lg:col-span-2 space-y-6">
+            <!-- Call Details Card -->
+            <div class="bg-white shadow rounded-lg p-6">
+                <h2 class="text-lg font-medium text-gray-900 mb-4">Call Information</h2>
+
+                <div class="flex items-center mb-6">
+                    <div class="h-16 w-16 rounded-full {% if call.direction == 'inbound' %}bg-green-100{% else %}bg-blue-100{% endif %} flex items-center justify-center mr-4">
+                        <i class="fas {% if call.direction == 'inbound' %}fa-phone-volume{% else %}fa-phone-arrow-up-right{% endif %} text-2xl {% if call.direction == 'inbound' %}text-green-600{% else %}text-blue-600{% endif %}"></i>
+                    </div>
+                    <div class="flex-1">
+                        <div class="text-xl font-medium text-gray-900">
+                            {% if call.direction == 'inbound' %}
+                                {{ call.from_number }}
+                                <span class="text-gray-400 mx-2"><i class="fas fa-arrow-right"></i></span>
+                                {{ call.to_number|default:"Your Line" }}
+                            {% else %}
+                                {{ call.from_number|default:"Your Line" }}
+                                <span class="text-gray-400 mx-2"><i class="fas fa-arrow-right"></i></span>
+                                {{ call.to_number }}
+                            {% endif %}
+                        </div>
+                        <div class="mt-1">
+                            <span class="status-badge status-{{ call.status }}">
+                                {{ call.get_status_display }}
+                            </span>
+                        </div>
+                    </div>
+                </div>
+
+                <dl class="grid grid-cols-2 gap-4">
+                    <div>
+                        <dt class="text-sm font-medium text-gray-500">Direction</dt>
+                        <dd class="mt-1 text-sm text-gray-900">{{ call.get_direction_display }}</dd>
+                    </div>
+                    <div>
+                        <dt class="text-sm font-medium text-gray-500">Status</dt>
+                        <dd class="mt-1 text-sm text-gray-900">{{ call.get_status_display }}</dd>
+                    </div>
+                    <div>
+                        <dt class="text-sm font-medium text-gray-500">Duration</dt>
+                        <dd class="mt-1 text-sm text-gray-900">{{ call.duration_formatted|default:"N/A" }}</dd>
+                    </div>
+                    <div>
+                        <dt class="text-sm font-medium text-gray-500">User</dt>
+                        <dd class="mt-1 text-sm text-gray-900">{{ call.user.username|default:"Unassigned" }}</dd>
+                    </div>
+                    <div>
+                        <dt class="text-sm font-medium text-gray-500">Started At</dt>
+                        <dd class="mt-1 text-sm text-gray-900">{{ call.started_at|date:"M d, Y H:i:s"|default:"N/A" }}</dd>
+                    </div>
+                    <div>
+                        <dt class="text-sm font-medium text-gray-500">Answered At</dt>
+                        <dd class="mt-1 text-sm text-gray-900">{{ call.answered_at|date:"M d, Y H:i:s"|default:"N/A" }}</dd>
+                    </div>
+                    <div>
+                        <dt class="text-sm font-medium text-gray-500">Ended At</dt>
+                        <dd class="mt-1 text-sm text-gray-900">{{ call.ended_at|date:"M d, Y H:i:s"|default:"N/A" }}</dd>
+                    </div>
+                    <div>
+                        <dt class="text-sm font-medium text-gray-500">Channel ID</dt>
+                        <dd class="mt-1 text-sm text-gray-900 font-mono text-xs">{{ call.asterisk_channel_id }}</dd>
+                    </div>
+                </dl>
+            </div>
+
+            <!-- Recording -->
+            {% if call.recording %}
+            <div class="bg-white shadow rounded-lg p-6">
+                <h2 class="text-lg font-medium text-gray-900 mb-4">
+                    <i class="fas fa-microphone mr-2 text-indigo-600"></i>Recording
+                </h2>
+
+                <div class="bg-gray-50 rounded-lg p-4">
+                    <audio controls class="w-full mb-4">
+                        <source src="{{ call.recording.file.url }}" type="audio/mpeg">
+                        Your browser does not support the audio element.
+                    </audio>
+
+                    <div class="flex items-center justify-between text-sm text-gray-500">
+                        <span>
+                            <i class="fas fa-clock mr-1"></i>
+                            Duration: {{ call.recording.duration|default:call.duration }}s
+                        </span>
+                        <span>
+                            <i class="fas fa-file mr-1"></i>
+                            Size: {{ call.recording.file_size_formatted }}
+                        </span>
+                        <a href="{% url 'calls:recording_download' call.recording.pk %}" class="text-indigo-600 hover:text-indigo-800">
+                            <i class="fas fa-download mr-1"></i>Download
+                        </a>
+                    </div>
+                </div>
+            </div>
+            {% endif %}
+
+            <!-- Notes -->
+            <div class="bg-white shadow rounded-lg p-6">
+                <h2 class="text-lg font-medium text-gray-900 mb-4">
+                    <i class="fas fa-sticky-note mr-2 text-yellow-500"></i>Notes
+                </h2>
+
+                <form id="notes-form" method="post" action="{% url 'calls:update_call_notes' call.pk %}">
+                    {% csrf_token %}
+                    <textarea name="notes" rows="4" class="w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500" placeholder="Add notes about this call...">{{ call.notes }}</textarea>
+                    <div class="mt-2 flex justify-end">
+                        <button type="submit" class="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-md text-sm font-medium">
+                            Save Notes
+                        </button>
+                    </div>
+                </form>
+            </div>
+
+            <!-- Call Log -->
+            <div class="bg-white shadow rounded-lg p-6">
+                <h2 class="text-lg font-medium text-gray-900 mb-4">
+                    <i class="fas fa-list mr-2 text-gray-500"></i>Event Log
+                </h2>
+
+                {% if logs %}
+                <div class="space-y-2">
+                    {% for log in logs %}
+                    <div class="log-event">
+                        <div class="flex items-center justify-between">
+                            <span class="font-medium text-gray-900">{{ log.event }}</span>
+                            <span class="text-sm text-gray-500">{{ log.timestamp|date:"H:i:s" }}</span>
+                        </div>
+                        {% if log.data %}
+                        <details class="mt-2">
+                            <summary class="text-sm text-gray-500 cursor-pointer">View details</summary>
+                            <pre class="mt-2 text-xs bg-gray-100 p-2 rounded overflow-x-auto">{{ log.data|pprint }}</pre>
+                        </details>
+                        {% endif %}
+                    </div>
+                    {% endfor %}
+                </div>
+                {% else %}
+                <p class="text-gray-500 text-sm">No events logged yet.</p>
+                {% endif %}
+            </div>
+        </div>
+
+        <!-- Sidebar -->
+        <div class="space-y-6">
+            <!-- Linked Contact -->
+            <div class="bg-white shadow rounded-lg p-6">
+                <h2 class="text-lg font-medium text-gray-900 mb-4">
+                    <i class="fas fa-user mr-2 text-blue-500"></i>Linked Contact
+                </h2>
+
+                {% if call.contact %}
+                <div class="flex items-center mb-4">
+                    <div class="h-10 w-10 rounded-full bg-gray-300 flex items-center justify-center mr-3">
+                        <span class="text-gray-700 font-medium">{{ call.contact.name|first|upper }}</span>
+                    </div>
+                    <div>
+                        <p class="font-medium text-gray-900">{{ call.contact.name }}</p>
+                        {% if call.contact.company %}
+                        <p class="text-sm text-gray-500">{{ call.contact.company.display_name }}</p>
+                        {% endif %}
+                    </div>
+                </div>
+                <a href="{% url 'contacts:contact_detail' call.contact.pk %}" class="text-indigo-600 hover:text-indigo-800 text-sm">
+                    View Contact <i class="fas fa-external-link-alt ml-1"></i>
+                </a>
+                {% else %}
+                <p class="text-gray-500 text-sm mb-4">No contact linked to this call.</p>
+                <button onclick="showLinkContactModal()" class="w-full bg-gray-100 hover:bg-gray-200 text-gray-700 px-4 py-2 rounded-md text-sm font-medium">
+                    <i class="fas fa-link mr-2"></i>Link Contact
+                </button>
+                {% endif %}
+            </div>
+
+            <!-- Linked Opportunity -->
+            <div class="bg-white shadow rounded-lg p-6">
+                <h2 class="text-lg font-medium text-gray-900 mb-4">
+                    <i class="fas fa-briefcase mr-2 text-green-500"></i>Linked Opportunity
+                </h2>
+
+                {% if call.opportunity %}
+                <div class="mb-4">
+                    <p class="font-medium text-gray-900">{{ call.opportunity.title }}</p>
+                    <p class="text-sm text-gray-500">{{ call.opportunity.contact_full_name }}</p>
+                    <p class="text-sm text-gray-500">{{ call.opportunity.stage.name }}</p>
+                </div>
+                <a href="{% url 'crm:opportunity_edit' call.opportunity.pk %}" class="text-indigo-600 hover:text-indigo-800 text-sm">
+                    View Opportunity <i class="fas fa-external-link-alt ml-1"></i>
+                </a>
+                {% else %}
+                <p class="text-gray-500 text-sm mb-4">No opportunity linked to this call.</p>
+                <button onclick="showLinkOpportunityModal()" class="w-full bg-gray-100 hover:bg-gray-200 text-gray-700 px-4 py-2 rounded-md text-sm font-medium">
+                    <i class="fas fa-link mr-2"></i>Link Opportunity
+                </button>
+                {% endif %}
+            </div>
+
+            <!-- Quick Actions -->
+            <div class="bg-white shadow rounded-lg p-6">
+                <h2 class="text-lg font-medium text-gray-900 mb-4">
+                    <i class="fas fa-bolt mr-2 text-yellow-500"></i>Quick Actions
+                </h2>
+
+                <div class="space-y-2">
+                    <a href="{% url 'calls:dialpad' %}?number={% if call.direction == 'inbound' %}{{ call.from_number }}{% else %}{{ call.to_number }}{% endif %}" class="block w-full bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-md text-sm font-medium text-center">
+                        <i class="fas fa-phone mr-2"></i>Call Back
+                    </a>
+                    {% if call.contact %}
+                    <a href="{% url 'contacts:contact_detail' call.contact.pk %}" class="block w-full bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-md text-sm font-medium text-center">
+                        <i class="fas fa-user mr-2"></i>View Contact
+                    </a>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+function hangupCall() {
+    if (confirm('Are you sure you want to hang up this call?')) {
+        fetch('{% url "calls:hangup_call" call.pk %}', {
+            method: 'POST',
+            headers: {
+                'X-CSRFToken': '{{ csrf_token }}',
+            },
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                location.reload();
+            } else {
+                alert('Failed to hang up call: ' + data.error);
+            }
+        });
+    }
+}
+
+// Handle notes form submission via AJAX
+document.getElementById('notes-form').addEventListener('submit', function(e) {
+    e.preventDefault();
+
+    const formData = new FormData(this);
+
+    fetch(this.action, {
+        method: 'POST',
+        body: formData,
+        headers: {
+            'X-CSRFToken': '{{ csrf_token }}',
+        },
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            // Show success feedback
+            const btn = this.querySelector('button[type="submit"]');
+            const originalText = btn.innerHTML;
+            btn.innerHTML = '<i class="fas fa-check mr-2"></i>Saved!';
+            btn.classList.remove('bg-indigo-600');
+            btn.classList.add('bg-green-600');
+            setTimeout(() => {
+                btn.innerHTML = originalText;
+                btn.classList.remove('bg-green-600');
+                btn.classList.add('bg-indigo-600');
+            }, 2000);
+        }
+    });
+});
+
+function showLinkContactModal() {
+    // TODO: Implement contact linking modal
+    alert('Contact linking modal - to be implemented');
+}
+
+function showLinkOpportunityModal() {
+    // TODO: Implement opportunity linking modal
+    alert('Opportunity linking modal - to be implemented');
+}
+</script>
+{% endblock %}

@@ -1,0 +1,74 @@
+{% extends "base.html" %}
+
+{% block title %}Dashboard - CRM System{% endblock %}
+
+{% block content %}
+<div class="dashboard-bg">
+    <div class="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
+        <!-- Header -->
+        <div class="mb-8">
+            <h1 class="text-3xl font-bold text-gray-900">Dashboard</h1>
+            <p class="mt-2 text-gray-600">Welcome back, {{ user.first_name|default:user.username }}! Select an application to get started.</p>
+        </div>
+
+        <!-- Apps Grid -->
+        <div class="grid grid-cols-2 gap-6 sm:grid-cols-3 lg:grid-cols-6 app-grid">
+            {% for app in user_apps %}
+                <a href="{{ app.get_absolute_url }}" class="app-card">
+                    <div class="app-card-icon icon-{{ app.name|default:'gray' }}">
+                        {% if app.name == 'settings' %}⚙️
+                        {% elif app.name == 'sales' %}📊
+                        {% elif app.name == 'inventory' %}📦
+                        {% elif app.name == 'purchase' %}🛒
+                        {% elif app.name == 'crm' %}👥
+                        {% elif app.name == 'activities' %}📅
+                        {% elif app.name == 'accounting' %}💰
+                        {% elif app.name == 'project' %}📋
+                        {% elif app.name == 'hr' %}👨‍💼
+                        {% elif app.name == 'reports' %}📈
+                        {% elif app.name == 'documents' %}📄
+                        {% elif app.name == 'calls' %}📞
+                        {% else %}📱{% endif %}
+                    </div>
+                    <h3 class="app-card-title">{{ app.display_name }}</h3>
+                </a>
+            {% empty %}
+                <!-- Message when no apps are registered -->
+                <div class="col-span-full text-center py-12">
+                    <div class="text-gray-400 mb-4">
+                        <svg class="mx-auto h-12 w-12" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0v5a2 2 0 01-2 2H6a2 2 0 01-2-2v-5m16 0h-2M4 13h2m13-8V6a2 2 0 00-2-2H6a2 2 0 00-2 2v1h16z"></path>
+                        </svg>
+                    </div>
+                    <h3 class="text-lg font-medium text-gray-900 mb-2">No Apps Installed</h3>
+                    <p class="text-gray-500 mb-4">Get started by creating your first app in the apps/ directory.</p>
+                    <a href="/admin/" class="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700">
+                        Open Admin Panel
+                    </a>
+                </div>
+            {% endfor %}
+        </div>
+
+        {% if user_apps %}
+            <!-- Additional info when real apps are loaded -->
+            <div class="mt-8 rounded-lg bg-blue-50 p-4">
+                <div class="flex">
+                    <div class="flex-shrink-0">
+                        <svg class="h-5 w-5 text-blue-400" viewBox="0 0 20 20" fill="currentColor">
+                            <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clip-rule="evenodd" />
+                        </svg>
+                    </div>
+                    <div class="ml-3">
+                        <h3 class="text-sm font-medium text-blue-800">
+                            Welcome to your ERP system!
+                        </h3>
+                        <div class="mt-2 text-sm text-blue-700">
+                            <p>You have access to {{ user_apps|length }} application{{ user_apps|length|pluralize }}. Click on any app to get started.</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}

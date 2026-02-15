@@ -1,0 +1,158 @@
+{% load static %}
+{% load settings_tags %}
+
+<nav class="space-y-1">
+    <!-- Dashboard -->
+    <a href="{% url 'settings:home' %}" 
+       class="{% if current_section == 'dashboard' %}bg-gray-200 text-gray-900{% else %}text-gray-600 hover:bg-gray-50 hover:text-gray-900{% endif %} group flex items-center px-2 py-2 text-sm font-medium rounded-md">
+        <i class="fas fa-tachometer-alt text-gray-400 mr-3 flex-shrink-0 h-6 w-6"></i>
+        Dashboard
+    </a>
+
+    <!-- Profile Section -->
+    <div class="space-y-1">
+        <div class="{% if current_section == 'profile' %}bg-gray-100{% else %}hover:bg-gray-50{% endif %} rounded-md">
+            <button type="button" 
+                    class="{% if current_section == 'profile' %}text-gray-900{% else %}text-gray-600 hover:text-gray-900{% endif %} group flex w-full items-center px-2 py-2 text-sm font-medium rounded-md" 
+                    aria-expanded="{% if current_section == 'profile' %}true{% else %}false{% endif %}"
+                    data-toggle="collapse" 
+                    data-target="profile-submenu">
+                <i class="fas fa-user text-gray-400 mr-3 flex-shrink-0 h-6 w-6"></i>
+                <span class="flex-1 text-left">Profile</span>
+                <i class="fas fa-chevron-right transform transition-transform duration-200 {% if current_section == 'profile' %}rotate-90{% endif %} text-gray-400 ml-3 h-5 w-5 flex-shrink-0"></i>
+            </button>
+        </div>
+        
+        <div class="{% if current_section != 'profile' %}hidden{% endif %} space-y-1 pl-11" id="profile-submenu">
+            <a href="{% url 'settings:profile:personal_info' %}" 
+               class="{% if current_page == 'personal_info' %}bg-gray-200 text-gray-900{% else %}text-gray-600 hover:bg-gray-50 hover:text-gray-900{% endif %} group flex items-center px-2 py-2 text-sm rounded-md">
+                <i class="fas fa-id-card text-gray-400 mr-3 flex-shrink-0 h-4 w-4"></i>
+                Personal Info
+            </a>
+            <a href="{% url 'settings:profile:security' %}" 
+               class="{% if current_page == 'security' %}bg-gray-200 text-gray-900{% else %}text-gray-600 hover:bg-gray-50 hover:text-gray-900{% endif %} group flex items-center px-2 py-2 text-sm rounded-md">
+                <i class="fas fa-shield-alt text-gray-400 mr-3 flex-shrink-0 h-4 w-4"></i>
+                Security
+            </a>
+            <a href="{% url 'settings:profile:preferences' %}" 
+               class="{% if current_page == 'preferences' %}bg-gray-200 text-gray-900{% else %}text-gray-600 hover:bg-gray-50 hover:text-gray-900{% endif %} group flex items-center px-2 py-2 text-sm rounded-md">
+                <i class="fas fa-sliders-h text-gray-400 mr-3 flex-shrink-0 h-4 w-4"></i>
+                Preferences
+            </a>
+        </div>
+    </div>
+
+    <!-- General Section (Admin Only) -->
+    {% user_is_admin user as is_admin %}
+    {% if is_admin %}
+    <div class="space-y-1">
+        <div class="{% if current_section == 'general' %}bg-gray-100{% else %}hover:bg-gray-50{% endif %} rounded-md">
+            <button type="button" 
+                    class="{% if current_section == 'general' %}text-gray-900{% else %}text-gray-600 hover:text-gray-900{% endif %} group flex w-full items-center px-2 py-2 text-sm font-medium rounded-md" 
+                    aria-expanded="{% if current_section == 'general' %}true{% else %}false{% endif %}"
+                    data-toggle="collapse" 
+                    data-target="general-submenu">
+                <i class="fas fa-cog text-gray-400 mr-3 flex-shrink-0 h-6 w-6"></i>
+                <span class="flex-1 text-left">General</span>
+                <i class="fas fa-chevron-right transform transition-transform duration-200 {% if current_section == 'general' %}rotate-90{% endif %} text-gray-400 ml-3 h-5 w-5 flex-shrink-0"></i>
+            </button>
+        </div>
+        
+        <div class="{% if current_section != 'general' %}hidden{% endif %} space-y-1 pl-11" id="general-submenu">
+            <a href="{% url 'settings:general:system_config' %}" 
+               class="{% if current_page == 'system_config' %}bg-gray-200 text-gray-900{% else %}text-gray-600 hover:bg-gray-50 hover:text-gray-900{% endif %} group flex items-center px-2 py-2 text-sm rounded-md">
+                <i class="fas fa-server text-gray-400 mr-3 flex-shrink-0 h-4 w-4"></i>
+                System Config
+            </a>
+            <a href="{% url 'settings:general:roles' %}" 
+               class="{% if current_page == 'roles' %}bg-gray-200 text-gray-900{% else %}text-gray-600 hover:bg-gray-50 hover:text-gray-900{% endif %} group flex items-center px-2 py-2 text-sm rounded-md">
+                <i class="fas fa-users-cog text-gray-400 mr-3 flex-shrink-0 h-4 w-4"></i>
+                Role Management
+            </a>
+            <a href="{% url 'settings:general:users' %}" 
+               class="{% if current_page == 'users' %}bg-gray-200 text-gray-900{% else %}text-gray-600 hover:bg-gray-50 hover:text-gray-900{% endif %} group flex items-center px-2 py-2 text-sm rounded-md">
+                <i class="fas fa-users text-gray-400 mr-3 flex-shrink-0 h-4 w-4"></i>
+                User Management
+            </a>
+            <a href="{% url 'settings:general:app_registry' %}" 
+               class="{% if current_page == 'app_registry' %}bg-gray-200 text-gray-900{% else %}text-gray-600 hover:bg-gray-50 hover:text-gray-900{% endif %} group flex items-center px-2 py-2 text-sm rounded-md">
+                <i class="fas fa-th-list text-gray-400 mr-3 flex-shrink-0 h-4 w-4"></i>
+                App Registry
+            </a>
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- CRM Section (Admin/Manager Only) -->
+    {% if is_admin or user.is_sales_manager or user.is_sales_executive %}
+    <div class="space-y-1">
+        <div class="{% if current_section == 'crm' %}bg-gray-100{% else %}hover:bg-gray-50{% endif %} rounded-md">
+            <button type="button"
+                    class="{% if current_section == 'crm' %}text-gray-900{% else %}text-gray-600 hover:text-gray-900{% endif %} group flex w-full items-center px-2 py-2 text-sm font-medium rounded-md"
+                    aria-expanded="{% if current_section == 'crm' %}true{% else %}false{% endif %}"
+                    data-toggle="collapse"
+                    data-target="crm-submenu">
+                <i class="fas fa-chart-line text-gray-400 mr-3 flex-shrink-0 h-6 w-6"></i>
+                <span class="flex-1 text-left">CRM</span>
+                <i class="fas fa-chevron-right transform transition-transform duration-200 {% if current_section == 'crm' %}rotate-90{% endif %} text-gray-400 ml-3 h-5 w-5 flex-shrink-0"></i>
+            </button>
+        </div>
+
+        <div class="{% if current_section != 'crm' %}hidden{% endif %} space-y-1 pl-11" id="crm-submenu">
+            {% if is_admin or user.is_sales_executive %}
+            <a href="{% url 'settings:crm:global_stages' %}"
+               class="{% if current_page == 'global_stages' %}bg-gray-200 text-gray-900{% else %}text-gray-600 hover:bg-gray-50 hover:text-gray-900{% endif %} group flex items-center px-2 py-2 text-sm rounded-md">
+                <i class="fas fa-list-ol text-gray-400 mr-3 flex-shrink-0 h-4 w-4"></i>
+                Global Pipeline Stages
+            </a>
+            {% endif %}
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- VoIP Section -->
+    <div class="space-y-1">
+        <div class="{% if current_section == 'voip' %}bg-gray-100{% else %}hover:bg-gray-50{% endif %} rounded-md">
+            <button type="button"
+                    class="{% if current_section == 'voip' %}text-gray-900{% else %}text-gray-600 hover:text-gray-900{% endif %} group flex w-full items-center px-2 py-2 text-sm font-medium rounded-md"
+                    aria-expanded="{% if current_section == 'voip' %}true{% else %}false{% endif %}"
+                    data-toggle="collapse"
+                    data-target="voip-submenu">
+                <i class="fas fa-phone-alt text-gray-400 mr-3 flex-shrink-0 h-6 w-6"></i>
+                <span class="flex-1 text-left">VoIP</span>
+                <i class="fas fa-chevron-right transform transition-transform duration-200 {% if current_section == 'voip' %}rotate-90{% endif %} text-gray-400 ml-3 h-5 w-5 flex-shrink-0"></i>
+            </button>
+        </div>
+
+        <div class="{% if current_section != 'voip' %}hidden{% endif %} space-y-1 pl-11" id="voip-submenu">
+            <a href="{% url 'settings:voip:sip_credentials' %}"
+               class="{% if current_page == 'sip_credentials' %}bg-gray-200 text-gray-900{% else %}text-gray-600 hover:bg-gray-50 hover:text-gray-900{% endif %} group flex items-center px-2 py-2 text-sm rounded-md">
+                <i class="fas fa-key text-gray-400 mr-3 flex-shrink-0 h-4 w-4"></i>
+                SIP Credentials
+            </a>
+        </div>
+    </div>
+</nav>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // Handle collapsible sections
+    document.querySelectorAll('[data-toggle="collapse"]').forEach(function(button) {
+        button.addEventListener('click', function() {
+            const targetId = this.getAttribute('data-target');
+            const target = document.getElementById(targetId);
+            const icon = this.querySelector('.fa-chevron-right');
+            
+            if (target.classList.contains('hidden')) {
+                target.classList.remove('hidden');
+                icon.classList.add('rotate-90');
+                this.setAttribute('aria-expanded', 'true');
+            } else {
+                target.classList.add('hidden');
+                icon.classList.remove('rotate-90');
+                this.setAttribute('aria-expanded', 'false');
+            }
+        });
+    });
+});
+</script>

@@ -46,7 +46,7 @@ def process_recording(self, call_id):
         recordings_path = getattr(
             settings,
             'ASTERISK_RECORDINGS_PATH',
-            '/var/spool/asterisk/recording'
+            '/var/spool/asterisk/monitor'
         )
 
         # Try to find the recording file
@@ -163,7 +163,7 @@ def sync_asterisk_recordings():
     recordings_path = getattr(
         settings,
         'ASTERISK_RECORDINGS_PATH',
-        '/var/spool/asterisk/recording'
+        '/var/spool/asterisk/monitor'
     )
 
     if not os.path.exists(recordings_path):

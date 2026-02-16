@@ -18,6 +18,7 @@ from core.exceptions import NotFoundError, ValidationError
 
 from ..ari_client import ari_client
 from ..models import Call, CallLog
+from ..tasks import process_recording
 
 logger = logging.getLogger(__name__)
 
@@ -213,6 +214,8 @@ class CallService:
             data={"user_id": user.id},
         )
 
+        process_recording.delay(call.id)
+
         return call
 
     @staticmethod
@@ -321,6 +324,7 @@ class CallService:
                         event="ended",
                         data={"reason": "channel_not_found"},
                     )
+                    process_recording.delay(call.id)
 
         return {
             "status": call.status,

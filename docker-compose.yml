@@ -16,7 +16,7 @@ services:
       - "8000:8000"
     volumes:
       - .:/app
-      - asterisk_recordings:/var/spool/asterisk/recording
+      - asterisk_recordings:/var/spool/asterisk/monitor
       - asterisk_config:/etc/asterisk/dynamic
     environment:
       - DEBUG=${DEBUG:-0}
@@ -26,7 +26,7 @@ services:
       - ASTERISK_ARI_URL=http://asterisk:8088
       - ASTERISK_ARI_USER=${ARI_USER:-crm}
       - ASTERISK_ARI_PASSWORD=${ARI_PASSWORD}
-      - ASTERISK_RECORDINGS_PATH=/var/spool/asterisk/recording
+      - ASTERISK_RECORDINGS_PATH=/var/spool/asterisk/monitor
       - CELERY_BROKER_URL=redis://redis:6379/0
       - CELERY_RESULT_BACKEND=redis://redis:6379/0
     depends_on:
@@ -42,7 +42,7 @@ services:
       - "8088:8088"        # ARI HTTP/WebSocket
       - "10000-10100:10000-10100/udp"  # RTP media
     volumes:
-      - asterisk_recordings:/var/spool/asterisk/recording
+      - asterisk_recordings:/var/spool/asterisk/monitor
       - asterisk_config:/etc/asterisk/dynamic
     environment:
       - ARI_PASSWORD=${ARI_PASSWORD}
@@ -60,7 +60,7 @@ services:
     command: celery -A core worker -l info
     volumes:
       - .:/app
-      - asterisk_recordings:/var/spool/asterisk/recording
+      - asterisk_recordings:/var/spool/asterisk/monitor
     environment:
       - DEBUG=${DEBUG:-0}
       - SECRET_KEY=${SECRET_KEY}
@@ -68,7 +68,7 @@ services:
       - ASTERISK_ARI_URL=http://asterisk:8088
       - ASTERISK_ARI_USER=${ARI_USER:-crm}
       - ASTERISK_ARI_PASSWORD=${ARI_PASSWORD}
-      - ASTERISK_RECORDINGS_PATH=/var/spool/asterisk/recording
+      - ASTERISK_RECORDINGS_PATH=/var/spool/asterisk/monitor
       - CELERY_BROKER_URL=redis://redis:6379/0
       - CELERY_RESULT_BACKEND=redis://redis:6379/0
     depends_on:

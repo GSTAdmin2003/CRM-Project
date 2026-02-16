@@ -16,6 +16,7 @@ from django.views.decorators.http import require_GET, require_POST
 
 from ..models import Call, CallRecording, SIPSettings
 from ..services import CallService
+from ..tasks import process_recording
 
 
 @login_required
@@ -99,6 +100,29 @@ def register_inbound_call(request):
         started_at=timezone.now(),
         answered_at=timezone.now(),
     )
+    return JsonResponse({"success": True, "call_id": call.id})
+
+
+@login_required
+@require_POST
+def call_ended(request, pk):
+    """Mark an inbound call as ended and trigger recording processing."""
+    try:
+        call = Call.objects.get(pk=pk, user=request.user)
+    except Call.DoesNotExist:
+        return JsonResponse({"error": "Call not found"}, status=404)
+
+    if call.status in ("ended", "failed"):
+        return JsonResponse({"success": True, "call_id": call.id})
+
+    call.status = "ended"
+    call.ended_at = timezone.now()
+    if call.answered_at:
+        call.duration = int((call.ended_at - call.answered_at).total_seconds())
+    call.save()
+
+    process_recording.delay(call.id)
+
     return JsonResponse({"success": True, "call_id": call.id})
 
 

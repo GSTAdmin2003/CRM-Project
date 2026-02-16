@@ -21,6 +21,22 @@ media/
 *.swp
 *.swo
 
+# Node
+node_modules/
+
 # OS
 .DS_Store
 Thumbs.db
+
+# Coverage
+htmlcov/
+.coverage
+.coverage.*
+
+# Celery
+celerybeat-schedule
+celerybeat.pid
+
+# Misc
+cookies.txt
+*.sqlite3

@@ -21,6 +21,7 @@ services:
     environment:
       - DEBUG=${DEBUG:-0}
       - SECRET_KEY=${SECRET_KEY}
+      - ALLOWED_HOSTS=${ALLOWED_HOSTS:-localhost,127.0.0.1,0.0.0.0}
       - DATABASE_URL=postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}
       - ASTERISK_ARI_URL=http://asterisk:8088
       - ASTERISK_ARI_USER=${ARI_USER:-crm}
@@ -45,6 +46,7 @@ services:
       - asterisk_config:/etc/asterisk/dynamic
     environment:
       - ARI_PASSWORD=${ARI_PASSWORD}
+      - WEBRTC_AGENT_PASSWORD=${WEBRTC_AGENT_PASSWORD:-changeme}
 
   redis:
     image: redis:7-alpine

@@ -1,4 +1,4 @@
 from .base import *
 from .profile import *
 from .general import *
-from .voip import *
+# VoIP SIPSettings lives in apps.calls.models

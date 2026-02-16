@@ -42,18 +42,25 @@ class ARIClient:
 
     def make_call(self, from_ext, to_number, variables=None):
         """
-        Originate an outbound call.
+        Originate a click-to-call via the dialplan.
+
+        Flow:
+        1. ARI calls the agent's extension (from_ext).
+        2. When the agent picks up, the dialplan's [from-internal] context
+           dials PJSIP/{to_number}@sip-trunk-endpoint.
+        3. Asterisk's Dial() bridges both legs automatically.
+        4. MixMonitor records the call.
 
         Args:
-            from_ext: The extension/caller ID to use (ignored, uses trunk ID)
-            to_number: The destination phone number
-            variables: Optional dict of channel variables
+            from_ext: The agent's local extension (e.g. '100').
+            to_number: The destination phone number.
+            variables: Optional dict of channel variables.
 
         Returns:
-            The created channel data
+            An object with channel attributes (id, name, state, …).
         """
-        # Get caller ID from user's SIP settings in the database
         from .models import SIPSettings
+
         trunk_caller_id = from_ext
         try:
             sip = SIPSettings.objects.filter(is_active=True).first()
@@ -62,17 +69,27 @@ class ARIClient:
         except Exception:
             pass
 
-        # Originate call directly to the SIP trunk endpoint
+        # Originate to the agent's phone; on answer the dialplan
+        # sends the call out via the SIP trunk to `to_number`.
         params = {
-            'endpoint': f'PJSIP/{to_number}@sip-trunk-endpoint',
+            'endpoint': f'PJSIP/{from_ext}',
+            'extension': to_number,
+            'context': 'from-internal',
+            'priority': 1,
             'callerId': trunk_caller_id,
-            'app': self.app_name,  # Track in Stasis for status updates
             'timeout': 60,
         }
 
+        if variables:
+            for key, value in variables.items():
+                params[f'variables[{key}]'] = str(value)
+
         channel = self._request('POST', '/channels', params=params)
         channel_id = channel.get('id', 'unknown')
-        logger.info(f"Originated call to {to_number} from {trunk_caller_id}, channel: {channel_id}")
+        logger.info(
+            f"Click-to-call: agent={from_ext}, dest={to_number}, "
+            f"callerId={trunk_caller_id}, channel={channel_id}"
+        )
 
         # Return an object with the channel data as attributes
         class ChannelObj:

@@ -5,7 +5,8 @@ RUN apk add --no-cache \
     asterisk \
     asterisk-sample-config \
     asterisk-sounds-en \
-    asterisk-sounds-moh
+    asterisk-sounds-moh \
+    asterisk-srtp
 
 # Copy configuration files (overwrite defaults)
 COPY pjsip.conf /etc/asterisk/pjsip.conf

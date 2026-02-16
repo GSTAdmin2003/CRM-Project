@@ -1,28 +1,43 @@
-from django.urls import path
-from . import views
+from django.urls import include, path
+from rest_framework.routers import DefaultRouter
 
-app_name = 'calls'
+from .views import call_views, template_views
+
+router = DefaultRouter()
+router.register(r"calls", call_views.CallViewSet, basename="call-api")
+
+app_name = "calls"
 
 urlpatterns = [
-    # Main views
-    path('', views.call_list, name='call_list'),
-    path('dialpad/', views.dialpad, name='dialpad'),
-    path('<int:pk>/', views.call_detail, name='call_detail'),
-
-    # Call actions
-    path('initiate/', views.initiate_call, name='initiate_call'),
-    path('<int:pk>/hangup/', views.hangup_call, name='hangup_call'),
-    path('<int:pk>/answer/', views.answer_call, name='answer_call'),
-    path('<int:pk>/status/', views.call_status, name='call_status'),
-
-    # Call management
-    path('<int:pk>/notes/', views.update_call_notes, name='update_call_notes'),
-    path('<int:pk>/link-contact/', views.link_call_to_contact, name='link_call_to_contact'),
-    path('<int:pk>/link-opportunity/', views.link_call_to_opportunity, name='link_call_to_opportunity'),
-
+    # DRF API endpoints
+    path("api/", include(router.urls)),
+    # Existing template views
+    path("", template_views.call_list, name="call_list"),
+    path("dialpad/", template_views.dialpad, name="dialpad"),
+    path("<int:pk>/", template_views.call_detail, name="call_detail"),
+    # Call actions (template views)
+    path("initiate/", template_views.initiate_call, name="initiate_call"),
+    path("<int:pk>/hangup/", template_views.hangup_call, name="hangup_call"),
+    path("<int:pk>/answer/", template_views.answer_call, name="answer_call"),
+    path("<int:pk>/status/", template_views.call_status, name="call_status"),
+    # Call management (template views)
+    path("<int:pk>/notes/", template_views.update_call_notes, name="update_call_notes"),
+    path(
+        "<int:pk>/link-contact/",
+        template_views.link_call_to_contact,
+        name="link_call_to_contact",
+    ),
+    path(
+        "<int:pk>/link-opportunity/",
+        template_views.link_call_to_opportunity,
+        name="link_call_to_opportunity",
+    ),
     # Recording
-    path('recording/<int:pk>/download/', views.recording_download, name='recording_download'),
-
-    # API
-    path('api/active/', views.active_calls, name='active_calls'),
+    path(
+        "recording/<int:pk>/download/",
+        template_views.recording_download,
+        name="recording_download",
+    ),
+    # Legacy API endpoint (kept for backward compatibility)
+    path("api/active/", template_views.active_calls, name="active_calls"),
 ]

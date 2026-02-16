@@ -4,6 +4,8 @@
 
 {% block extra_css %}
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+{% load static %}
+<script src="{% static 'js/vendor/jssip.min.js' %}"></script>
 <style>
 .dialpad-btn {
     width: 80px;
@@ -43,6 +45,9 @@
 
 {% block content %}
 <div class="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-6">
+    <!-- Hidden audio element for remote call audio -->
+    <audio id="remote-audio" autoplay></audio>
+
     <!-- Header -->
     <div class="mb-8">
         <div class="flex justify-between items-start">
@@ -54,6 +59,11 @@
                 </nav>
                 <h1 class="text-3xl font-bold text-gray-900">Dialpad</h1>
                 <p class="mt-2 text-gray-600">Make a new call</p>
+            </div>
+            <!-- SIP Registration Status -->
+            <div id="sip-status" class="flex items-center px-4 py-2 rounded-full bg-gray-100 text-gray-500">
+                <span id="sip-dot" class="w-2 h-2 rounded-full bg-gray-400 mr-2"></span>
+                <span id="sip-text" class="text-sm font-medium">Connecting...</span>
             </div>
         </div>
     </div>
@@ -190,11 +200,183 @@
 </div>
 
 <script>
+// Monkey-patch WebSocket to log all SIP messages
+(function() {
+    const OrigWS = window.WebSocket;
+    window.WebSocket = function(url, protocols) {
+        console.log('[WS] Opening WebSocket to:', url);
+        const ws = protocols ? new OrigWS(url, protocols) : new OrigWS(url);
+        ws.addEventListener('message', function(ev) {
+            const data = typeof ev.data === 'string' ? ev.data : '(binary)';
+            if (data.includes('INVITE') || data.includes('BYE') || data.includes('CANCEL')) {
+                console.log('[WS] <<< RECEIVED SIP:', data.substring(0, 300));
+            }
+        });
+        const origSend = ws.send.bind(ws);
+        ws.send = function(data) {
+            if (typeof data === 'string' && (data.includes('INVITE') || data.includes('BYE'))) {
+                console.log('[WS] >>> SENT SIP:', data.substring(0, 300));
+            }
+            return origSend(data);
+        };
+        ws.addEventListener('close', function(ev) {
+            console.log('[WS] Connection closed, code:', ev.code, 'reason:', ev.reason);
+        });
+        ws.addEventListener('error', function(ev) {
+            console.error('[WS] WebSocket error:', ev);
+        });
+        return ws;
+    };
+    window.WebSocket.prototype = OrigWS.prototype;
+    window.WebSocket.CONNECTING = OrigWS.CONNECTING;
+    window.WebSocket.OPEN = OrigWS.OPEN;
+    window.WebSocket.CLOSING = OrigWS.CLOSING;
+    window.WebSocket.CLOSED = OrigWS.CLOSED;
+})();
+
+// ---------------------------------------------------------------------------
+//  State
+// ---------------------------------------------------------------------------
 let currentCallId = null;
 let callTimer = null;
 let callSeconds = 0;
+let sipUA = null;           // JsSIP User Agent
+let sipRegistered = false;
+let currentSession = null;  // active RTC session (WebRTC call leg)
 
-// Get number from URL if provided
+// ---------------------------------------------------------------------------
+//  JsSIP — WebRTC SIP client
+// ---------------------------------------------------------------------------
+function initSIP() {
+    const wsUrl   = '{{ ws_url }}';
+    const sipExt  = '{{ sip_extension }}';
+    const sipDomain = '{{ sip_domain }}';
+    console.log('[SIP] initSIP called, wsUrl:', wsUrl, 'ext:', sipExt, 'domain:', sipDomain);
+
+    const socket = new JsSIP.WebSocketInterface(wsUrl);
+
+    const config = {
+        sockets: [socket],
+        uri: `sip:${sipExt}@${sipDomain}`,
+        password: 'changeme',   // matches WEBRTC_AGENT_PASSWORD env var
+        register: true,
+        session_timers: false,
+    };
+
+    sipUA = new JsSIP.UA(config);
+
+    // --- Registration events ---
+    sipUA.on('registered', function () {
+        console.log('[SIP] Registered successfully');
+        sipRegistered = true;
+        setSipStatus('connected', 'Phone Ready');
+    });
+
+    sipUA.on('unregistered', function () {
+        sipRegistered = false;
+        setSipStatus('disconnected', 'Disconnected');
+    });
+
+    sipUA.on('registrationFailed', function (ev) {
+        sipRegistered = false;
+        setSipStatus('error', 'Reg Failed');
+        console.error('SIP registration failed:', ev.cause);
+    });
+
+    // --- Incoming call (originated by ARI click-to-call) ---
+    sipUA.on('newRTCSession', function (ev) {
+        const session = ev.session;
+        console.log('[SIP] newRTCSession, originator:', ev.originator);
+
+        if (ev.originator === 'remote') {
+            // Auto-answer — the agent already clicked "Call" in the UI
+            currentSession = session;
+            attachSessionEvents(session);
+
+            // Request microphone first, then answer with the stream
+            navigator.mediaDevices.getUserMedia({ audio: true, video: false })
+                .then(function (stream) {
+                    console.log('[SIP] Got microphone stream, answering...');
+                    session.answer({
+                        mediaStream: stream,
+                        pcConfig: { iceServers: [] },
+                    });
+                })
+                .catch(function (err) {
+                    console.error('[SIP] Microphone access failed:', err);
+                    session.terminate({ cause: 'Microphone Error' });
+                });
+        }
+    });
+
+    sipUA.start();
+    setSipStatus('connecting', 'Connecting...');
+}
+
+function attachSessionEvents(session) {
+    session.on('peerconnection', function (ev) {
+        console.log('[SIP] PeerConnection created');
+        ev.peerconnection.addEventListener('iceconnectionstatechange', function () {
+            console.log('[SIP] ICE state:', ev.peerconnection.iceConnectionState);
+        });
+        ev.peerconnection.addEventListener('icecandidate', function (e) {
+            if (e.candidate) console.log('[SIP] ICE candidate:', e.candidate.candidate);
+        });
+    });
+
+    session.on('confirmed', function () {
+        console.log('[SIP] Call confirmed (media connected)');
+        // Call connected — attach remote audio stream
+        const remoteAudio = document.getElementById('remote-audio');
+        const receivers = session.connection.getReceivers();
+        if (receivers.length > 0) {
+            const stream = new MediaStream();
+            receivers.forEach(r => { if (r.track) stream.addTrack(r.track); });
+            remoteAudio.srcObject = stream;
+        }
+    });
+
+    session.on('ended', function (ev) {
+        console.log('[SIP] Call ended:', ev.cause);
+        currentSession = null;
+        document.getElementById('remote-audio').srcObject = null;
+    });
+
+    session.on('failed', function (ev) {
+        console.error('[SIP] Call failed:', ev.cause);
+        currentSession = null;
+        document.getElementById('remote-audio').srcObject = null;
+    });
+}
+
+function setSipStatus(state, text) {
+    const dot  = document.getElementById('sip-dot');
+    const label = document.getElementById('sip-text');
+    const wrap = document.getElementById('sip-status');
+    label.textContent = text;
+
+    dot.className = 'w-2 h-2 rounded-full mr-2';
+    wrap.className = 'flex items-center px-4 py-2 rounded-full text-sm font-medium';
+
+    if (state === 'connected') {
+        dot.classList.add('bg-green-500');
+        wrap.classList.add('bg-green-100', 'text-green-800');
+    } else if (state === 'connecting') {
+        dot.classList.add('bg-yellow-400', 'animate-pulse');
+        wrap.classList.add('bg-yellow-50', 'text-yellow-700');
+    } else {
+        dot.classList.add('bg-red-500');
+        wrap.classList.add('bg-red-100', 'text-red-800');
+    }
+}
+
+// Start SIP on page load
+console.log('[SIP] Page loaded, starting SIP...');
+initSIP();
+
+// ---------------------------------------------------------------------------
+//  Dialpad logic
+// ---------------------------------------------------------------------------
 const urlParams = new URLSearchParams(window.location.search);
 const prefilledNumber = urlParams.get('number');
 if (prefilledNumber) {
@@ -202,8 +384,7 @@ if (prefilledNumber) {
 }
 
 function dialNumber(digit) {
-    const input = document.getElementById('phone-number');
-    input.value += digit;
+    document.getElementById('phone-number').value += digit;
 }
 
 function clearNumber() {
@@ -220,30 +401,30 @@ function quickDial(number) {
 
 function makeCall() {
     const phoneNumber = document.getElementById('phone-number').value.trim();
+    console.log('[SIP] makeCall called, number:', phoneNumber, 'sipRegistered:', sipRegistered);
+    if (!phoneNumber) { alert('Please enter a phone number'); return; }
 
-    if (!phoneNumber) {
-        alert('Please enter a phone number');
+    if (!sipRegistered) {
+        alert('Phone is not connected. Wait for the status indicator to show "Phone Ready".');
         return;
     }
 
-    // Update UI for calling state
+    // Update UI
     document.getElementById('call-status').classList.remove('hidden');
     document.getElementById('status-text').textContent = 'Calling...';
     document.getElementById('call-btn').classList.add('hidden');
     document.getElementById('hangup-btn').classList.remove('hidden');
 
-    // Make API call
+    // Tell the backend to originate via ARI (rings our WebRTC extension)
     const formData = new FormData();
     formData.append('to_number', phoneNumber);
 
     fetch('{% url "calls:initiate_call" %}', {
         method: 'POST',
         body: formData,
-        headers: {
-            'X-CSRFToken': '{{ csrf_token }}',
-        },
+        headers: { 'X-CSRFToken': '{{ csrf_token }}' },
     })
-    .then(response => response.json())
+    .then(r => r.json())
     .then(data => {
         if (data.success) {
             currentCallId = data.call_id;
@@ -253,36 +434,37 @@ function makeCall() {
             resetDialpad();
         }
     })
-    .catch(error => {
-        console.error('Error:', error);
+    .catch(err => {
+        console.error('Error:', err);
         alert('Failed to initiate call');
         resetDialpad();
     });
 }
 
 function hangupCall() {
-    if (!currentCallId) return;
+    // Hangup the WebRTC session locally
+    if (currentSession) {
+        try { currentSession.terminate(); } catch (e) { /* ignore */ }
+        currentSession = null;
+    }
+
+    if (!currentCallId) { resetDialpad(); return; }
 
     fetch(`/calls/${currentCallId}/hangup/`, {
         method: 'POST',
-        headers: {
-            'X-CSRFToken': '{{ csrf_token }}',
-        },
+        headers: { 'X-CSRFToken': '{{ csrf_token }}' },
     })
-    .then(response => response.json())
-    .then(data => {
-        resetDialpad();
-    });
+    .then(r => r.json())
+    .then(() => resetDialpad());
 }
 
 function pollCallStatus() {
     if (!currentCallId) return;
 
     fetch(`/calls/${currentCallId}/status/`)
-    .then(response => response.json())
+    .then(r => r.json())
     .then(data => {
         updateCallStatus(data.status);
-
         if (['ended', 'failed', 'busy', 'no_answer'].includes(data.status)) {
             setTimeout(resetDialpad, 2000);
         } else {
@@ -295,40 +477,32 @@ function updateCallStatus(status) {
     const statusText = document.getElementById('status-text');
     const statusMap = {
         'initiated': 'Calling...',
-        'ringing': 'Ringing...',
-        'answered': 'Connected',
-        'ended': 'Call Ended',
-        'failed': 'Call Failed',
-        'busy': 'Line Busy',
-        'no_answer': 'No Answer'
+        'ringing':   'Ringing...',
+        'answered':  'Connected',
+        'ended':     'Call Ended',
+        'failed':    'Call Failed',
+        'busy':      'Line Busy',
+        'no_answer': 'No Answer',
     };
-
     statusText.textContent = statusMap[status] || status;
-
-    if (status === 'answered' && !callTimer) {
-        startTimer();
-    }
+    if (status === 'answered' && !callTimer) startTimer();
 }
 
 function startTimer() {
     callSeconds = 0;
     callTimer = setInterval(() => {
         callSeconds++;
-        const minutes = Math.floor(callSeconds / 60);
-        const seconds = callSeconds % 60;
+        const m = Math.floor(callSeconds / 60);
+        const s = callSeconds % 60;
         document.getElementById('call-timer').textContent =
-            String(minutes).padStart(2, '0') + ':' + String(seconds).padStart(2, '0');
+            String(m).padStart(2, '0') + ':' + String(s).padStart(2, '0');
     }, 1000);
 }
 
 function resetDialpad() {
     currentCallId = null;
-    if (callTimer) {
-        clearInterval(callTimer);
-        callTimer = null;
-    }
+    if (callTimer) { clearInterval(callTimer); callTimer = null; }
     callSeconds = 0;
-
     document.getElementById('call-status').classList.add('hidden');
     document.getElementById('call-timer').textContent = '00:00';
     document.getElementById('call-btn').classList.remove('hidden');
@@ -336,16 +510,14 @@ function resetDialpad() {
 }
 
 // Keyboard support
-document.getElementById('phone-number').addEventListener('keypress', function(e) {
-    if (e.key === 'Enter') {
-        makeCall();
-    }
+document.getElementById('phone-number').addEventListener('keypress', function (e) {
+    if (e.key === 'Enter') makeCall();
 });
 
-// Load active calls
+// Active calls widget
 function loadActiveCalls() {
     fetch('{% url "calls:active_calls" %}')
-    .then(response => response.json())
+    .then(r => r.json())
     .then(data => {
         const container = document.getElementById('active-calls-list');
         if (data.calls && data.calls.length > 0) {
@@ -365,8 +537,6 @@ function loadActiveCalls() {
         }
     });
 }
-
-// Load active calls on page load and periodically
 loadActiveCalls();
 setInterval(loadActiveCalls, 5000);
 </script>

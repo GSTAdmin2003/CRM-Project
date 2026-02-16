@@ -1,0 +1,31 @@
+from .template_views import (
+    active_calls,
+    answer_call,
+    call_detail,
+    call_list,
+    call_status,
+    dialpad,
+    hangup_call,
+    initiate_call,
+    link_call_to_contact,
+    link_call_to_opportunity,
+    recording_download,
+    sip_settings_view,
+    update_call_notes,
+)
+
+__all__ = [
+    "call_list",
+    "call_detail",
+    "dialpad",
+    "initiate_call",
+    "hangup_call",
+    "answer_call",
+    "call_status",
+    "update_call_notes",
+    "link_call_to_contact",
+    "link_call_to_opportunity",
+    "recording_download",
+    "active_calls",
+    "sip_settings_view",
+]

@@ -10,6 +10,7 @@ from .template_views import (
     link_call_to_contact,
     link_call_to_opportunity,
     recording_download,
+    register_inbound_call,
     sip_settings_view,
     update_call_notes,
 )
@@ -19,6 +20,7 @@ __all__ = [
     "call_detail",
     "dialpad",
     "initiate_call",
+    "register_inbound_call",
     "hangup_call",
     "answer_call",
     "call_status",

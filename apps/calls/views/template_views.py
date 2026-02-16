@@ -11,6 +11,7 @@ from django.contrib.auth.decorators import login_required
 from django.core.paginator import Paginator
 from django.http import HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
+from django.utils import timezone
 from django.views.decorators.http import require_GET, require_POST
 
 from ..models import Call, CallRecording, SIPSettings
@@ -81,6 +82,24 @@ def dialpad(request):
         "sip_domain": "localhost",
     }
     return render(request, "calls/dialpad.html", context)
+
+
+@login_required
+@require_POST
+def register_inbound_call(request):
+    """Register an inbound call when the agent answers it in the browser."""
+    from_number = request.POST.get("from_number", "").strip()
+
+    call = Call.objects.create(
+        direction="inbound",
+        from_number=from_number,
+        to_number=getattr(request.user, "extension", None) or "100",
+        status="answered",
+        user=request.user,
+        started_at=timezone.now(),
+        answered_at=timezone.now(),
+    )
+    return JsonResponse({"success": True, "call_id": call.id})
 
 
 @login_required

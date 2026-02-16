@@ -35,7 +35,7 @@ password={sip_settings.password}
 
 [sip-trunk-endpoint]
 type=endpoint
-context=from-internal
+context=from-trunk
 disallow=all
 allow=ulaw
 allow=alaw

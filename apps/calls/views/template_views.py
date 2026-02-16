@@ -253,7 +253,7 @@ class SIPSettingsForm(forms.ModelForm):
 
     class Meta:
         model = SIPSettings
-        fields = ["server_ip", "server_port", "username", "caller_id", "is_active"]
+        fields = ["server_ip", "server_port", "username", "caller_id", "is_active", "hold_music"]
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -264,6 +264,14 @@ class SIPSettingsForm(forms.ModelForm):
 
     def clean(self):
         cleaned = super().clean()
+
+        # Validate hold_music file extension
+        hold_music = cleaned.get("hold_music")
+        if hold_music and hasattr(hold_music, "name"):
+            ext = hold_music.name.rsplit(".", 1)[-1].lower() if "." in hold_music.name else ""
+            if ext not in ("mp3", "wav"):
+                self.add_error("hold_music", "Only mp3 and wav files are supported.")
+
         server_ip = cleaned.get("server_ip")
         server_port = cleaned.get("server_port")
         username = cleaned.get("username")
@@ -303,7 +311,7 @@ class SIPSettingsForm(forms.ModelForm):
 @login_required
 def sip_settings_view(request):
     """SIP credentials settings page"""
-    from ..asterisk_config import apply_sip_settings
+    from ..asterisk_config import apply_moh_settings, apply_sip_settings
 
     try:
         sip = request.user.sip_settings
@@ -318,11 +326,25 @@ def sip_settings_view(request):
                 messages.success(request, "SIP credentials deleted. Asterisk config cleared.")
             return redirect("settings_voip")
 
-        form = SIPSettingsForm(request.POST, instance=sip)
+        # Handle hold music removal
+        if "remove_hold_music" in request.POST and sip and sip.hold_music:
+            sip.hold_music.delete(save=False)
+            sip.hold_music = None
+            sip.save()
+            apply_moh_settings(sip)
+            messages.success(request, "Hold music removed. Default music will be used.")
+            return redirect("settings_voip")
+
+        form = SIPSettingsForm(request.POST, request.FILES, instance=sip)
         if form.is_valid():
             obj = form.save(commit=False)
             obj.user = request.user
             obj.save()
+
+            # Apply MOH settings if hold music was uploaded
+            if "hold_music" in request.FILES:
+                apply_moh_settings(obj)
+
             if apply_sip_settings(obj):
                 messages.success(request, "SIP credentials saved and Asterisk reloaded.")
             else:

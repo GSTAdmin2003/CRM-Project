@@ -93,7 +93,7 @@
             <!-- SIP Credentials Form -->
             <div class="bg-white shadow rounded-lg">
                 <div class="px-4 py-5 sm:p-6">
-                    <form method="post">
+                    <form method="post" enctype="multipart/form-data">
                         {% csrf_token %}
 
                         {% if form.non_field_errors %}
@@ -224,6 +224,45 @@
                                     </label>
                                 </div>
                                 <p class="mt-1 text-xs text-gray-500">When disabled, calls will not use this SIP account</p>
+                            </div>
+                        </div>
+
+                        <!-- Hold Music -->
+                        <h3 class="text-lg font-medium text-gray-900 mb-6">
+                            <i class="fas fa-music text-gray-400 mr-2"></i>
+                            Hold Music
+                        </h3>
+                        <div class="mb-8">
+                            <p class="text-sm text-gray-500 mb-4">Upload a custom audio file to play when you place callers on hold. If no file is uploaded, the default Asterisk hold music will be used.</p>
+                            {% if sip_settings and sip_settings.hold_music %}
+                            <div class="flex items-center justify-between p-3 bg-gray-50 rounded-lg mb-4">
+                                <div class="flex items-center">
+                                    <i class="fas fa-file-audio text-indigo-500 mr-3 text-lg"></i>
+                                    <div>
+                                        <p class="text-sm font-medium text-gray-900">{{ sip_settings.hold_music.name|cut:"hold_music/" }}</p>
+                                        <p class="text-xs text-gray-500">Current hold music file</p>
+                                    </div>
+                                </div>
+                                <button type="submit" name="remove_hold_music" value="1"
+                                        onclick="return confirm('Remove custom hold music? Default music will be used instead.')"
+                                        class="text-red-600 hover:text-red-800 text-sm font-medium">
+                                    <i class="fas fa-times mr-1"></i>Remove
+                                </button>
+                            </div>
+                            {% endif %}
+                            <div>
+                                <label for="id_hold_music" class="block text-sm font-medium text-gray-700">
+                                    {% if sip_settings and sip_settings.hold_music %}Replace hold music{% else %}Upload hold music{% endif %}
+                                </label>
+                                <div class="mt-1">
+                                    <input type="file" name="hold_music" id="id_hold_music"
+                                           accept=".mp3,.wav"
+                                           class="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:text-sm file:font-medium file:bg-indigo-50 file:text-indigo-700 hover:file:bg-indigo-100">
+                                </div>
+                                {% if form.hold_music.errors %}
+                                <p class="mt-1 text-sm text-red-600">{{ form.hold_music.errors.0 }}</p>
+                                {% endif %}
+                                <p class="mt-1 text-xs text-gray-500">Accepted formats: mp3, wav</p>
                             </div>
                         </div>
 

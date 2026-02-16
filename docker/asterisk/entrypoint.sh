@@ -12,6 +12,11 @@ if [ ! -f /etc/asterisk/dynamic/pjsip_trunk.conf ]; then
     echo "; No SIP trunk configured yet. Save credentials in CRM Settings > VoIP." > /etc/asterisk/dynamic/pjsip_trunk.conf
 fi
 
+# Create empty MOH custom config if it doesn't exist yet
+if [ ! -f /etc/asterisk/dynamic/musiconhold_custom.conf ]; then
+    echo "; No custom hold music configured." > /etc/asterisk/dynamic/musiconhold_custom.conf
+fi
+
 # Create default WebRTC agent extensions (100-104) if not already present.
 # Password defaults to WEBRTC_AGENT_PASSWORD env var or 'changeme'.
 if [ ! -f /etc/asterisk/dynamic/pjsip_agents.conf ]; then
@@ -38,6 +43,7 @@ rtp_symmetric=yes
 force_rport=yes
 rewrite_contact=yes
 from_domain=localhost
+moh_suggest=default
 auth=$ext-auth
 aors=$ext
 

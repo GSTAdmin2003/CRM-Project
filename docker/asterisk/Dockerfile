@@ -14,6 +14,7 @@ COPY extensions.conf /etc/asterisk/extensions.conf
 COPY ari.conf /etc/asterisk/ari.conf
 COPY http.conf /etc/asterisk/http.conf
 COPY modules.conf /etc/asterisk/modules.conf
+COPY musiconhold.conf /etc/asterisk/musiconhold.conf
 
 # Copy entrypoint script
 COPY entrypoint.sh /entrypoint.sh
@@ -22,6 +23,10 @@ RUN chmod +x /entrypoint.sh
 # Create recordings directory
 RUN mkdir -p /var/spool/asterisk/recording && \
     chown asterisk:asterisk /var/spool/asterisk/recording
+
+# Create custom MOH directory
+RUN mkdir -p /var/lib/asterisk/custom-moh && \
+    chown asterisk:asterisk /var/lib/asterisk/custom-moh
 
 EXPOSE 5060/udp 8088 10000-10100/udp
 

@@ -169,6 +169,18 @@
                         </button>
                     </div>
 
+                    <!-- In-Call Controls (visible only during active call) -->
+                    <div id="in-call-controls" class="hidden flex space-x-4 mt-4">
+                        <button id="mute-btn" onclick="toggleMute()" class="dialpad-btn bg-gray-200 hover:bg-gray-300 text-gray-700" title="Mute">
+                            <i id="mute-icon" class="fas fa-microphone"></i>
+                            <span id="mute-label" class="text-xs mt-1">Mute</span>
+                        </button>
+                        <button id="hold-btn" onclick="toggleHold()" class="dialpad-btn bg-gray-200 hover:bg-gray-300 text-gray-700" title="Hold">
+                            <i id="hold-icon" class="fas fa-pause"></i>
+                            <span id="hold-label" class="text-xs mt-1">Hold</span>
+                        </button>
+                    </div>
+
                     <!-- Action Buttons -->
                     <div class="flex space-x-4 mt-6">
                         <button onclick="clearNumber()" class="dialpad-btn bg-gray-200 hover:bg-gray-300 text-gray-700">
@@ -238,6 +250,8 @@ let sipRegistered = false;
 let currentSession = null;
 let outboundPending = false;   // true while we're waiting for our own click-to-call
 let incomingCallerNumber = '';  // caller ID for the current incoming call
+let isMuted = false;
+let isOnHold = false;
 
 // ---------------------------------------------------------------------------
 //  JsSIP — WebRTC SIP client
@@ -321,6 +335,7 @@ function attachSessionEvents(session) {
             receivers.forEach(function (r) { if (r.track) stream.addTrack(r.track); });
             remoteAudio.srcObject = stream;
         }
+        showInCallControls();
     });
 
     session.on('ended', function () {
@@ -552,6 +567,78 @@ function startTimer() {
     }, 1000);
 }
 
+// ---------------------------------------------------------------------------
+//  Mute & Hold
+// ---------------------------------------------------------------------------
+function toggleMute() {
+    if (!currentSession) return;
+    isMuted = !isMuted;
+    var muteBtn = document.getElementById('mute-btn');
+    var muteIcon = document.getElementById('mute-icon');
+    var muteLabel = document.getElementById('mute-label');
+    if (isMuted) {
+        currentSession.mute({audio: true});
+        muteBtn.classList.remove('bg-gray-200', 'hover:bg-gray-300', 'text-gray-700');
+        muteBtn.classList.add('bg-red-100', 'hover:bg-red-200', 'text-red-700');
+        muteIcon.className = 'fas fa-microphone-slash';
+        muteLabel.textContent = 'Unmute';
+    } else {
+        currentSession.unmute({audio: true});
+        muteBtn.classList.remove('bg-red-100', 'hover:bg-red-200', 'text-red-700');
+        muteBtn.classList.add('bg-gray-200', 'hover:bg-gray-300', 'text-gray-700');
+        muteIcon.className = 'fas fa-microphone';
+        muteLabel.textContent = 'Mute';
+    }
+}
+
+function toggleHold() {
+    if (!currentSession) return;
+    isOnHold = !isOnHold;
+    var holdBtn = document.getElementById('hold-btn');
+    var holdIcon = document.getElementById('hold-icon');
+    var holdLabel = document.getElementById('hold-label');
+    if (isOnHold) {
+        currentSession.hold();
+        holdBtn.classList.remove('bg-gray-200', 'hover:bg-gray-300', 'text-gray-700');
+        holdBtn.classList.add('bg-yellow-100', 'hover:bg-yellow-200', 'text-yellow-700');
+        holdIcon.className = 'fas fa-play';
+        holdLabel.textContent = 'Resume';
+    } else {
+        currentSession.unhold();
+        holdBtn.classList.remove('bg-yellow-100', 'hover:bg-yellow-200', 'text-yellow-700');
+        holdBtn.classList.add('bg-gray-200', 'hover:bg-gray-300', 'text-gray-700');
+        holdIcon.className = 'fas fa-pause';
+        holdLabel.textContent = 'Hold';
+    }
+}
+
+function showInCallControls() {
+    document.getElementById('in-call-controls').classList.remove('hidden');
+}
+
+function hideInCallControls() {
+    document.getElementById('in-call-controls').classList.add('hidden');
+}
+
+function resetMuteHold() {
+    isMuted = false;
+    isOnHold = false;
+    var muteBtn = document.getElementById('mute-btn');
+    var muteIcon = document.getElementById('mute-icon');
+    var muteLabel = document.getElementById('mute-label');
+    muteBtn.classList.remove('bg-red-100', 'hover:bg-red-200', 'text-red-700');
+    muteBtn.classList.add('bg-gray-200', 'hover:bg-gray-300', 'text-gray-700');
+    muteIcon.className = 'fas fa-microphone';
+    muteLabel.textContent = 'Mute';
+    var holdBtn = document.getElementById('hold-btn');
+    var holdIcon = document.getElementById('hold-icon');
+    var holdLabel = document.getElementById('hold-label');
+    holdBtn.classList.remove('bg-yellow-100', 'hover:bg-yellow-200', 'text-yellow-700');
+    holdBtn.classList.add('bg-gray-200', 'hover:bg-gray-300', 'text-gray-700');
+    holdIcon.className = 'fas fa-pause';
+    holdLabel.textContent = 'Hold';
+}
+
 function resetDialpad() {
     currentCallId = null;
     outboundPending = false;
@@ -561,6 +648,8 @@ function resetDialpad() {
     document.getElementById('call-timer').textContent = '00:00';
     document.getElementById('call-btn').classList.remove('hidden');
     document.getElementById('hangup-btn').classList.add('hidden');
+    hideInCallControls();
+    resetMuteHold();
 }
 
 // Keyboard support

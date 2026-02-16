@@ -29,6 +29,13 @@ class SIPSettings(models.Model):
         ],
     )
     last_registration_check = models.DateTimeField(null=True, blank=True)
+    hold_music = models.FileField(
+        upload_to="hold_music/",
+        blank=True,
+        null=True,
+        verbose_name="Custom Hold Music",
+        help_text="Upload a custom hold music file (mp3 or wav)",
+    )
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 

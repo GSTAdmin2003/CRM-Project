@@ -30,6 +30,12 @@ class Contact(models.Model):
     def __str__(self):
         return f"{self.name} - {self.position} at {self.company.display_name}"
 
+    def save(self, *args, **kwargs):
+        from core.utils import normalize_phone
+        self.phone = normalize_phone(self.phone)
+        self.mobile = normalize_phone(self.mobile)
+        super().save(*args, **kwargs)
+
     @property
     def effective_language(self):
         return self.preferred_language or 'en'

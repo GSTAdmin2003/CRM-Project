@@ -155,6 +155,9 @@ class Lead(models.Model):
         return self.assigned_to == user
 
     def save(self, *args, **kwargs):
+        from core.utils import normalize_phone
+        self.phone = normalize_phone(self.phone)
+
         # Auto-assign sales team if not set
         if not self.sales_team and self.assigned_to and self.assigned_to.sales_team:
             self.sales_team = self.assigned_to.sales_team

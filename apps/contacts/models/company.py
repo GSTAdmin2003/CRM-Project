@@ -53,6 +53,9 @@ class Company(models.Model):
                 self.save()
 
     def save(self, *args, **kwargs):
+        from core.utils import normalize_phone
+        self.company_phone = normalize_phone(self.company_phone)
+        self.company_mobile = normalize_phone(self.company_mobile)
         super().save(*args, **kwargs)
         # Auto-set favorite contact if none exists and we have contacts
         if not self.favorite_contact and self.contacts.exists():

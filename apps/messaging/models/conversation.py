@@ -23,6 +23,11 @@ class WhatsAppConversation(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
+    def save(self, *args, **kwargs):
+        from core.utils import normalize_phone
+        self.phone_number = normalize_phone(self.phone_number)
+        super().save(*args, **kwargs)
+
     class Meta:
         app_label = "messaging"
         ordering = ["-last_message_at"]

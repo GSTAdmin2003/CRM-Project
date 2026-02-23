@@ -9,21 +9,17 @@ from django.urls import reverse
 
 # Registry of models that can be used with autocomplete
 AUTOCOMPLETE_REGISTRY = {
-    # Company-type contacts (used by LeadForm company autocomplete)
-    # model_class is the real model; filter_kwargs narrows to type='company'
     'contacts.Company': {
-        'model_class': 'contacts.Contact',
-        'filter_kwargs': {'type': 'company'},
         'search_fields': ['legal_id', 'legal_name', 'brand_name'],
         'display_field': 'display_name',
         'secondary_field': 'legal_name',
         'id_display_field': 'legal_id',
-        'view_url_name': 'contacts:contact_detail',
+        'view_url_name': 'contacts:company_detail',
         'allow_create': True,
     },
     'contacts.Contact': {
         'search_fields': ['name', 'email', 'phone'],
-        'display_field': 'display_name',
+        'display_field': 'name',
         'secondary_field': 'email',
         'id_display_field': None,
         'view_url_name': 'contacts:contact_detail',
@@ -187,7 +183,7 @@ def CompanyAutocompleteField(**kwargs):
     kwargs.setdefault('placeholder', 'Type company name...')
     return AutocompleteField(
         model_name='contacts.Company',
-        view_url_name='contacts:contact_detail',
+        view_url_name='contacts:company_detail',
         allow_create=True,
         **kwargs
     )

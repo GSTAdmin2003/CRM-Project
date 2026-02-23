@@ -155,7 +155,22 @@
             {% endif %}
 
             <!-- Transcript -->
-            {% if call.transcript %}
+            {% if call.recording and not call.transcript %}
+            <div class="bg-white shadow rounded-lg p-6">
+                <div class="flex items-center justify-between">
+                    <div>
+                        <h2 class="text-lg font-medium text-gray-900">
+                            <i class="fas fa-file-alt mr-2 text-gray-400"></i>Transcript
+                        </h2>
+                        <p class="text-sm text-gray-500 mt-1">Recording is ready. Start transcription to convert it to text.</p>
+                    </div>
+                    <button onclick="openLangModal()"
+                            class="flex items-center gap-2 text-sm px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-md font-medium">
+                        <i class="fas fa-microphone-alt"></i>Transcribe
+                    </button>
+                </div>
+            </div>
+            {% elif call.transcript %}
             <div class="bg-white shadow rounded-lg p-6">
                 <div class="flex items-center justify-between mb-4">
                     <h2 class="text-lg font-medium text-gray-900">
@@ -175,7 +190,7 @@
                                 class="flex items-center gap-1 text-xs px-3 py-1.5 border border-indigo-300 text-indigo-600 hover:bg-indigo-50 rounded-md font-medium">
                             <i class="fas fa-redo"></i> Retranscribe
                         </button>
-                        {% elif call.transcript.status == 'processing' or call.transcript.status == 'pending' and call.transcript.language_code %}
+                        {% elif call.transcript.status == 'processing' or call.transcript.celery_task_id %}
                         <button onclick="cancelTranscription()"
                                 class="flex items-center gap-1 text-xs px-3 py-1.5 border border-red-300 text-red-600 hover:bg-red-50 rounded-md font-medium">
                             <i class="fas fa-times"></i> Cancel
@@ -184,6 +199,11 @@
                         <button onclick="openLangModal()"
                                 class="flex items-center gap-1 text-xs px-3 py-1.5 bg-green-600 hover:bg-green-700 text-white rounded-md font-medium">
                             <i class="fas fa-redo"></i> Retry
+                        </button>
+                        {% elif call.transcript.status == 'pending' %}
+                        <button onclick="openLangModal()"
+                                class="flex items-center gap-1 text-xs px-3 py-1.5 bg-green-600 hover:bg-green-700 text-white rounded-md font-medium">
+                            <i class="fas fa-microphone-alt"></i> Transcribe
                         </button>
                         {% endif %}
                     </div>
@@ -248,37 +268,33 @@
                     Transcription failed: {{ call.transcript.error_message }}
                 </div>
 
-                {% elif call.transcript.status == 'pending' and not call.transcript.language_code %}
-                <div class="flex items-center justify-between">
-                    <p class="text-sm text-gray-500">Recording is ready. Choose a language to begin transcription.</p>
-                    <button onclick="openLangModal()"
-                            class="ml-4 bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-md text-sm font-medium whitespace-nowrap">
-                        <i class="fas fa-language mr-1"></i>Choose Language
-                    </button>
-                </div>
-
-                {% else %}
+                {% elif call.transcript.celery_task_id %}
                 <div class="flex items-center text-sm text-gray-500">
                     <i class="fas fa-clock mr-2"></i>Queued for transcription...
                 </div>
+
+                {% else %}
+                <p class="text-sm text-gray-500">Recording is ready. Click <strong>Transcribe</strong> above to begin.</p>
                 {% endif %}
             </div>
+            {% endif %}
 
-            <!-- Shared language selection modal -->
+            <!-- Language selection modal (shown whenever there's a recording) -->
+            {% if call.recording %}
             <div id="lang-modal" class="hidden fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50">
                 <div class="bg-white rounded-lg shadow-xl p-6 w-80">
-                    <h3 class="text-lg font-medium text-gray-900 mb-4" id="lang-modal-title">Select Language</h3>
+                    <h3 class="text-lg font-medium text-gray-900 mb-4">Select Language</h3>
                     <form id="lang-form">
                         {% csrf_token %}
                         <div class="space-y-2 mb-4">
                             <label class="flex items-center gap-3 p-3 rounded-lg border cursor-pointer hover:bg-gray-50">
                                 <input type="radio" name="language" value="en" class="text-indigo-600"
-                                       {% if call.transcript.language_code|slice:":2" == 'en' %}checked{% endif %}>
+                                       {% if call.transcript and call.transcript.language_code|slice:":2" == 'en' %}checked{% elif not call.transcript %}checked{% endif %}>
                                 <span class="text-sm font-medium">English</span>
                             </label>
                             <label class="flex items-center gap-3 p-3 rounded-lg border cursor-pointer hover:bg-gray-50">
                                 <input type="radio" name="language" value="ka" class="text-indigo-600"
-                                       {% if call.transcript.language_code|slice:":2" == 'ka' %}checked{% endif %}>
+                                       {% if call.transcript and call.transcript.language_code|slice:":2" == 'ka' %}checked{% endif %}>
                                 <span class="text-sm font-medium">Georgian (ქართული)</span>
                             </label>
                         </div>

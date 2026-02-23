@@ -40,6 +40,10 @@ class WhatsAppConfig(models.Model):
         default=False,
         help_text="Enable/disable WhatsApp integration",
     )
+    default_pitch_media_id = models.CharField(max_length=200, blank=True, default='')
+    default_pitch_filename = models.CharField(max_length=200, blank=True, default='')
+    default_pitch_media_id_ka = models.CharField(max_length=200, blank=True, default='')
+    default_pitch_filename_ka = models.CharField(max_length=200, blank=True, default='')
     updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
@@ -65,3 +69,9 @@ class WhatsAppConfig(models.Model):
 
     def can_submit_templates(self):
         return bool(self.is_configured() and self.waba_id)
+
+    def get_default_pitch_for_language(self, lang: str) -> tuple:
+        """Return (media_id, filename) of the default pitch for the given language."""
+        if lang == 'ka' and self.default_pitch_media_id_ka:
+            return self.default_pitch_media_id_ka, self.default_pitch_filename_ka or 'sales_pitch.pdf'
+        return self.default_pitch_media_id, self.default_pitch_filename or 'sales_pitch.pdf'

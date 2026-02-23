@@ -1,6 +1,6 @@
 {% extends 'base.html' %}
 
-{% block title %}{{ action }} Company - CRM System{% endblock %}
+{% block title %}{{ action }} Contact - CRM System{% endblock %}
 
 {% block extra_css %}
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
@@ -33,20 +33,20 @@
         <nav class="flex mb-2">
             <a href="{% url 'contacts:dashboard_home' %}" class="text-indigo-600 hover:text-indigo-900">Contacts</a>
             <span class="mx-2 text-gray-400">/</span>
-            <a href="{% url 'contacts:company_list' %}" class="text-indigo-600 hover:text-indigo-900">Companies</a>
+            <a href="{% url 'contacts:company_list' %}" class="text-indigo-600 hover:text-indigo-900">Contacts</a>
             <span class="mx-2 text-gray-400">/</span>
             {% if company %}
             <a href="{% url 'contacts:company_detail' company.pk %}" class="text-indigo-600 hover:text-indigo-900">{{ company.display_name }}</a>
             <span class="mx-2 text-gray-400">/</span>
             {% endif %}
-            <span class="text-gray-500">{{ action }} Company</span>
+            <span class="text-gray-500">{{ action }} Contact</span>
         </nav>
-        <h1 class="text-3xl font-bold text-gray-900">{{ action }} Company</h1>
+        <h1 class="text-3xl font-bold text-gray-900">{{ action }} Contact</h1>
         <p class="mt-2 text-gray-600">
             {% if action == 'Create' %}
-                Add a new company to your contacts.
+                Add a new contact.
             {% else %}
-                Update company information.
+                Update contact information.
             {% endif %}
         </p>
     </div>
@@ -56,7 +56,41 @@
         <div class="bg-white shadow rounded-lg">
             <form method="post" class="px-4 py-5 sm:p-6">
                 {% csrf_token %}
-                
+
+                <!-- Contact Type -->
+                <div class="mb-6 pb-6 border-b border-gray-200">
+                    <label class="block text-sm font-medium text-gray-700 mb-3">Contact Type</label>
+                    <div class="flex gap-6">
+                        {% for value, label in form.contact_type.field.choices %}
+                        <label class="flex items-center gap-2 cursor-pointer">
+                            <input type="radio" name="contact_type" value="{{ value }}"
+                                   id="contact_type_{{ value }}"
+                                   {% if form.contact_type.value == value %}checked{% elif not form.contact_type.value and value == 'company' %}checked{% endif %}
+                                   class="h-4 w-4 text-indigo-600 border-gray-300 focus:ring-indigo-500"
+                                   onchange="toggleContactTypeFields()">
+                            <span class="text-sm font-medium text-gray-700">{{ label }}</span>
+                        </label>
+                        {% endfor %}
+                    </div>
+                </div>
+
+                <!-- Preferred Pitch Language -->
+                <div class="mb-6 pb-6 border-b border-gray-200">
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Preferred Language</label>
+                    <p class="text-xs text-gray-500 mb-3">Which language should communications be sent in? Leave as System Default to follow the global setting.</p>
+                    <div class="flex gap-6">
+                        {% for value, label in form.preferred_language.field.choices %}
+                        <label class="flex items-center gap-2 cursor-pointer">
+                            <input type="radio" name="preferred_language" value="{{ value }}"
+                                   id="preferred_language_{{ value|default:'default' }}"
+                                   {% if form.preferred_language.value == value %}checked{% elif not form.preferred_language.value and value == '' %}checked{% endif %}
+                                   class="h-4 w-4 text-indigo-600 border-gray-300 focus:ring-indigo-500">
+                            <span class="text-sm text-gray-700">{{ label }}</span>
+                        </label>
+                        {% endfor %}
+                    </div>
+                </div>
+
                 <div class="grid grid-cols-1 gap-6 sm:grid-cols-2">
                     <!-- Legal ID -->
                     <div class="sm:col-span-1">
@@ -71,7 +105,7 @@
                                 {{ form.legal_id.errors.0 }}
                             </div>
                         {% endif %}
-                        <p class="mt-1 text-sm text-gray-500">Unique legal identifier for the company</p>
+                        <p class="mt-1 text-sm text-gray-500">Unique legal identifier for the contact</p>
                     </div>
 
                     <!-- Legal Name -->
@@ -89,8 +123,8 @@
                         {% endif %}
                     </div>
 
-                    <!-- Brand Name -->
-                    <div class="sm:col-span-1">
+                    <!-- Brand Name (Company only) -->
+                    <div class="sm:col-span-1" id="field-brand-name">
                         <label for="{{ form.brand_name.id_for_label }}" class="block text-sm font-medium text-gray-700">
                             Brand Name
                         </label>
@@ -105,8 +139,8 @@
                         <p class="mt-1 text-sm text-gray-500">Trading or brand name (if different from legal name)</p>
                     </div>
 
-                    <!-- Industry -->
-                    <div class="sm:col-span-1">
+                    <!-- Industry (Company only) -->
+                    <div class="sm:col-span-1" id="field-industry">
                         <label for="{{ form.industry.id_for_label }}" class="block text-sm font-medium text-gray-700">
                             Industry
                         </label>
@@ -121,7 +155,7 @@
                     </div>
 
                     <!-- Category -->
-                    <div class="sm:col-span-1">
+                    <div class="sm:col-span-1" id="field-category">
                         <label for="{{ form.category.id_for_label }}" class="block text-sm font-medium text-gray-700">
                             Category
                         </label>
@@ -151,7 +185,7 @@
                     </div>
 
                     <!-- Company Phone -->
-                    <div class="sm:col-span-1">
+                    <div class="sm:col-span-1" id="field-company-phone">
                         <label for="{{ form.company_phone.id_for_label }}" class="block text-sm font-medium text-gray-700">
                             Company Phone
                         </label>
@@ -187,11 +221,25 @@
                         Cancel
                     </a>
                     <button type="submit" class="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-md text-sm font-medium">
-                        {{ action }} Company
+                        {{ action }} Contact
                     </button>
                 </div>
             </form>
         </div>
     </div>
 </div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+function toggleContactTypeFields() {
+    var selected = document.querySelector('input[name="contact_type"]:checked');
+    var isIndividual = selected && selected.value === 'individual';
+    document.getElementById('field-brand-name').style.display = isIndividual ? 'none' : '';
+    document.getElementById('field-industry').style.display = isIndividual ? 'none' : '';
+    document.getElementById('field-category').style.display = isIndividual ? 'none' : '';
+    document.getElementById('field-company-phone').style.display = isIndividual ? 'none' : '';
+}
+document.addEventListener('DOMContentLoaded', toggleContactTypeFields);
+</script>
 {% endblock %}

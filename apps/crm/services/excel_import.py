@@ -1,5 +1,5 @@
 """
-Excel parsing and import logic for IncomingLead import.
+Excel parsing and import logic for Lead import.
 """
 import re
 from django.core.validators import validate_email
@@ -8,7 +8,7 @@ from django.db import transaction
 from openpyxl import load_workbook
 
 from apps.contacts.models import Company, Contact
-from apps.crm.models import IncomingLead
+from apps.crm.models import Lead
 
 
 # Header mappings - maps header names to internal field names
@@ -422,11 +422,11 @@ def execute_import(preview_data, user):
                     if lead_contact is None:
                         lead_contact = contact
 
-                # 3. Create IncomingLead
-                # Use Notes field as message, or create a default message
-                message = lead_data.get('notes', '') or f"Imported lead: {lead_data.get('title', 'No title')}"
+                # 3. Create Lead (lead_type='lead')
+                message = lead_data.get('notes', '') or ''
 
-                incoming_lead = IncomingLead.objects.create(
+                Lead.objects.create(
+                    lead_type=Lead.TYPE_LEAD,
                     company=company,
                     contact=lead_contact,
                     message=message,

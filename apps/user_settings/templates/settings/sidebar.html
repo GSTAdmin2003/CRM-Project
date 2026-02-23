@@ -46,49 +46,35 @@
     {% user_is_admin user as is_admin %}
     {% if is_admin %}
     <div class="space-y-1">
-        <div class="{% if current_section == 'general' %}bg-gray-100{% else %}hover:bg-gray-50{% endif %} rounded-md">
-            <button type="button" 
-                    class="{% if current_section == 'general' %}text-gray-900{% else %}text-gray-600 hover:text-gray-900{% endif %} group flex w-full items-center px-2 py-2 text-sm font-medium rounded-md" 
-                    aria-expanded="{% if current_section == 'general' %}true{% else %}false{% endif %}"
-                    data-toggle="collapse" 
+        <div class="{% if current_section == 'general' or current_section == 'users' %}bg-gray-100{% else %}hover:bg-gray-50{% endif %} rounded-md">
+            <button type="button"
+                    class="{% if current_section == 'general' or current_section == 'users' %}text-gray-900{% else %}text-gray-600 hover:text-gray-900{% endif %} group flex w-full items-center px-2 py-2 text-sm font-medium rounded-md"
+                    aria-expanded="{% if current_section == 'general' or current_section == 'users' %}true{% else %}false{% endif %}"
+                    data-toggle="collapse"
                     data-target="general-submenu">
                 <i class="fas fa-cog text-gray-400 mr-3 flex-shrink-0 h-6 w-6"></i>
                 <span class="flex-1 text-left">General</span>
-                <i class="fas fa-chevron-right transform transition-transform duration-200 {% if current_section == 'general' %}rotate-90{% endif %} text-gray-400 ml-3 h-5 w-5 flex-shrink-0"></i>
+                <i class="fas fa-chevron-right transform transition-transform duration-200 {% if current_section == 'general' or current_section == 'users' %}rotate-90{% endif %} text-gray-400 ml-3 h-5 w-5 flex-shrink-0"></i>
             </button>
         </div>
-        
-        <div class="{% if current_section != 'general' %}hidden{% endif %} space-y-1 pl-11" id="general-submenu">
-            <a href="{% url 'settings:general:system_config' %}"
-               class="{% if current_page == 'system_config' %}bg-gray-200 text-gray-900{% else %}text-gray-600 hover:bg-gray-50 hover:text-gray-900{% endif %} group flex items-center px-2 py-2 text-sm rounded-md">
-                <i class="fas fa-server text-gray-400 mr-3 flex-shrink-0 h-4 w-4"></i>
-                System Config
+
+        <div class="{% if current_section != 'general' and current_section != 'users' %}hidden{% endif %} space-y-1 pl-11" id="general-submenu">
+            <a href="{% url 'settings:general:preferred_language' %}"
+               class="{% if current_page == 'preferred_language' %}bg-gray-200 text-gray-900{% else %}text-gray-600 hover:bg-gray-50 hover:text-gray-900{% endif %} group flex items-center px-2 py-2 text-sm rounded-md">
+                <i class="fas fa-language text-gray-400 mr-3 flex-shrink-0 h-4 w-4"></i>
+                Preferred Language
             </a>
-            <a href="{% url 'settings:general:roles' %}"
-               class="{% if current_page == 'roles' %}bg-gray-200 text-gray-900{% else %}text-gray-600 hover:bg-gray-50 hover:text-gray-900{% endif %} group flex items-center px-2 py-2 text-sm rounded-md">
-                <i class="fas fa-users-cog text-gray-400 mr-3 flex-shrink-0 h-4 w-4"></i>
-                Role Management
-            </a>
-            <a href="{% url 'settings:general:app_registry' %}"
-               class="{% if current_page == 'app_registry' %}bg-gray-200 text-gray-900{% else %}text-gray-600 hover:bg-gray-50 hover:text-gray-900{% endif %} group flex items-center px-2 py-2 text-sm rounded-md">
-                <i class="fas fa-th-list text-gray-400 mr-3 flex-shrink-0 h-4 w-4"></i>
-                App Registry
+            <a href="{% url 'settings:users:list' %}"
+               class="{% if current_section == 'users' %}bg-gray-200 text-gray-900{% else %}text-gray-600 hover:bg-gray-50 hover:text-gray-900{% endif %} group flex items-center px-2 py-2 text-sm rounded-md">
+                <i class="fas fa-users text-gray-400 mr-3 flex-shrink-0 h-4 w-4"></i>
+                User Management
             </a>
         </div>
     </div>
     {% endif %}
 
-    <!-- User Management (Admin Only) — top-level section -->
-    {% if is_admin %}
-    <a href="{% url 'settings:users:list' %}"
-       class="{% if current_section == 'users' %}bg-gray-200 text-gray-900{% else %}text-gray-600 hover:bg-gray-50 hover:text-gray-900{% endif %} group flex items-center px-2 py-2 text-sm font-medium rounded-md">
-        <i class="fas fa-users text-gray-400 mr-3 flex-shrink-0 h-6 w-6"></i>
-        User Management
-    </a>
-    {% endif %}
-
-    <!-- CRM Section (Admin/Manager Only) -->
-    {% if is_admin or user.is_sales_manager or user.is_sales_executive %}
+    <!-- CRM Section (Admin/Executive Only) -->
+    {% if is_admin or user.is_sales_executive %}
     <div class="space-y-1">
         <div class="{% if current_section == 'crm' %}bg-gray-100{% else %}hover:bg-gray-50{% endif %} rounded-md">
             <button type="button"
@@ -101,15 +87,17 @@
                 <i class="fas fa-chevron-right transform transition-transform duration-200 {% if current_section == 'crm' %}rotate-90{% endif %} text-gray-400 ml-3 h-5 w-5 flex-shrink-0"></i>
             </button>
         </div>
-
         <div class="{% if current_section != 'crm' %}hidden{% endif %} space-y-1 pl-11" id="crm-submenu">
-            {% if is_admin or user.is_sales_executive %}
             <a href="{% url 'settings:crm:global_stages' %}"
                class="{% if current_page == 'global_stages' %}bg-gray-200 text-gray-900{% else %}text-gray-600 hover:bg-gray-50 hover:text-gray-900{% endif %} group flex items-center px-2 py-2 text-sm rounded-md">
                 <i class="fas fa-list-ol text-gray-400 mr-3 flex-shrink-0 h-4 w-4"></i>
-                Global Pipeline Stages
+                Default Stages
             </a>
-            {% endif %}
+            <a href="{% url 'settings:crm:sales_team_pitch_list' %}"
+               class="{% if current_page == 'sales_pitch' %}bg-gray-200 text-gray-900{% else %}text-gray-600 hover:bg-gray-50 hover:text-gray-900{% endif %} group flex items-center px-2 py-2 text-sm rounded-md">
+                <i class="fas fa-file-pdf text-gray-400 mr-3 flex-shrink-0 h-4 w-4"></i>
+                Sales Pitch
+            </a>
         </div>
     </div>
     {% endif %}
@@ -140,11 +128,6 @@
                 <i class="fas fa-file-alt text-gray-400 mr-3 flex-shrink-0 h-4 w-4"></i>
                 Templates
             </a>
-            <a href="{% url 'settings:whatsapp:sales_team_pitch_list' %}"
-               class="{% if current_page == 'whatsapp_sales_teams' %}bg-gray-200 text-gray-900{% else %}text-gray-600 hover:bg-gray-50 hover:text-gray-900{% endif %} group flex items-center px-2 py-2 text-sm rounded-md">
-                <i class="fas fa-users text-gray-400 mr-3 flex-shrink-0 h-4 w-4"></i>
-                Sales Teams
-            </a>
         </div>
     </div>
     {% endif %}
@@ -152,23 +135,28 @@
     <!-- Transcription Section (Admin Only) -->
     {% if is_admin %}
     <div class="space-y-1">
-        <div class="{% if current_section == 'google' %}bg-gray-100{% else %}hover:bg-gray-50{% endif %} rounded-md">
+        <div class="{% if current_section == 'elevenlabs' %}bg-gray-100{% else %}hover:bg-gray-50{% endif %} rounded-md">
             <button type="button"
-                    class="{% if current_section == 'google' %}text-gray-900{% else %}text-gray-600 hover:text-gray-900{% endif %} group flex w-full items-center px-2 py-2 text-sm font-medium rounded-md"
-                    aria-expanded="{% if current_section == 'google' %}true{% else %}false{% endif %}"
+                    class="{% if current_section == 'elevenlabs' %}text-gray-900{% else %}text-gray-600 hover:text-gray-900{% endif %} group flex w-full items-center px-2 py-2 text-sm font-medium rounded-md"
+                    aria-expanded="{% if current_section == 'elevenlabs' %}true{% else %}false{% endif %}"
                     data-toggle="collapse"
-                    data-target="google-submenu">
+                    data-target="elevenlabs-submenu">
                 <i class="fas fa-microphone text-gray-400 mr-3 flex-shrink-0 h-6 w-6"></i>
                 <span class="flex-1 text-left">Transcription</span>
-                <i class="fas fa-chevron-right transform transition-transform duration-200 {% if current_section == 'google' %}rotate-90{% endif %} text-gray-400 ml-3 h-5 w-5 flex-shrink-0"></i>
+                <i class="fas fa-chevron-right transform transition-transform duration-200 {% if current_section == 'elevenlabs' %}rotate-90{% endif %} text-gray-400 ml-3 h-5 w-5 flex-shrink-0"></i>
             </button>
         </div>
 
-        <div class="{% if current_section != 'google' %}hidden{% endif %} space-y-1 pl-11" id="google-submenu">
-            <a href="{% url 'settings:google:credentials' %}"
-               class="{% if current_page == 'credentials' %}bg-gray-200 text-gray-900{% else %}text-gray-600 hover:bg-gray-50 hover:text-gray-900{% endif %} group flex items-center px-2 py-2 text-sm rounded-md">
+        <div class="{% if current_section != 'elevenlabs' %}hidden{% endif %} space-y-1 pl-11" id="elevenlabs-submenu">
+            <a href="{% url 'settings:elevenlabs:config' %}"
+               class="{% if current_page == 'config' %}bg-gray-200 text-gray-900{% else %}text-gray-600 hover:bg-gray-50 hover:text-gray-900{% endif %} group flex items-center px-2 py-2 text-sm rounded-md">
                 <i class="fas fa-key text-gray-400 mr-3 flex-shrink-0 h-4 w-4"></i>
-                Credentials
+                Configuration
+            </a>
+            <a href="{% url 'settings:elevenlabs:vocabulary' %}"
+               class="{% if current_page == 'vocabulary' %}bg-gray-200 text-gray-900{% else %}text-gray-600 hover:bg-gray-50 hover:text-gray-900{% endif %} group flex items-center px-2 py-2 text-sm rounded-md">
+                <i class="fas fa-spell-check text-gray-400 mr-3 flex-shrink-0 h-4 w-4"></i>
+                Default Custom Vocabulary
             </a>
         </div>
     </div>
@@ -189,10 +177,20 @@
         </div>
 
         <div class="{% if current_section != 'voip' %}hidden{% endif %} space-y-1 pl-11" id="voip-submenu">
-            <a href="{% url 'settings:voip:sip_credentials' %}"
-               class="{% if current_page == 'sip_credentials' %}bg-gray-200 text-gray-900{% else %}text-gray-600 hover:bg-gray-50 hover:text-gray-900{% endif %} group flex items-center px-2 py-2 text-sm rounded-md">
+            <a href="{% url 'settings:voip:voip_config' %}"
+               class="{% if current_page == 'voip_config' %}bg-gray-200 text-gray-900{% else %}text-gray-600 hover:bg-gray-50 hover:text-gray-900{% endif %} group flex items-center px-2 py-2 text-sm rounded-md">
                 <i class="fas fa-key text-gray-400 mr-3 flex-shrink-0 h-4 w-4"></i>
-                SIP Credentials
+                Configuration
+            </a>
+            <a href="{% url 'settings:voip:voip_sounds' %}"
+               class="{% if current_page == 'voip_sounds' %}bg-gray-200 text-gray-900{% else %}text-gray-600 hover:bg-gray-50 hover:text-gray-900{% endif %} group flex items-center px-2 py-2 text-sm rounded-md">
+                <i class="fas fa-music text-gray-400 mr-3 flex-shrink-0 h-4 w-4"></i>
+                Sounds
+            </a>
+            <a href="{% url 'settings:voip:voip_working_hours' %}"
+               class="{% if current_page == 'voip_working_hours' %}bg-gray-200 text-gray-900{% else %}text-gray-600 hover:bg-gray-50 hover:text-gray-900{% endif %} group flex items-center px-2 py-2 text-sm rounded-md">
+                <i class="fas fa-clock text-gray-400 mr-3 flex-shrink-0 h-4 w-4"></i>
+                Working Hours
             </a>
         </div>
     </div>

@@ -213,9 +213,16 @@ class WhatsAppService:
             )
         media_id, pdf_filename = sales_team.get_pitch_for_language(lang)
         if not media_id:
+            # Fall back to system-wide default pitch
+            from apps.messaging.models import WhatsAppConfig
+            config = WhatsAppConfig.get_config()
+            if config:
+                media_id, pdf_filename = config.get_default_pitch_for_language(lang)
+        if not media_id:
             raise ValidationError(
-                f"The lead's sales team has no {lang.upper()} pitch PDF uploaded. "
-                "Go to Settings → WhatsApp → Sales Teams to upload one."
+                f"The lead's sales team has no {lang.upper()} pitch PDF uploaded, "
+                "and no default pitch PDF is set. "
+                "Go to Settings → CRM → Sales Pitch to upload one."
             )
 
         conv = WhatsAppService.get_or_create_conversation_for_phone(phone=contact.mobile)
@@ -316,3 +323,41 @@ class WhatsAppService:
             team.pitch_pdf_media_id = media_id
             team.pitch_pdf_filename = filename
             team.save(update_fields=["pitch_pdf", "pitch_pdf_media_id", "pitch_pdf_filename"])
+
+    @staticmethod
+    def upload_default_pitch_pdf(*, file, filename: str, language: str = 'en') -> None:
+        """Upload PDF to Meta media and save the media_id as the system-wide default pitch.
+
+        Raises:
+            core.exceptions.ValidationError — Meta upload failed
+        """
+        import tempfile
+        import os
+        from core.exceptions import ValidationError
+        from apps.messaging.models import WhatsAppConfig
+        from apps.messaging.meta_client import upload_media
+
+        with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tmp:
+            for chunk in file.chunks():
+                tmp.write(chunk)
+            tmp_path = tmp.name
+
+        try:
+            media_id = upload_media(tmp_path, "application/pdf", filename)
+        except Exception as exc:
+            raise ValidationError(f"Meta media upload failed: {exc}")
+        finally:
+            try:
+                os.unlink(tmp_path)
+            except OSError:
+                pass
+
+        config = WhatsAppConfig.get_or_create_config()
+        if language == 'ka':
+            config.default_pitch_media_id_ka = media_id
+            config.default_pitch_filename_ka = filename
+            config.save(update_fields=["default_pitch_media_id_ka", "default_pitch_filename_ka"])
+        else:
+            config.default_pitch_media_id = media_id
+            config.default_pitch_filename = filename
+            config.save(update_fields=["default_pitch_media_id", "default_pitch_filename"])

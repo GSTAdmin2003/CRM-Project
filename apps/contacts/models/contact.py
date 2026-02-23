@@ -6,6 +6,7 @@ from .company import Company
 
 
 LANGUAGE_CHOICES = [('en', 'English'), ('ka', 'Georgian')]
+_LANG_NAMES = {'en': 'English', 'ka': 'Georgian'}
 
 
 class Contact(models.Model):
@@ -16,7 +17,7 @@ class Contact(models.Model):
     phone = models.CharField(max_length=20, blank=True, verbose_name="Phone")
     mobile = models.CharField(max_length=20, blank=True, verbose_name="Mobile")
     preferred_language = models.CharField(
-        max_length=10, choices=LANGUAGE_CHOICES, default='en', blank=True,
+        max_length=10, choices=LANGUAGE_CHOICES, default='', blank=True,
         verbose_name="Preferred Language"
     )
 
@@ -37,8 +38,21 @@ class Contact(models.Model):
         super().save(*args, **kwargs)
 
     @property
-    def effective_language(self):
-        return self.preferred_language or 'en'
+    def effective_language(self) -> str:
+        """Resolve language: explicit → company → system default."""
+        return self.preferred_language or self.company.effective_preferred_language
+
+    @property
+    def preferred_language_display(self) -> str:
+        """Human-readable label with fallback source noted."""
+        if self.preferred_language:
+            return _LANG_NAMES.get(self.preferred_language, self.preferred_language)
+        company_lang = self.company.preferred_language
+        if company_lang:
+            return f"{_LANG_NAMES.get(company_lang, company_lang)} (Company Default)"
+        from apps.user_settings.models import SystemConfiguration
+        lang = SystemConfiguration.get_setting('default_preferred_language', 'en')
+        return f"{_LANG_NAMES.get(lang, lang)} (System Default)"
 
 
 @receiver(post_save, sender=Contact)

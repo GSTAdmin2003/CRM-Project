@@ -21,7 +21,6 @@ from apps.activities.models import Activity
 from apps.contacts.models import Company, Contact
 from core.models import User
 
-from ..forms import IncomingLeadForm
 from ..models import Lead, LeadActivity, LeadStage, SalesTeam
 
 from datetime import timedelta
@@ -441,10 +440,21 @@ def lead_create(request):
 
         contacts_by_company[company.id] = contact_list
 
+    # Individual companies: show their own data directly (no contact selection step)
+    individual_companies = {}
+    for company in Company.objects.filter(contact_type='individual'):
+        individual_companies[company.id] = {
+            'name': company.display_name,
+            'email': company.company_email or '',
+            'phone': company.company_phone or '',
+            'mobile': company.company_mobile or '',
+        }
+
     return render(request, 'crm/lead_form.html', {
         'form': form,
         'stages': stages,
         'contacts_by_company_json': json.dumps(contacts_by_company),
+        'individual_companies_json': json.dumps(individual_companies),
         'selected_contact_id': form.selected_contact_id if hasattr(form, 'selected_contact_id') else '',
     })
 
@@ -597,6 +607,16 @@ def lead_edit(request, pk):
 
         contacts_by_company[company.id] = contact_list
 
+    # Individual companies: show their own data directly (no contact selection step)
+    individual_companies = {}
+    for company in Company.objects.filter(contact_type='individual'):
+        individual_companies[company.id] = {
+            'name': company.display_name,
+            'email': company.company_email or '',
+            'phone': company.company_phone or '',
+            'mobile': company.company_mobile or '',
+        }
+
     # Get activities for this lead
     activities = Activity.objects.filter(lead=lead).select_related(
         'activity_type', 'assigned_to'
@@ -618,6 +638,7 @@ def lead_edit(request, pk):
         'lead': lead,
         'stages': stages,
         'contacts_by_company_json': json.dumps(contacts_by_company),
+        'individual_companies_json': json.dumps(individual_companies),
         'selected_contact_id': form.selected_contact_id if hasattr(form, 'selected_contact_id') else '',
         'activities': activities,
         'activity_types': activity_types,
@@ -1043,6 +1064,65 @@ def team_stage_delete(request, team_pk, stage_pk):
 
 
 # ============================================
+# Shared helpers
+# ============================================
+
+def _build_contacts_data():
+    """Build contacts_by_company and individual_companies dicts for the lead form."""
+    contacts_by_company = {}
+    companies_with_contacts = Company.objects.filter(contacts__isnull=False).distinct()
+
+    for company in companies_with_contacts:
+        company_contacts = company.contacts.all()
+        contact_list = []
+
+        if company.favorite_contact and company.favorite_contact in company_contacts:
+            contact_list.append({
+                'id': company.favorite_contact.id,
+                'name': company.favorite_contact.name,
+                'email': company.favorite_contact.email,
+                'phone': company.favorite_contact.phone,
+                'mobile': company.favorite_contact.mobile,
+                'position': company.favorite_contact.position,
+                'is_favorite': True,
+            })
+            for contact in company_contacts.exclude(id=company.favorite_contact.id):
+                contact_list.append({
+                    'id': contact.id,
+                    'name': contact.name,
+                    'email': contact.email,
+                    'phone': contact.phone,
+                    'mobile': contact.mobile,
+                    'position': contact.position,
+                    'is_favorite': False,
+                })
+        else:
+            for contact in company_contacts:
+                contact_list.append({
+                    'id': contact.id,
+                    'name': contact.name,
+                    'email': contact.email,
+                    'phone': contact.phone,
+                    'mobile': contact.mobile,
+                    'position': contact.position,
+                    'is_favorite': False,
+                })
+
+        contacts_by_company[company.id] = contact_list
+
+    individual_companies = {}
+    for company in Company.objects.filter(contact_type='individual'):
+        individual_companies[company.id] = {
+            'name': company.display_name,
+            'email': company.company_email or '',
+            'phone': company.company_phone or '',
+            'mobile': company.company_mobile or '',
+        }
+
+    return contacts_by_company, individual_companies
+
+
+# ============================================
 # Incoming Leads Views
 # ============================================
 
@@ -1092,88 +1172,29 @@ def incoming_lead_list(request):
 
 @login_required
 def incoming_lead_create(request):
-    """Create new incoming lead"""
+    """Create new incoming lead — uses unified lead_form.html"""
+    from ..forms import LeadForm
     if request.method == 'POST':
-        form = IncomingLeadForm(request.POST, user=request.user)
+        form = LeadForm(request.POST, user=request.user)
+        form._lead_type = Lead.TYPE_LEAD
         if form.is_valid():
             lead = form.save()
-            messages.success(request, f'Lead created successfully.')
+            messages.success(request, 'Lead created successfully.')
             return redirect('crm:lead_detail', pk=lead.pk)
-        else:
-            # Show form errors
-            for field, errors in form.errors.items():
-                for error in errors:
-                    messages.error(request, f'{field}: {error}')
     else:
-        form = IncomingLeadForm(user=request.user)
+        form = LeadForm(user=request.user)
+        form._lead_type = Lead.TYPE_LEAD
 
-    # Get all companies for autocomplete
-    companies = Company.objects.all()
-    companies_list = [
-        {
-            'id': company.id,
-            'legal_name': company.legal_name,
-            'brand_name': company.brand_name,
-            'legal_id': company.legal_id,
-        }
-        for company in companies
-    ]
-
-    # Get all contacts for the contact selector, grouped by company
-    contacts_by_company = {}
-
-    # Group contacts by company and prioritize favorite contacts
-    companies_with_contacts = Company.objects.filter(contacts__isnull=False).distinct()
-
-    for company in companies_with_contacts:
-        company_contacts = company.contacts.all()
-        contact_list = []
-
-        # Add favorite contact first if it exists
-        if company.favorite_contact and company.favorite_contact in company_contacts:
-            contact_list.append({
-                'id': company.favorite_contact.id,
-                'name': company.favorite_contact.name,
-                'email': company.favorite_contact.email,
-                'phone': company.favorite_contact.phone,
-                'mobile': company.favorite_contact.mobile,
-                'position': company.favorite_contact.position,
-                'is_favorite': True,
-            })
-            # Add other contacts (excluding favorite)
-            for contact in company_contacts.exclude(id=company.favorite_contact.id):
-                contact_list.append({
-                    'id': contact.id,
-                    'name': contact.name,
-                    'email': contact.email,
-                    'phone': contact.phone,
-                    'mobile': contact.mobile,
-                    'position': contact.position,
-                    'is_favorite': False,
-                })
-        else:
-            # No favorite contact, add all contacts
-            for contact in company_contacts:
-                contact_list.append({
-                    'id': contact.id,
-                    'name': contact.name,
-                    'email': contact.email,
-                    'phone': contact.phone,
-                    'mobile': contact.mobile,
-                    'position': contact.position,
-                    'is_favorite': False,
-                })
-
-        contacts_by_company[company.id] = contact_list
-
-    context = {
+    contacts_by_company, individual_companies = _build_contacts_data()
+    stages = LeadStage.get_stages_for_team(request.user.sales_team)
+    return render(request, 'crm/lead_form.html', {
         'form': form,
-        'action': 'Create Lead',
-        'companies_json': json.dumps(companies_list),
+        'stages': stages,
         'contacts_by_company_json': json.dumps(contacts_by_company),
-    }
-
-    return render(request, 'crm/incoming_lead_form.html', context)
+        'individual_companies_json': json.dumps(individual_companies),
+        'selected_contact_id': form.selected_contact_id if hasattr(form, 'selected_contact_id') else '',
+        'is_lead': True,
+    })
 
 
 @login_required
@@ -1195,91 +1216,51 @@ def incoming_lead_detail(request, pk):
 
 @login_required
 def incoming_lead_edit(request, pk):
-    """Edit incoming lead"""
+    """Edit incoming lead — uses unified lead_form.html"""
+    from ..forms import LeadForm
     lead = get_object_or_404(Lead, lead_type=Lead.TYPE_LEAD, pk=pk)
 
-    # Check permissions
     if not lead.can_be_edited_by(request.user):
         messages.error(request, 'You do not have permission to edit this lead.')
         return redirect('crm:lead_detail', pk=lead.pk)
 
     if request.method == 'POST':
-        form = IncomingLeadForm(request.POST, instance=lead, user=request.user)
+        form = LeadForm(request.POST, instance=lead, user=request.user)
         if form.is_valid():
             lead = form.save()
-            messages.success(request, f'Lead updated successfully.')
+            messages.success(request, 'Lead updated successfully.')
             return redirect('crm:lead_detail', pk=lead.pk)
     else:
-        form = IncomingLeadForm(instance=lead, user=request.user)
+        form = LeadForm(instance=lead, user=request.user)
 
-    # Get all companies for autocomplete
-    companies = Company.objects.all()
-    companies_list = [
-        {
-            'id': company.id,
-            'legal_name': company.legal_name,
-            'brand_name': company.brand_name,
-            'legal_id': company.legal_id,
-        }
-        for company in companies
-    ]
+    contacts_by_company, individual_companies = _build_contacts_data()
+    stages = LeadStage.get_stages_for_team(request.user.sales_team)
 
-    # Get all contacts for the contact selector, grouped by company
-    contacts_by_company = {}
+    activities = Activity.objects.filter(lead=lead).select_related(
+        'activity_type', 'assigned_to'
+    ).order_by('-scheduled_date', '-created_at')
 
-    # Group contacts by company and prioritize favorite contacts
-    companies_with_contacts = Company.objects.filter(contacts__isnull=False).distinct()
+    from apps.activities.models import ActivityType as ActivityTypeModel
+    activity_types = ActivityTypeModel.objects.filter(is_active=True)
 
-    for company in companies_with_contacts:
-        company_contacts = company.contacts.all()
-        contact_list = []
+    try:
+        from apps.messaging.models import WhatsAppConversation
+        wa_conversation = lead.whatsapp_conversations.select_related().prefetch_related('messages').first()
+    except Exception:
+        wa_conversation = None
 
-        # Add favorite contact first if it exists
-        if company.favorite_contact and company.favorite_contact in company_contacts:
-            contact_list.append({
-                'id': company.favorite_contact.id,
-                'name': company.favorite_contact.name,
-                'email': company.favorite_contact.email,
-                'phone': company.favorite_contact.phone,
-                'mobile': company.favorite_contact.mobile,
-                'position': company.favorite_contact.position,
-                'is_favorite': True,
-            })
-            # Add other contacts (excluding favorite)
-            for contact in company_contacts.exclude(id=company.favorite_contact.id):
-                contact_list.append({
-                    'id': contact.id,
-                    'name': contact.name,
-                    'email': contact.email,
-                    'phone': contact.phone,
-                    'mobile': contact.mobile,
-                    'position': contact.position,
-                    'is_favorite': False,
-                })
-        else:
-            # No favorite contact, add all contacts
-            for contact in company_contacts:
-                contact_list.append({
-                    'id': contact.id,
-                    'name': contact.name,
-                    'email': contact.email,
-                    'phone': contact.phone,
-                    'mobile': contact.mobile,
-                    'position': contact.position,
-                    'is_favorite': False,
-                })
-
-        contacts_by_company[company.id] = contact_list
-
-    context = {
+    return render(request, 'crm/lead_form.html', {
         'form': form,
         'lead': lead,
-        'action': 'Edit Lead',
-        'companies_json': json.dumps(companies_list),
+        'stages': stages,
         'contacts_by_company_json': json.dumps(contacts_by_company),
-    }
-
-    return render(request, 'crm/incoming_lead_form.html', context)
+        'individual_companies_json': json.dumps(individual_companies),
+        'selected_contact_id': form.selected_contact_id if hasattr(form, 'selected_contact_id') else '',
+        'is_lead': True,
+        'activities': activities,
+        'activity_types': activity_types,
+        'wa_conversation': wa_conversation,
+    })
 
 
 @login_required

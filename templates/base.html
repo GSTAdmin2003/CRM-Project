@@ -40,11 +40,8 @@
                             <div class="flex-shrink-0">
                                 <div class="relative ml-3">
                                     <div class="flex items-center space-x-4">
-                                        <!-- Phone icon button -->
-                                        <button id="dialpad-toggle-btn" onclick="toggleDialpadPanel()" class="relative p-2 rounded-full text-gray-500 hover:text-indigo-600 hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-indigo-500 transition-colors" title="Open Dialpad">
-                                            <i class="fas fa-phone text-lg"></i>
-                                            <span id="navbar-sip-dot" class="absolute top-1 right-1 w-2 h-2 rounded-full bg-gray-400"></span>
-                                        </button>
+                                        <!-- Hidden SIP status dot (referenced by setSipStatus()) -->
+                                        <span id="navbar-sip-dot" class="hidden"></span>
                                         <span class="text-sm text-gray-700">
                                             Hello, {{ user.first_name|default:user.username }}
                                         </span>
@@ -70,9 +67,8 @@
                 </div>
             </nav>
 
-            <!-- Dialpad slide-out panel -->
-            <div id="dialpad-overlay" class="hidden fixed inset-0 bg-black bg-opacity-25 z-40" onclick="toggleDialpadPanel()"></div>
-            <div id="dialpad-panel" class="fixed top-0 right-0 h-full w-[380px] bg-white shadow-2xl z-40 transform translate-x-full transition-transform duration-300 ease-in-out flex flex-col">
+            <!-- Dialpad DOM (hidden — call controls live inline in the lead form) -->
+            <div id="dialpad-panel" class="hidden">
                 <!-- Panel header -->
                 <div class="flex items-center justify-between px-5 py-4 border-b border-gray-200">
                     <div class="flex items-center space-x-3">
@@ -450,22 +446,12 @@
     var dialpadOpen = false;
 
     function toggleDialpadPanel() {
-        var panel = document.getElementById('dialpad-panel');
-        var overlay = document.getElementById('dialpad-overlay');
-        dialpadOpen = !dialpadOpen;
-        if (dialpadOpen) {
-            panel.classList.remove('translate-x-full');
-            overlay.classList.remove('hidden');
-        } else {
-            panel.classList.add('translate-x-full');
-            overlay.classList.add('hidden');
-        }
+        // Dialpad removed — calling is inline on the lead form only
     }
 
     // =========================================================================
     //  State
     // =========================================================================
-    var currentCallId = null;
     var currentActivityId = null;
     var callTimer = null;
     var callSeconds = 0;
@@ -562,8 +548,8 @@
 
         session.on('ended', function () {
             currentSession = null;
-            if (currentCallId) {
-                fetch('/calls/' + currentCallId + '/ended/', {
+            if (currentActivityId) {
+                fetch('/activities/' + currentActivityId + '/call/ended/', {
                     method: 'POST',
                     headers: { 'X-CSRFToken': getCsrfToken() },
                 }).catch(function (err) { console.error('Failed to notify call ended:', err); });
@@ -574,8 +560,8 @@
 
         session.on('failed', function () {
             currentSession = null;
-            if (currentCallId) {
-                fetch('/calls/' + currentCallId + '/ended/', {
+            if (currentActivityId) {
+                fetch('/activities/' + currentActivityId + '/call/ended/', {
                     method: 'POST',
                     headers: { 'X-CSRFToken': getCsrfToken() },
                 }).catch(function (err) { console.error('Failed to notify call ended:', err); });
@@ -601,9 +587,6 @@
         hideIncomingCall();
         if (!currentSession) return;
 
-        // Open the dialpad panel so the user can see call controls
-        if (!dialpadOpen) toggleDialpadPanel();
-
         document.getElementById('phone-number').value = incomingCallerNumber;
         document.getElementById('call-status').classList.remove('hidden');
         document.getElementById('status-text').textContent = 'Connected';
@@ -625,7 +608,7 @@
         .then(function (r) { return r.json(); })
         .then(function (data) {
             if (data.success) {
-                currentCallId = data.call_id;
+                currentActivityId = data.activity_id || null;
                 showNotebook();
             }
         });
@@ -705,6 +688,9 @@
         if (window.currentOpportunityId) {
             formData.append('opportunity_id', window.currentOpportunityId);
         }
+        if (window.currentContactId) {
+            formData.append('contact_id', window.currentContactId);
+        }
 
         fetch('/calls/initiate/', {
             method: 'POST',
@@ -714,7 +700,6 @@
         .then(function (r) { return r.json(); })
         .then(function (data) {
             if (data.success) {
-                currentCallId = data.call_id;
                 currentActivityId = data.activity_id || null;
                 showNotebook();
                 pollCallStatus();
@@ -739,9 +724,9 @@
         }
         outboundPending = false;
 
-        if (!currentCallId) { resetDialpad(); return; }
+        if (!currentActivityId) { resetDialpad(); return; }
 
-        fetch('/calls/' + currentCallId + '/hangup/', {
+        fetch('/activities/' + currentActivityId + '/call/hangup/', {
             method: 'POST',
             headers: { 'X-CSRFToken': getCsrfToken() },
         })
@@ -750,9 +735,9 @@
     }
 
     function pollCallStatus() {
-        if (!currentCallId) return;
+        if (!currentActivityId) return;
 
-        fetch('/calls/' + currentCallId + '/status/')
+        fetch('/activities/' + currentActivityId + '/call/status/')
         .then(function (r) { return r.json(); })
         .then(function (data) {
             updateCallStatus(data.status);
@@ -868,7 +853,6 @@
     }
 
     function resetDialpad() {
-        currentCallId = null;
         currentActivityId = null;
         outboundPending = false;
         window.dispatchEvent(new CustomEvent('crm:callEnded'));
@@ -1000,10 +984,10 @@
     }
 
     function linkContact(contactId, name) {
-        if (!currentCallId) return;
+        if (!currentActivityId) return;
         var formData = new FormData();
         formData.append('contact_id', contactId);
-        fetch('/calls/' + currentCallId + '/link-contact/', {
+        fetch('/activities/' + currentActivityId + '/call/link-contact/', {
             method: 'POST',
             body: formData,
             headers: { 'X-CSRFToken': getCsrfToken() },
@@ -1154,10 +1138,10 @@
     }
 
     function linkOpportunity(oppId, title) {
-        if (!currentCallId) return;
+        if (!currentActivityId) return;
         var formData = new FormData();
         formData.append('opportunity_id', oppId);
-        fetch('/calls/' + currentCallId + '/link-opportunity/', {
+        fetch('/activities/' + currentActivityId + '/call/link-opportunity/', {
             method: 'POST',
             body: formData,
             headers: { 'X-CSRFToken': getCsrfToken() },
@@ -1267,13 +1251,13 @@
 
     function saveNotesNow() {
         if (noteSaveTimer) { clearTimeout(noteSaveTimer); noteSaveTimer = null; }
-        if (!currentCallId) return;
+        if (!currentActivityId) return;
         var notes = document.getElementById('note-textarea').value.trim();
         if (!notes) return;
         document.getElementById('note-save-status').textContent = 'Saving...';
         var formData = new FormData();
         formData.append('notes', notes);
-        fetch('/calls/' + currentCallId + '/notes/', {
+        fetch('/activities/' + currentActivityId + '/call/notes/', {
             method: 'POST',
             body: formData,
             headers: { 'X-CSRFToken': getCsrfToken() },

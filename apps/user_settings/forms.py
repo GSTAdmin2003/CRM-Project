@@ -26,7 +26,7 @@ class UserPreferencesForm(forms.ModelForm):
         fields = ['theme', 'language', 'timezone', 'notifications_email', 'notifications_browser']
         widgets = {
             'theme': forms.Select(attrs={'class': 'form-select'}),
-            'language': forms.Select(attrs={'class': 'form-select'}),
+            'language': forms.RadioSelect(),
             'timezone': forms.Select(attrs={'class': 'form-select'}),
             'notifications_email': forms.CheckboxInput(attrs={'class': 'form-check-input'}),
             'notifications_browser': forms.CheckboxInput(attrs={'class': 'form-check-input'}),

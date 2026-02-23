@@ -1,0 +1,122 @@
+{% extends 'settings/base.html' %}
+
+{% block page_title %}ElevenLabs Speech-to-Text{% endblock %}
+{% block page_description %}API key for call transcription via ElevenLabs Scribe{% endblock %}
+
+{% block settings_content %}
+
+{% if status == 'configured' %}
+<div class="flex items-center gap-3 mb-6 p-4 bg-green-50 border border-green-200 rounded-lg">
+    <i class="fas fa-check-circle text-green-600 text-lg"></i>
+    <div>
+        <p class="text-sm font-medium text-green-800">API key configured</p>
+        <p class="text-xs text-green-600">ElevenLabs Scribe is available for call transcription.</p>
+    </div>
+</div>
+{% else %}
+<div class="flex items-center gap-3 mb-6 p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
+    <i class="fas fa-exclamation-triangle text-yellow-600 text-lg"></i>
+    <div>
+        <p class="text-sm font-medium text-yellow-800">No API key configured</p>
+        <p class="text-xs text-yellow-600">Call transcription will not work until an ElevenLabs API key is added.</p>
+    </div>
+</div>
+{% endif %}
+
+{% if error %}
+<div class="flex items-center gap-3 mb-6 p-4 bg-red-50 border border-red-200 rounded-lg">
+    <i class="fas fa-times-circle text-red-600 text-lg"></i>
+    <p class="text-sm text-red-700">{{ error }}</p>
+</div>
+{% endif %}
+
+<div class="mb-6 p-4 bg-blue-50 border border-blue-200 rounded-lg">
+    <h3 class="text-sm font-semibold text-blue-800 mb-2">
+        <i class="fas fa-info-circle mr-1"></i>How to get an ElevenLabs API key
+    </h3>
+    <ol class="text-xs text-blue-700 space-y-1 list-decimal list-inside">
+        <li>Go to <strong>elevenlabs.io</strong> and sign in</li>
+        <li>Open <strong>Profile → API Keys</strong></li>
+        <li>Click <strong>Create new API key</strong>, enable <strong>Speech to Text</strong> permission</li>
+        <li>Copy the key and paste it below</li>
+    </ol>
+</div>
+
+<form method="post" class="mb-10">
+    {% csrf_token %}
+    <input type="hidden" name="action" value="save_key">
+    <div class="mb-4">
+        <label for="api_key" class="block text-sm font-medium text-gray-700 mb-1">ElevenLabs API Key</label>
+        <input type="text" id="api_key" name="api_key"
+               value="{% if status == 'configured' %}{{ api_key }}{% endif %}"
+               class="w-full font-mono text-sm border border-gray-300 rounded-lg px-3 py-2 focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500"
+               placeholder="sk_…" autocomplete="off" spellcheck="false">
+        <p class="mt-1 text-xs text-gray-500">Stored in the database. Keep it secure.</p>
+    </div>
+    <div class="flex items-center justify-between">
+        {% if status == 'configured' %}
+        <button type="submit" form="clear-key-form"
+                class="text-sm text-red-600 hover:text-red-800 underline"
+                onclick="return confirm('Remove ElevenLabs API key? Transcription will stop working.')">
+            <i class="fas fa-trash mr-1"></i>Remove API key
+        </button>
+        {% else %}<span></span>{% endif %}
+        <button type="submit" class="text-sm px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-md font-medium">
+            <i class="fas fa-save mr-1"></i>Save API key
+        </button>
+    </div>
+</form>
+
+{% if status == 'configured' %}
+<form id="clear-key-form" method="post">
+    {% csrf_token %}
+    <input type="hidden" name="action" value="clear_key">
+</form>
+{% endif %}
+
+<!-- Auto-transcription toggle -->
+<div class="border border-gray-200 rounded-lg overflow-hidden">
+    <div class="px-5 py-4 bg-gray-50 border-b border-gray-200">
+        <h3 class="text-sm font-semibold text-gray-800">Automatic Transcription</h3>
+        <p class="text-xs text-gray-500 mt-0.5">When enabled, every call is transcribed automatically once the recording is ready.</p>
+    </div>
+    <div class="px-5 py-4">
+        <form method="post">
+            {% csrf_token %}
+            <input type="hidden" name="action" value="save_auto_transcribe">
+            <label class="flex items-start gap-3 cursor-pointer select-none">
+                <div class="relative mt-0.5">
+                    <input type="checkbox" name="auto_transcribe" id="auto_transcribe"
+                           {% if auto_transcribe %}checked{% endif %}
+                           class="sr-only peer"
+                           onchange="this.form.submit()">
+                    <div class="w-10 h-6 bg-gray-200 rounded-full peer-checked:bg-indigo-600 transition-colors"></div>
+                    <div class="absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform peer-checked:translate-x-4"></div>
+                </div>
+                <div>
+                    <p class="text-sm font-medium text-gray-800" id="auto-label">
+                        {% if auto_transcribe %}Enabled{% else %}Disabled{% endif %}
+                    </p>
+                    <p class="text-xs text-gray-500 mt-0.5">
+                        Transcription uses 2-speaker diarization (caller + agent), team keywords, and timestamps.
+                        Language is resolved from the contact → company → system default.
+                    </p>
+                </div>
+            </label>
+            {% if not status == 'configured' %}
+            <p class="mt-3 text-xs text-yellow-700 flex items-center gap-1">
+                <i class="fas fa-exclamation-triangle"></i>
+                An ElevenLabs API key must be configured above before transcription can run.
+            </p>
+            {% endif %}
+        </form>
+    </div>
+</div>
+
+<script>
+document.getElementById('auto_transcribe').addEventListener('change', function() {
+    document.getElementById('auto-label').textContent = this.checked ? 'Enabled' : 'Disabled';
+});
+</script>
+
+{% endblock %}

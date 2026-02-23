@@ -15,11 +15,22 @@
                 <nav class="flex mb-2">
                     <a href="{% url 'contacts:dashboard_home' %}" class="text-indigo-600 hover:text-indigo-900">Contacts</a>
                     <span class="mx-2 text-gray-400">/</span>
-                    <a href="{% url 'contacts:company_list' %}" class="text-indigo-600 hover:text-indigo-900">Companies</a>
+                    <a href="{% url 'contacts:company_list' %}" class="text-indigo-600 hover:text-indigo-900">Contacts</a>
                     <span class="mx-2 text-gray-400">/</span>
                     <span class="text-gray-500">{{ company.display_name }}</span>
                 </nav>
-                <h1 class="text-3xl font-bold text-gray-900">{{ company.display_name }}</h1>
+                <div class="flex items-center gap-3">
+                    <h1 class="text-3xl font-bold text-gray-900">{{ company.display_name }}</h1>
+                    {% if company.contact_type == 'individual' %}
+                    <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+                        <i class="fas fa-user mr-1"></i>Individual
+                    </span>
+                    {% else %}
+                    <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-indigo-100 text-indigo-800">
+                        <i class="fas fa-building mr-1"></i>Contact
+                    </span>
+                    {% endif %}
+                </div>
                 <p class="mt-2 text-gray-600">{{ company.legal_name }} ({{ company.legal_id }})</p>
             </div>
             <div class="flex space-x-2">
@@ -35,10 +46,10 @@
 
     <div class="grid grid-cols-1 gap-6 lg:grid-cols-3">
         <!-- Company Information -->
-        <div class="lg:col-span-1">
+        <div class="{% if company.contact_type == 'individual' %}lg:col-span-3{% else %}lg:col-span-1{% endif %}">
             <div class="bg-white shadow rounded-lg">
                 <div class="px-4 py-5 sm:p-6">
-                    <h3 class="text-lg leading-6 font-medium text-gray-900 mb-4">Company Information</h3>
+                    <h3 class="text-lg leading-6 font-medium text-gray-900 mb-4">Contact Information</h3>
                     <dl class="space-y-3">
                         <div>
                             <dt class="text-sm font-medium text-gray-500">Legal Name</dt>
@@ -48,24 +59,28 @@
                             <dt class="text-sm font-medium text-gray-500">Legal ID</dt>
                             <dd class="mt-1 text-sm text-gray-900">{{ company.legal_id }}</dd>
                         </div>
-                        {% if company.brand_name %}
+                        {% if company.contact_type != 'individual' and company.brand_name %}
                         <div>
                             <dt class="text-sm font-medium text-gray-500">Brand Name</dt>
                             <dd class="mt-1 text-sm text-gray-900">{{ company.brand_name }}</dd>
                         </div>
                         {% endif %}
-                        {% if company.industry %}
+                        {% if company.contact_type != 'individual' and company.industry %}
                         <div>
                             <dt class="text-sm font-medium text-gray-500">Industry</dt>
                             <dd class="mt-1 text-sm text-gray-900">{{ company.industry }}</dd>
                         </div>
                         {% endif %}
-                        {% if company.category %}
+                        {% if company.contact_type != 'individual' and company.category %}
                         <div>
                             <dt class="text-sm font-medium text-gray-500">Category</dt>
                             <dd class="mt-1 text-sm text-gray-900">{{ company.category }}</dd>
                         </div>
                         {% endif %}
+                        <div>
+                            <dt class="text-sm font-medium text-gray-500">Preferred Language</dt>
+                            <dd class="mt-1 text-sm text-gray-900">{{ company.preferred_language_display }}</dd>
+                        </div>
                     </dl>
                 </div>
             </div>
@@ -86,7 +101,7 @@
                             </dd>
                         </div>
                         {% endif %}
-                        {% if company.company_phone %}
+                        {% if company.contact_type != 'individual' and company.company_phone %}
                         <div>
                             <dt class="text-sm font-medium text-gray-500">Phone</dt>
                             <dd class="mt-1 text-sm text-gray-900">
@@ -112,16 +127,17 @@
             {% endif %}
         </div>
 
-        <!-- Contacts List -->
+        <!-- Representatives List (Company type only) -->
+        {% if company.contact_type != 'individual' %}
         <div class="lg:col-span-2">
             <div class="bg-white shadow rounded-lg">
                 <div class="px-4 py-5 sm:p-6">
                     <div class="flex justify-between items-center mb-4">
                         <h3 class="text-lg leading-6 font-medium text-gray-900">
-                            Contacts ({{ contacts.count }})
+                            Representatives ({{ contacts.count }})
                         </h3>
                         <a href="{% url 'contacts:contact_create' company.pk %}" class="bg-green-600 hover:bg-green-700 text-white px-3 py-1 rounded-md text-sm font-medium">
-                            <i class="fas fa-plus mr-1"></i>Add Contact
+                            <i class="fas fa-plus mr-1"></i>Add Representative
                         </a>
                     </div>
 
@@ -196,16 +212,17 @@
                     {% else %}
                     <div class="text-center py-8">
                         <i class="fas fa-users text-gray-400 text-4xl mb-4"></i>
-                        <h3 class="text-lg font-medium text-gray-900 mb-2">No contacts yet</h3>
-                        <p class="text-gray-500 mb-4">Get started by adding the first contact for this company.</p>
+                        <h3 class="text-lg font-medium text-gray-900 mb-2">No representatives yet</h3>
+                        <p class="text-gray-500 mb-4">Get started by adding the first representative for this contact.</p>
                         <a href="{% url 'contacts:contact_create' company.pk %}" class="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-md text-sm font-medium">
-                            <i class="fas fa-user-plus mr-2"></i>Add First Contact
+                            <i class="fas fa-user-plus mr-2"></i>Add First Representative
                         </a>
                     </div>
                     {% endif %}
                 </div>
             </div>
         </div>
+        {% endif %}{# end contact_type != 'individual' #}
     </div>
 </div>
 {% endblock %}

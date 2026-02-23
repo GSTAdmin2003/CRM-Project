@@ -235,60 +235,6 @@ class SubmitTemplateApprovalView(AdminRequiredMixin, View):
         return redirect("settings:whatsapp:templates_list")
 
 
-class SalesTeamPitchListView(SettingsBaseMixin, AdminRequiredMixin, ListView):
-    template_name = "settings/whatsapp/sales_team_pitch_list.html"
-    settings_section = "whatsapp"
-    settings_page = "whatsapp_sales_teams"
-    context_object_name = "teams"
-
-    def get_queryset(self):
-        from apps.crm.models import SalesTeam
-        return SalesTeam.objects.filter(is_active=True).order_by('name')
-
-
-class SalesTeamPitchEditView(SettingsBaseMixin, AdminRequiredMixin, TemplateView):
-    template_name = "settings/whatsapp/sales_team_pitch_edit.html"
-    settings_section = "whatsapp"
-    settings_page = "whatsapp_sales_teams"
-
-    def _get_team(self, pk):
-        from apps.crm.models import SalesTeam
-        return get_object_or_404(SalesTeam, pk=pk)
-
-    def get_context_data(self, **kwargs):
-        ctx = super().get_context_data(**kwargs)
-        team = self._get_team(self.kwargs['pk'])
-        ctx['team'] = team
-        from apps.user_settings.forms import get_sales_team_pitch_form
-        ctx['form'] = get_sales_team_pitch_form()(instance=team)
-        return ctx
-
-    def post(self, request, pk):
-        from apps.messaging.services.whatsapp_service import WhatsAppService
-        from core.exceptions import NotFoundError, ValidationError as SvcError
-
-        team = self._get_team(pk)
-        language = request.POST.get('language', 'en')
-        if language not in ('en', 'ka'):
-            language = 'en'
-        uploaded_file = request.FILES.get('pitch_pdf')
-        if not uploaded_file:
-            messages.error(request, "Please select a PDF file.")
-            return redirect("settings:whatsapp:sales_team_pitch_edit", pk=pk)
-        try:
-            WhatsAppService.upload_team_pitch_pdf(
-                sales_team_id=team.id,
-                file=uploaded_file,
-                filename=uploaded_file.name,
-                language=language,
-            )
-            lang_label = 'Georgian' if language == 'ka' else 'English'
-            messages.success(request, f"{lang_label} PDF uploaded for '{team.name}' and registered with Meta.")
-        except (NotFoundError, SvcError) as exc:
-            messages.error(request, str(exc))
-        return redirect("settings:whatsapp:sales_team_pitch_list")
-
-
 whatsapp_urls = [
     path("", WhatsAppSettingsView.as_view(), name="config"),
     path("templates/", WhatsAppTemplateListView.as_view(), name="templates_list"),
@@ -297,6 +243,4 @@ whatsapp_urls = [
     path("templates/<int:pk>/edit/", WhatsAppTemplateEditView.as_view(), name="template_edit"),
     path("templates/<int:pk>/delete/", WhatsAppTemplateDeleteView.as_view(), name="template_delete"),
     path("templates/<int:pk>/submit-approval/", SubmitTemplateApprovalView.as_view(), name="template_submit_approval"),
-    path("sales-teams/", SalesTeamPitchListView.as_view(), name="sales_team_pitch_list"),
-    path("sales-teams/<int:pk>/edit/", SalesTeamPitchEditView.as_view(), name="sales_team_pitch_edit"),
 ]

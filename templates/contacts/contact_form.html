@@ -145,6 +145,31 @@
                     </div>
                 </div>
 
+                <!-- Preferred Pitch Language -->
+                <div class="mt-6 pt-6 border-t border-gray-200">
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Preferred Language</label>
+                    <p class="text-xs text-gray-500 mb-3">
+                        Which language should communications be sent to this contact?
+                        Leave as Company Default to follow
+                        {% if company.preferred_language %}
+                            the company setting ({{ company.get_preferred_language_display }}).
+                        {% else %}
+                            the company/system setting.
+                        {% endif %}
+                    </p>
+                    <div class="flex gap-6">
+                        {% for value, label in form.preferred_language.field.choices %}
+                        <label class="flex items-center gap-2 cursor-pointer">
+                            <input type="radio" name="preferred_language" value="{{ value }}"
+                                   id="contact_preferred_language_{{ value|default:'default' }}"
+                                   {% if form.preferred_language.value == value %}checked{% elif not form.preferred_language.value and value == '' %}checked{% endif %}
+                                   class="h-4 w-4 text-indigo-600 border-gray-300 focus:ring-indigo-500">
+                            <span class="text-sm text-gray-700">{{ label }}</span>
+                        </label>
+                        {% endfor %}
+                    </div>
+                </div>
+
                 <!-- Form Actions -->
                 <div class="mt-6 flex items-center justify-between">
                     <a href="{% url 'contacts:company_detail' company.pk %}" class="bg-gray-300 hover:bg-gray-400 text-gray-700 px-4 py-2 rounded-md text-sm font-medium">

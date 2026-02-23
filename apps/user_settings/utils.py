@@ -75,37 +75,13 @@ def initialize_settings_navigation():
         
         # Create General pages
         general_pages = [
-            {
-                'name': 'system_config',
-                'display_name': 'System Config',
-                'description': 'System-wide configuration settings',
-                'url_name': 'settings:general:system_config',
-                'icon': 'fas fa-server',
-                'order': 0,
-            },
-            {
-                'name': 'roles',
-                'display_name': 'Role Management',
-                'description': 'Create and manage user roles',
-                'url_name': 'settings:general:roles',
-                'icon': 'fas fa-users-cog',
-                'order': 1,
-            },
-            {
+{
                 'name': 'users',
                 'display_name': 'User Management',
                 'description': 'Manage system users',
                 'url_name': 'settings:users:list',
                 'icon': 'fas fa-users',
                 'order': 2,
-            },
-            {
-                'name': 'app_registry',
-                'display_name': 'App Registry',
-                'description': 'Manage registered applications',
-                'url_name': 'settings:general:app_registry',
-                'icon': 'fas fa-th-list',
-                'order': 3,
             },
         ]
         
@@ -138,10 +114,8 @@ def get_settings_breadcrumbs(section, page=None):
         breadcrumbs.append({'name': 'General', 'url': 'settings:general:index'})
         if page:
             page_names = {
-                'system_config': 'System Config',
                 'roles': 'Role Management',
                 'users': 'User Management',
-                'app_registry': 'App Registry',
             }
             if page in page_names:
                 breadcrumbs.append({'name': page_names[page], 'url': None})

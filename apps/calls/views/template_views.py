@@ -68,8 +68,8 @@ def call_detail(request, pk):
 
 @login_required
 def dialpad(request):
-    """Redirect to call list — dialpad is now in the navbar."""
-    return redirect("calls:call_list")
+    """Redirect to activities dashboard — dialpad is now inline on the lead form."""
+    return redirect("activities:dashboard")
 
 
 @login_required
@@ -87,7 +87,42 @@ def register_inbound_call(request):
         started_at=timezone.now(),
         answered_at=timezone.now(),
     )
-    return JsonResponse({"success": True, "call_id": call.id})
+
+    # Create a Phone Call activity + extension so the browser can track via activity_id
+    activity_id = None
+    try:
+        from apps.activities.models import Activity, ActivityType, PhoneCallExtension
+        phone_call_type = ActivityType.objects.filter(name="Phone Call", is_active=True).first()
+        if phone_call_type:
+            activity = Activity.objects.create(
+                activity_type=phone_call_type,
+                title=f"Inbound call from {from_number}",
+                scheduled_date=timezone.now().date(),
+                status="planned",
+                assigned_to=request.user,
+                created_by=request.user,
+            )
+            call.activity = activity
+            call.save(update_fields=["activity", "updated_at"])
+
+            PhoneCallExtension.objects.create(
+                activity=activity,
+                ari_call=call,
+                direction="inbound",
+                call_status="answered",
+                from_number=from_number,
+                to_number=getattr(request.user, "extension", None) or "100",
+                asterisk_channel_id=call.asterisk_channel_id,
+                user=request.user,
+                started_at=call.started_at,
+                answered_at=call.answered_at,
+            )
+
+            activity_id = activity.id
+    except Exception:
+        pass
+
+    return JsonResponse({"success": True, "call_id": call.id, "activity_id": activity_id})
 
 
 @login_required
@@ -317,7 +352,7 @@ def calls_bulk_action(request):
     ids = [int(i) for i in request.POST.getlist("selected_ids") if i.isdigit()]
     if not ids:
         messages.warning(request, "No items selected.")
-        return redirect("calls:call_list")
+        return redirect("activities:dashboard")
     try:
         if action == "export_csv":
             calls = Call.objects.filter(id__in=ids).select_related("contact", "user")
@@ -348,7 +383,7 @@ def calls_bulk_action(request):
             messages.warning(request, "Unknown action.")
     except (NotFoundError, PermissionDeniedError, ValidationError) as e:
         messages.error(request, str(e))
-    return redirect("calls:call_list")
+    return redirect("activities:dashboard")
 
 
 WEEKDAY_CHOICES = [
@@ -666,3 +701,295 @@ def cancel_transcription(request, pk):
     transcript.save(update_fields=['status', 'language_code', 'celery_task_id', 'error_message', 'updated_at'])
 
     return JsonResponse({'success': True})
+
+
+# ── VoIP split views ──────────────────────────────────────────────────────────
+
+class SIPConfigForm(forms.ModelForm):
+    password = forms.CharField(
+        widget=forms.PasswordInput(render_value=True, attrs={"autocomplete": "new-password"}),
+        required=False,
+    )
+
+    class Meta:
+        model = SIPSettings
+        fields = ["server_ip", "server_port", "username", "caller_id", "is_active"]
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        if self.instance and self.instance.pk:
+            self.fields["password"].initial = self.instance.password
+        else:
+            self.fields["password"].required = True
+
+    def clean(self):
+        cleaned = super().clean()
+        password = cleaned.get("password")
+        if not password and self.instance and self.instance.pk:
+            password = self.instance.password
+
+        server_ip = cleaned.get("server_ip")
+        server_port = cleaned.get("server_port")
+        username = cleaned.get("username")
+
+        if not all([server_ip, server_port, username, password]):
+            return cleaned
+        if not cleaned.get("is_active", True):
+            return cleaned
+
+        if self.instance and self.instance.pk:
+            creds_changed = (
+                server_ip != self.instance.server_ip
+                or server_port != self.instance.server_port
+                or username != self.instance.username
+                or (cleaned.get("password") and cleaned["password"] != self.instance.password)
+                or cleaned.get("is_active") != self.instance.is_active
+            )
+            if not creds_changed:
+                return cleaned
+
+        from ..sip_validator import validate_sip_credentials
+        is_valid, error = validate_sip_credentials(server_ip, server_port, username, password)
+        if not is_valid:
+            raise forms.ValidationError(f"SIP credential test failed: {error}")
+        return cleaned
+
+    def save(self, commit=True):
+        instance = super().save(commit=False)
+        password = self.cleaned_data.get("password")
+        if password:
+            instance.password = password
+        if commit:
+            instance.save()
+        return instance
+
+
+class SIPSoundsForm(forms.ModelForm):
+    class Meta:
+        model = SIPSettings
+        fields = ["hold_music", "welcome_sound", "non_working_hours_sound"]
+
+    def _validate_sound_field(self, field_name):
+        sound = self.cleaned_data.get(field_name)
+        if sound and hasattr(sound, "name"):
+            ext = sound.name.rsplit(".", 1)[-1].lower() if "." in sound.name else ""
+            if ext not in ("mp3", "wav"):
+                self.add_error(field_name, "Only mp3 and wav files are supported.")
+
+    def clean(self):
+        cleaned = super().clean()
+        self._validate_sound_field("hold_music")
+        self._validate_sound_field("welcome_sound")
+        self._validate_sound_field("non_working_hours_sound")
+        return cleaned
+
+
+class SIPWorkingHoursForm(forms.ModelForm):
+    working_days_choices = forms.MultipleChoiceField(
+        choices=WEEKDAY_CHOICES,
+        widget=forms.CheckboxSelectMultiple,
+        required=False,
+        label="Working Days",
+    )
+
+    class Meta:
+        model = SIPSettings
+        fields = ["working_hours_start", "working_hours_end"]
+        widgets = {
+            "working_hours_start": forms.TimeInput(
+                format="%H:%M", attrs={"type": "time", "class": "form-control"}
+            ),
+            "working_hours_end": forms.TimeInput(
+                format="%H:%M", attrs={"type": "time", "class": "form-control"}
+            ),
+        }
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        if self.instance and self.instance.pk and self.instance.working_days:
+            self.fields["working_days_choices"].initial = [
+                d.strip() for d in self.instance.working_days.split(",") if d.strip()
+            ]
+
+    def clean(self):
+        cleaned = super().clean()
+        days = cleaned.get("working_days_choices", [])
+        cleaned["working_days"] = ",".join(days)
+        start = cleaned.get("working_hours_start")
+        end = cleaned.get("working_hours_end")
+        if start and not end:
+            self.add_error("working_hours_end", "End time is required when start time is set.")
+        if end and not start:
+            self.add_error("working_hours_start", "Start time is required when end time is set.")
+        if (start and end) and not days:
+            self.add_error("working_days_choices", "Select at least one working day when hours are set.")
+        return cleaned
+
+    def save(self, commit=True):
+        instance = super().save(commit=False)
+        instance.working_days = self.cleaned_data.get("working_days", "")
+        instance.working_hours_start = self.cleaned_data.get("working_hours_start")
+        instance.working_hours_end = self.cleaned_data.get("working_hours_end")
+        if commit:
+            instance.save()
+        return instance
+
+
+@login_required
+def voip_config_view(request):
+    """VoIP Configuration — SIP credentials."""
+    from ..asterisk_config import apply_sip_settings, apply_schedule_settings
+
+    try:
+        sip = request.user.sip_settings
+    except SIPSettings.DoesNotExist:
+        sip = None
+
+    if request.method == "POST":
+        if "delete" in request.POST:
+            if sip:
+                sip.delete()
+                apply_sip_settings(None)
+                apply_schedule_settings(None)
+                messages.success(request, "SIP credentials deleted. Asterisk config cleared.")
+            return redirect("settings:voip:voip_config")
+
+        old_trunk = None
+        if sip:
+            old_trunk = {
+                "server_ip": sip.server_ip,
+                "server_port": sip.server_port,
+                "username": sip.username,
+                "is_active": sip.is_active,
+                "password": sip.password,
+            }
+
+        form = SIPConfigForm(request.POST, instance=sip)
+        if form.is_valid():
+            trunk_changed = old_trunk is None
+            if old_trunk:
+                for field in ("server_ip", "server_port", "username", "is_active"):
+                    if form.cleaned_data.get(field) != old_trunk[field]:
+                        trunk_changed = True
+                        break
+                pwd = form.cleaned_data.get("password")
+                if pwd and pwd != old_trunk["password"]:
+                    trunk_changed = True
+
+            obj = form.save(commit=False)
+            obj.user = request.user
+            obj.save()
+
+            if trunk_changed:
+                if apply_sip_settings(obj):
+                    messages.success(request, "SIP credentials saved and Asterisk reloaded.")
+                else:
+                    messages.warning(
+                        request,
+                        "SIP credentials saved but Asterisk reload failed. "
+                        "You may need to restart the Asterisk container.",
+                    )
+            else:
+                messages.success(request, "Settings saved.")
+            return redirect("settings:voip:voip_config")
+    else:
+        form = SIPConfigForm(instance=sip)
+
+    return render(request, "calls/voip_config.html", {
+        "form": form,
+        "sip_settings": sip,
+        "current_section": "voip",
+        "current_page": "voip_config",
+    })
+
+
+@login_required
+def voip_sounds_view(request):
+    """VoIP Sounds — hold music, welcome sound, non-working hours sound."""
+    from ..asterisk_config import apply_moh_settings, apply_schedule_settings
+
+    try:
+        sip = request.user.sip_settings
+    except SIPSettings.DoesNotExist:
+        sip = None
+
+    if sip is None:
+        messages.info(request, "Set up SIP credentials first before configuring sounds.")
+        return redirect("settings:voip:voip_config")
+
+    if request.method == "POST":
+        if "remove_hold_music" in request.POST and sip.hold_music:
+            sip.hold_music.delete(save=False)
+            sip.hold_music = None
+            sip.save()
+            apply_moh_settings(sip)
+            messages.success(request, "Hold music removed. Default music will be used.")
+            return redirect("settings:voip:voip_sounds")
+
+        if "remove_welcome_sound" in request.POST and sip.welcome_sound:
+            sip.welcome_sound.delete(save=False)
+            sip.welcome_sound = None
+            sip.save()
+            apply_schedule_settings(sip)
+            messages.success(request, "Welcome sound removed.")
+            return redirect("settings:voip:voip_sounds")
+
+        if "remove_non_working_sound" in request.POST and sip.non_working_hours_sound:
+            sip.non_working_hours_sound.delete(save=False)
+            sip.non_working_hours_sound = None
+            sip.save()
+            apply_schedule_settings(sip)
+            messages.success(request, "Non-working hours sound removed.")
+            return redirect("settings:voip:voip_sounds")
+
+        form = SIPSoundsForm(request.POST, request.FILES, instance=sip)
+        if form.is_valid():
+            obj = form.save()
+            if "hold_music" in request.FILES:
+                apply_moh_settings(obj)
+            if "welcome_sound" in request.FILES or "non_working_hours_sound" in request.FILES:
+                apply_schedule_settings(obj)
+            messages.success(request, "Sounds saved.")
+            return redirect("settings:voip:voip_sounds")
+    else:
+        form = SIPSoundsForm(instance=sip)
+
+    return render(request, "calls/voip_sounds.html", {
+        "form": form,
+        "sip_settings": sip,
+        "current_section": "voip",
+        "current_page": "voip_sounds",
+    })
+
+
+@login_required
+def voip_working_hours_view(request):
+    """VoIP Working Hours — schedule and working days."""
+    from ..asterisk_config import apply_schedule_settings
+
+    try:
+        sip = request.user.sip_settings
+    except SIPSettings.DoesNotExist:
+        sip = None
+
+    if sip is None:
+        messages.info(request, "Set up SIP credentials first before configuring working hours.")
+        return redirect("settings:voip:voip_config")
+
+    if request.method == "POST":
+        form = SIPWorkingHoursForm(request.POST, instance=sip)
+        if form.is_valid():
+            obj = form.save()
+            apply_schedule_settings(obj)
+            messages.success(request, "Working hours saved.")
+            return redirect("settings:voip:voip_working_hours")
+    else:
+        form = SIPWorkingHoursForm(instance=sip)
+
+    return render(request, "calls/voip_working_hours.html", {
+        "form": form,
+        "sip_settings": sip,
+        "weekday_choices": WEEKDAY_CHOICES,
+        "current_section": "voip",
+        "current_page": "voip_working_hours",
+    })

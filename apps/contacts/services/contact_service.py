@@ -49,6 +49,7 @@ class ContactService:
         email: str = "",
         phone: str = "",
         mobile: str = "",
+        preferred_language: str = "",
     ) -> Contact:
         """Create a new contact for the given company."""
         try:
@@ -68,6 +69,7 @@ class ContactService:
             email=email,
             phone=phone,
             mobile=mobile,
+            preferred_language=preferred_language,
         )
         return contact
 
@@ -83,7 +85,7 @@ class ContactService:
         """
         contact = ContactService.get_contact_or_raise(pk=pk)
 
-        allowed_fields = {"name", "position", "email", "phone", "mobile"}
+        allowed_fields = {"name", "position", "email", "phone", "mobile", "preferred_language"}
         for key, value in fields.items():
             if key in allowed_fields:
                 setattr(contact, key, value)

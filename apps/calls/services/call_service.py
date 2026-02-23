@@ -179,7 +179,7 @@ class CallService:
         )
 
         if lead_id:
-            from apps.activities.models import Activity, ActivityType
+            from apps.activities.models import Activity, ActivityType, PhoneCallExtension
 
             phone_call_type = ActivityType.objects.filter(name="Phone Call", is_active=True).first()
             if phone_call_type:
@@ -194,6 +194,19 @@ class CallService:
                 )
                 call.activity = activity
                 call.save(update_fields=["activity", "updated_at"])
+
+                PhoneCallExtension.objects.create(
+                    activity=activity,
+                    ari_call=call,
+                    direction="outbound",
+                    call_status="initiated",
+                    from_number=from_ext,
+                    to_number=cleaned_number,
+                    asterisk_channel_id=call.asterisk_channel_id,
+                    asterisk_uniqueid=call.asterisk_uniqueid,
+                    user=user,
+                    started_at=call.started_at,
+                )
 
         return call
 
@@ -232,6 +245,16 @@ class CallService:
             event="hangup_requested",
             data={"user_id": user.id},
         )
+
+        # Sync to PhoneCallExtension
+        try:
+            ext = call.extension
+            ext.call_status = "ended"
+            ext.ended_at = call.ended_at
+            ext.duration = call.duration
+            ext.save(update_fields=["call_status", "ended_at", "duration", "updated_at"])
+        except Exception:
+            pass
 
         process_recording.delay(call.id)
 
@@ -345,6 +368,27 @@ class CallService:
                     )
                     process_recording.delay(call.id)
 
+        # Sync status/timing back to PhoneCallExtension
+        try:
+            ext = call.extension
+            changed = False
+            if ext.call_status != call.status:
+                ext.call_status = call.status
+                changed = True
+            if call.answered_at and ext.answered_at != call.answered_at:
+                ext.answered_at = call.answered_at
+                changed = True
+            if call.ended_at and ext.ended_at != call.ended_at:
+                ext.ended_at = call.ended_at
+                changed = True
+            if call.duration and ext.duration != call.duration:
+                ext.duration = call.duration
+                changed = True
+            if changed:
+                ext.save(update_fields=["call_status", "answered_at", "ended_at", "duration", "updated_at"])
+        except Exception:
+            pass
+
         return {
             "status": call.status,
             "duration": call.duration,
@@ -400,6 +444,14 @@ class CallService:
 
         call.contact = contact
         call.save(update_fields=["contact", "updated_at"])
+
+        # Sync to PhoneCallExtension
+        try:
+            call.extension.contact = contact
+            call.extension.save(update_fields=["contact", "updated_at"])
+        except Exception:
+            pass
+
         return call
 
     @staticmethod

@@ -6,7 +6,7 @@ from .views.crm import crm_urls
 from .views.voip import voip_urls
 from .views.users import users_urls
 from .views.whatsapp import whatsapp_urls
-from .views.google import google_urls
+from .views.elevenlabs import elevenlabs_urls
 
 app_name = 'settings'
 
@@ -16,7 +16,7 @@ crm_patterns = (crm_urls, 'crm')
 voip_patterns = (voip_urls, 'voip')
 users_patterns = (users_urls, 'users')
 whatsapp_patterns = (whatsapp_urls, 'whatsapp')
-google_patterns = (google_urls, 'google')
+elevenlabs_patterns = (elevenlabs_urls, 'elevenlabs')
 
 urlpatterns = [
     path('', SettingsHomeView.as_view(), name='home'),
@@ -24,7 +24,7 @@ urlpatterns = [
     path('general/', include(general_patterns)),
     path('crm/', include(crm_patterns)),
     path('voip/', include(voip_patterns)),
-    path('users/', include(users_patterns)),
+    path('general/users/', include(users_patterns)),
     path('whatsapp/', include(whatsapp_patterns)),
-    path('google/', include(google_patterns)),
+    path('elevenlabs/', include(elevenlabs_patterns)),
 ]

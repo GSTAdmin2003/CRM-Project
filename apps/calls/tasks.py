@@ -105,23 +105,32 @@ def process_recording(self, call_id):
 
         logger.info(f"Created recording record for call {call_id}")
 
-        # Queue transcription for every recorded call
+        # Auto-transcription: only runs if enabled in settings
         from .models import CallTranscript, LANGUAGE_TO_STT_CODE
+        from apps.user_settings.models.general import SystemConfiguration
 
+        auto_transcribe = SystemConfiguration.get_setting('transcription_auto_enabled', False)
+
+        # Resolve language: contact preferred → company preferred → system default
         lang_code = ''
         if call.contact_id:
             short = call.contact.effective_language  # 'en' or 'ka'
             lang_code = LANGUAGE_TO_STT_CODE.get(short, '')
+        if not lang_code:
+            default_lang = SystemConfiguration.get_setting('default_preferred_language', 'en')
+            lang_code = LANGUAGE_TO_STT_CODE.get(default_lang, '') or 'en'
 
         transcript, _ = CallTranscript.objects.get_or_create(call=call)
         transcript.language_code = lang_code
         transcript.save(update_fields=['language_code', 'updated_at'])
 
-        if lang_code:
-            transcribe_call.delay(call_id)
-            logger.info(f"Queued transcription for call {call_id} (lang={lang_code})")
+        if auto_transcribe:
+            task = transcribe_call.delay(call_id)
+            transcript.celery_task_id = task.id
+            transcript.save(update_fields=['celery_task_id', 'updated_at'])
+            logger.info(f"Auto-queued transcription for call {call_id} (lang={lang_code}, task={task.id})")
         else:
-            logger.info(f"Recording saved for call {call_id} — awaiting language selection")
+            logger.info(f"Recording saved for call {call_id} — auto-transcription disabled")
 
         # Cleanup temp files; also remove any legacy split files if present
         call_uid = call.asterisk_uniqueid or call.asterisk_channel_id
@@ -200,11 +209,11 @@ def transcribe_call(self, call_id):
     import json
     import requests as http_requests
 
-    from .models import Call, CallTranscript
+    from .models import Call, CallTranscript, LANGUAGE_TO_STT_CODE
     from apps.user_settings.models.general import SystemConfiguration
 
     try:
-        call = Call.objects.select_related('opportunity__sales_team').get(id=call_id)
+        call = Call.objects.select_related('contact', 'opportunity__sales_team').get(id=call_id)
     except Call.DoesNotExist:
         logger.error(f"Call {call_id} not found for transcription")
         return
@@ -215,11 +224,20 @@ def transcribe_call(self, call_id):
         logger.error(f"No CallTranscript for call {call_id}")
         return
 
-    if not transcript.language_code:
-        logger.warning(f"No language set for call {call_id} — awaiting user selection")
-        return
+    # Resolve language: contact preferred → stored transcript code → system default → 'en'
+    lang = ''
+    if call.contact_id:
+        raw = call.contact.effective_language  # 'en' or 'ka'
+        lang = LANGUAGE_TO_STT_CODE.get(raw, '')
+    if not lang and transcript.language_code:
+        lang = _LANG_NORMALIZE.get(transcript.language_code, transcript.language_code[:2])
+    if not lang:
+        default_lang = SystemConfiguration.get_setting('default_preferred_language', 'en')
+        lang = LANGUAGE_TO_STT_CODE.get(default_lang, 'en') or 'en'
 
-    lang = _LANG_NORMALIZE.get(transcript.language_code, transcript.language_code[:2])
+    # Keep transcript.language_code in sync
+    if transcript.language_code != lang:
+        transcript.language_code = lang
 
     api_key = SystemConfiguration.get_setting('elevenlabs_api_key')
     if not api_key:
@@ -266,7 +284,7 @@ def transcribe_call(self, call_id):
     keywords = _build_keywords(call, lang)
 
     form_data = {
-        'model_id': 'scribe_v1',
+        'model_id': 'scribe_v2',
         'language_code': lang,
         'diarize': 'true',
         'num_speakers': '2',

@@ -69,6 +69,8 @@ class CompanyService:
         legal_id: str,
         legal_name: str,
         created_by,
+        contact_type: str = "company",
+        preferred_language: str = "",
         brand_name: str = "",
         company_phone: str = "",
         company_mobile: str = "",
@@ -86,6 +88,8 @@ class CompanyService:
             raise ValidationError(f"A company with Legal ID '{legal_id.strip()}' already exists")
 
         company = Company.objects.create(
+            contact_type=contact_type,
+            preferred_language=preferred_language,
             legal_id=legal_id.strip(),
             legal_name=legal_name.strip(),
             brand_name=brand_name,
@@ -113,6 +117,8 @@ class CompanyService:
         company = CompanyService.get_company_or_raise(pk=pk)
 
         allowed_fields = {
+            "contact_type",
+            "preferred_language",
             "legal_id",
             "legal_name",
             "brand_name",

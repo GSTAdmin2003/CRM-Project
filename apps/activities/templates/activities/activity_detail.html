@@ -53,6 +53,7 @@
                         <dt class="text-sm font-medium text-gray-500">Scheduled Date</dt>
                         <dd class="mt-1 text-sm text-gray-900">{{ activity.scheduled_date|date:"F j, Y" }}</dd>
                     </div>
+                    {% if activity.lead %}
                     <div class="sm:col-span-2">
                         <dt class="text-sm font-medium text-gray-500">Opportunity</dt>
                         <dd class="mt-1 text-sm text-gray-900">
@@ -61,6 +62,7 @@
                             </a>
                         </dd>
                     </div>
+                    {% endif %}
                     <div class="sm:col-span-1">
                         <dt class="text-sm font-medium text-gray-500">Assigned To</dt>
                         <dd class="mt-1 text-sm text-gray-900">{{ activity.assigned_to.get_full_name }}</dd>
@@ -71,19 +73,108 @@
                     </div>
                     {% if activity.description %}
                     <div class="sm:col-span-2">
-                        <dt class="text-sm font-medium text-gray-500">Description</dt>
-                        <dd class="mt-1 text-sm text-gray-900">{{ activity.description }}</dd>
+                        <dt class="text-sm font-medium text-gray-500">Notes</dt>
+                        <dd class="mt-1 text-sm text-gray-900 whitespace-pre-line">{{ activity.description }}</dd>
                     </div>
                     {% endif %}
                 </dl>
             </div>
+
+            <!-- Call Details (only for Phone Call activities with a linked call) -->
+            {% if phone_call %}
+            <div class="px-4 py-5 sm:p-6 border-b border-gray-200">
+                <h3 class="text-lg font-medium text-gray-900 mb-4">
+                    <i class="fas fa-phone mr-2 text-green-600"></i>Call Details
+                </h3>
+                <dl class="grid grid-cols-1 gap-x-4 gap-y-6 sm:grid-cols-2">
+                    <div class="sm:col-span-1">
+                        <dt class="text-sm font-medium text-gray-500">Direction</dt>
+                        <dd class="mt-1 text-sm text-gray-900">
+                            {% if phone_call.direction == 'inbound' %}
+                                <span class="inline-flex items-center gap-1 text-blue-700">
+                                    <i class="fas fa-phone-alt text-xs"></i> Inbound
+                                </span>
+                            {% else %}
+                                <span class="inline-flex items-center gap-1 text-green-700">
+                                    <i class="fas fa-phone text-xs"></i> Outbound
+                                </span>
+                            {% endif %}
+                        </dd>
+                    </div>
+                    <div class="sm:col-span-1">
+                        <dt class="text-sm font-medium text-gray-500">Call Status</dt>
+                        <dd class="mt-1 text-sm text-gray-900">
+                            <span class="px-2 py-0.5 text-xs font-medium rounded
+                                {% if phone_call.call_status == 'answered' or phone_call.call_status == 'ended' %}bg-green-100 text-green-800
+                                {% elif phone_call.call_status == 'failed' or phone_call.call_status == 'busy' or phone_call.call_status == 'no_answer' %}bg-red-100 text-red-800
+                                {% else %}bg-yellow-100 text-yellow-800{% endif %}">
+                                {{ phone_call.get_call_status_display }}
+                            </span>
+                        </dd>
+                    </div>
+                    <div class="sm:col-span-1">
+                        <dt class="text-sm font-medium text-gray-500">From</dt>
+                        <dd class="mt-1 text-sm text-gray-900 font-mono">{{ phone_call.from_number|default:"—" }}</dd>
+                    </div>
+                    <div class="sm:col-span-1">
+                        <dt class="text-sm font-medium text-gray-500">To</dt>
+                        <dd class="mt-1 text-sm text-gray-900 font-mono">{{ phone_call.to_number|default:"—" }}</dd>
+                    </div>
+                    {% if phone_call.duration %}
+                    <div class="sm:col-span-1">
+                        <dt class="text-sm font-medium text-gray-500">Duration</dt>
+                        <dd class="mt-1 text-sm text-gray-900">{{ phone_call.duration_formatted }}</dd>
+                    </div>
+                    {% endif %}
+                    {% if phone_call.started_at %}
+                    <div class="sm:col-span-1">
+                        <dt class="text-sm font-medium text-gray-500">Started At</dt>
+                        <dd class="mt-1 text-sm text-gray-900">{{ phone_call.started_at|date:"F j, Y \a\t g:i A" }}</dd>
+                    </div>
+                    {% endif %}
+                    {% if phone_call.answered_at %}
+                    <div class="sm:col-span-1">
+                        <dt class="text-sm font-medium text-gray-500">Answered At</dt>
+                        <dd class="mt-1 text-sm text-gray-900">{{ phone_call.answered_at|date:"g:i A" }}</dd>
+                    </div>
+                    {% endif %}
+                    {% if phone_call.ended_at %}
+                    <div class="sm:col-span-1">
+                        <dt class="text-sm font-medium text-gray-500">Ended At</dt>
+                        <dd class="mt-1 text-sm text-gray-900">{{ phone_call.ended_at|date:"g:i A" }}</dd>
+                    </div>
+                    {% endif %}
+                    {% if phone_call.contact %}
+                    <div class="sm:col-span-2">
+                        <dt class="text-sm font-medium text-gray-500">Linked Contact</dt>
+                        <dd class="mt-1 text-sm text-gray-900">
+                            <a href="{% url 'contacts:contact_detail' phone_call.contact.pk %}" class="text-indigo-600 hover:text-indigo-800">
+                                {{ phone_call.contact.name }}
+                            </a>
+                        </dd>
+                    </div>
+                    {% endif %}
+                    {% if phone_call.recording %}
+                    <div class="sm:col-span-2">
+                        <dt class="text-sm font-medium text-gray-500">Recording</dt>
+                        <dd class="mt-1 text-sm text-gray-900 flex items-center gap-3">
+                            <audio controls src="{% url 'calls:recording_download' phone_call.recording.pk %}" class="h-8"></audio>
+                            <a href="{% url 'calls:recording_download' phone_call.recording.pk %}" class="text-indigo-600 hover:text-indigo-800 text-xs">
+                                <i class="fas fa-download mr-1"></i>Download ({{ phone_call.recording.file_size_formatted }})
+                            </a>
+                        </dd>
+                    </div>
+                    {% endif %}
+                </dl>
+            </div>
+            {% endif %}
 
             <!-- Outcome (only shown for completed activities) -->
             {% if activity.status == 'completed' %}
             <div class="px-4 py-5 sm:p-6 border-b border-gray-200">
                 <h3 class="text-lg font-medium text-gray-900 mb-4">Outcome</h3>
                 {% if activity.outcome %}
-                <p class="text-sm text-gray-900">{{ activity.outcome }}</p>
+                <p class="text-sm text-gray-900 whitespace-pre-line">{{ activity.outcome }}</p>
                 {% else %}
                 <p class="text-sm text-gray-500 italic">No outcome notes added</p>
                 {% endif %}

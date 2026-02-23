@@ -12,6 +12,7 @@ from apps.user_settings.models.general import SystemConfiguration
 SETTING_KEY = 'elevenlabs_api_key'
 KEYWORDS_KEY_EN = 'stt_keywords_en'
 KEYWORDS_KEY_KA = 'stt_keywords_ka'
+AUTO_TRANSCRIBE_KEY = 'transcription_auto_enabled'
 
 
 def _require_admin(request):
@@ -19,16 +20,16 @@ def _require_admin(request):
 
 
 @login_required
-def google_credentials_view(request):
+def elevenlabs_config_view(request):
     if not _require_admin(request):
         messages.error(request, "You don't have permission to access Transcription settings.")
         return redirect('settings:home')
 
-    from apps.crm.models.sales_team import SalesTeam
-
     current_key = SystemConfiguration.get_setting(SETTING_KEY) or ''
     status = 'configured' if current_key else 'not_configured'
     error = None
+
+    auto_transcribe = SystemConfiguration.get_setting(AUTO_TRANSCRIBE_KEY, False)
 
     if request.method == 'POST':
         action = request.POST.get('action', 'save_key')
@@ -36,7 +37,7 @@ def google_credentials_view(request):
         if action == 'clear_key':
             SystemConfiguration.objects.filter(key=SETTING_KEY).delete()
             messages.success(request, 'ElevenLabs API key removed.')
-            return redirect('settings:google:credentials')
+            return redirect('settings:elevenlabs:config')
 
         if action == 'save_key':
             raw = request.POST.get('api_key', '').strip()
@@ -51,7 +52,44 @@ def google_credentials_view(request):
                     user=request.user,
                 )
                 messages.success(request, 'ElevenLabs API key saved successfully.')
-                return redirect('settings:google:credentials')
+                return redirect('settings:elevenlabs:config')
+
+        if action == 'save_auto_transcribe':
+            enabled = request.POST.get('auto_transcribe') == 'on'
+            SystemConfiguration.set_setting(
+                key=AUTO_TRANSCRIBE_KEY,
+                value='true' if enabled else 'false',
+                description='Automatically transcribe calls after recording is processed',
+                data_type='boolean',
+                user=request.user,
+            )
+            messages.success(
+                request,
+                'Auto-transcription enabled.' if enabled else 'Auto-transcription disabled.',
+            )
+            return redirect('settings:elevenlabs:config')
+
+    context = {
+        'current_section': 'elevenlabs',
+        'current_page': 'config',
+        'api_key': current_key,
+        'status': status,
+        'error': error,
+        'auto_transcribe': auto_transcribe,
+    }
+    return render(request, 'settings/elevenlabs/config.html', context)
+
+
+@login_required
+def elevenlabs_vocabulary_view(request):
+    if not _require_admin(request):
+        messages.error(request, "You don't have permission to access Transcription settings.")
+        return redirect('settings:home')
+
+    from apps.crm.models.sales_team import SalesTeam
+
+    if request.method == 'POST':
+        action = request.POST.get('action')
 
         if action == 'save_keywords':
             SystemConfiguration.set_setting(
@@ -69,7 +107,7 @@ def google_credentials_view(request):
                 user=request.user,
             )
             messages.success(request, 'Default keywords saved.')
-            return redirect('settings:google:credentials')
+            return redirect('settings:elevenlabs:vocabulary')
 
         if action == 'save_team_keywords':
             team_id = request.POST.get('team_id')
@@ -81,23 +119,21 @@ def google_credentials_view(request):
                 messages.success(request, f'Keywords saved for team "{team.name}".')
             except SalesTeam.DoesNotExist:
                 messages.error(request, 'Sales team not found.')
-            return redirect('settings:google:credentials')
+            return redirect('settings:elevenlabs:vocabulary')
 
     teams = SalesTeam.objects.filter(is_active=True).order_by('name')
 
     context = {
-        'current_section': 'google',
-        'current_page': 'credentials',
-        'api_key': current_key,
-        'status': status,
-        'error': error,
+        'current_section': 'elevenlabs',
+        'current_page': 'vocabulary',
         'stt_keywords_en': SystemConfiguration.get_setting(KEYWORDS_KEY_EN) or '',
         'stt_keywords_ka': SystemConfiguration.get_setting(KEYWORDS_KEY_KA) or '',
         'teams': teams,
     }
-    return render(request, 'settings/google/credentials.html', context)
+    return render(request, 'settings/elevenlabs/vocabulary.html', context)
 
 
-google_urls = [
-    path('credentials/', google_credentials_view, name='credentials'),
+elevenlabs_urls = [
+    path('config/', elevenlabs_config_view, name='config'),
+    path('vocabulary/', elevenlabs_vocabulary_view, name='vocabulary'),
 ]

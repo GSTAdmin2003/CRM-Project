@@ -124,6 +124,16 @@ class ARIEventHandler:
 
                 call.save()
 
+                # Sync to PhoneCallExtension
+                try:
+                    ext = call.extension
+                    ext.call_status = call.status
+                    ext.ended_at = call.ended_at
+                    ext.duration = call.duration
+                    ext.save(update_fields=["call_status", "ended_at", "duration", "updated_at"])
+                except Exception:
+                    pass
+
             CallLog.objects.create(
                 call=call,
                 event='stasis_end',
@@ -157,9 +167,24 @@ class ARIEventHandler:
                 call.save()
                 logger.info(f"Call answered: {channel_id}")
 
+                try:
+                    ext = call.extension
+                    ext.call_status = 'answered'
+                    ext.answered_at = call.answered_at
+                    ext.save(update_fields=["call_status", "answered_at", "updated_at"])
+                except Exception:
+                    pass
+
             elif state == 'Ringing' and call.status == 'initiated':
                 call.status = 'ringing'
                 call.save()
+
+                try:
+                    ext = call.extension
+                    ext.call_status = 'ringing'
+                    ext.save(update_fields=["call_status", "updated_at"])
+                except Exception:
+                    pass
 
             CallLog.objects.create(
                 call=call,
@@ -196,6 +221,16 @@ class ARIEventHandler:
                 call.duration = int((call.ended_at - call.answered_at).total_seconds())
             call.save()
 
+            # Sync to PhoneCallExtension
+            try:
+                ext = call.extension
+                ext.call_status = call.status
+                ext.ended_at = call.ended_at
+                ext.duration = call.duration
+                ext.save(update_fields=["call_status", "ended_at", "duration", "updated_at"])
+            except Exception:
+                pass
+
             CallLog.objects.create(
                 call=call,
                 event='hangup_request',
@@ -222,6 +257,16 @@ class ARIEventHandler:
                 if call.answered_at:
                     call.duration = int((call.ended_at - call.answered_at).total_seconds())
                 call.save()
+
+                # Sync to PhoneCallExtension
+                try:
+                    ext = call.extension
+                    ext.call_status = call.status
+                    ext.ended_at = call.ended_at
+                    ext.duration = call.duration
+                    ext.save(update_fields=["call_status", "ended_at", "duration", "updated_at"])
+                except Exception:
+                    pass
 
             CallLog.objects.create(
                 call=call,

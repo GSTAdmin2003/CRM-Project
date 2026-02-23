@@ -18,6 +18,7 @@ class ContactListSerializer(serializers.ModelSerializer):
             "email",
             "phone",
             "mobile",
+            "preferred_language",
             "company",
             "company_name",
             "is_favorite",
@@ -43,6 +44,7 @@ class ContactDetailSerializer(serializers.ModelSerializer):
             "email",
             "phone",
             "mobile",
+            "preferred_language",
             "company",
             "company_name",
             "is_favorite",
@@ -64,3 +66,9 @@ class ContactCreateUpdateSerializer(serializers.Serializer):
     email = serializers.EmailField(required=False, allow_blank=True, default="")
     phone = serializers.CharField(max_length=20, required=False, allow_blank=True, default="")
     mobile = serializers.CharField(max_length=20, required=False, allow_blank=True, default="")
+    preferred_language = serializers.ChoiceField(
+        choices=[('', 'Company Default'), ('en', 'English'), ('ka', 'Georgian')],
+        required=False,
+        default='',
+        allow_blank=True,
+    )

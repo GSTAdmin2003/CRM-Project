@@ -270,9 +270,15 @@
                             <label class="detail-label">Phone</label>
                             <div class="detail-value {% if not lead.phone %}empty{% endif %}">
                                 {% if lead.phone %}
-                                    <a href="tel:{{ lead.phone }}" class="text-blue-600 hover:text-blue-800">
-                                        {{ lead.phone }}
-                                    </a>
+                                <div class="flex items-center gap-2">
+                                    <a href="tel:{{ lead.phone }}" class="text-blue-600 hover:text-blue-800">{{ lead.phone }}</a>
+                                    <button type="button"
+                                            onclick="detailInitiateCall()"
+                                            title="Call this number"
+                                            class="flex-shrink-0 inline-flex items-center justify-center w-7 h-7 rounded-full bg-green-500 hover:bg-green-600 text-white transition-colors">
+                                        <i class="fas fa-phone text-xs"></i>
+                                    </button>
+                                </div>
                                 {% else %}
                                     Not provided
                                 {% endif %}
@@ -287,7 +293,7 @@
                         </div>
                         
                         <div class="detail-item">
-                            <label class="detail-label">Company</label>
+                            <label class="detail-label">Contact</label>
                             <div class="detail-value">
                                 {% if lead.company %}
                                     {{ lead.company.legal_name }}
@@ -437,4 +443,16 @@
         </div>
     </div>
 </div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+function detailInitiateCall() {
+    {% if not lead.phone %}alert('No phone number on this lead.'); return;{% endif %}
+    document.getElementById('phone-number').value = '{{ lead.phone }}';
+    window.currentOpportunityId = {{ lead.pk }};
+    {% if lead.contact_id %}window.currentContactId = {{ lead.contact_id }};{% endif %}
+    makeCall();
+}
+</script>
 {% endblock %}

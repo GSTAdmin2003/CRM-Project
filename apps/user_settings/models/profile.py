@@ -15,11 +15,9 @@ class UserPreferences(BaseSettingModel):
     
     LANGUAGE_CHOICES = [
         ('en', 'English'),
-        ('es', 'Spanish'),
-        ('fr', 'French'),
-        ('de', 'German'),
+        ('ka', 'Georgian'),
     ]
-    
+
     user = models.OneToOneField(User, on_delete=models.CASCADE, related_name='preferences')
     theme = models.CharField(max_length=10, choices=THEME_CHOICES, default='light')
     language = models.CharField(max_length=5, choices=LANGUAGE_CHOICES, default='en')
@@ -38,12 +36,14 @@ class UserPreferences(BaseSettingModel):
     
     @classmethod
     def get_or_create_for_user(cls, user):
-        """Get or create preferences for a user"""
+        """Get or create preferences for a user."""
+        from .general import SystemConfiguration
+        default_lang = SystemConfiguration.get_setting('default_preferred_language', 'en')
         preferences, created = cls.objects.get_or_create(
             user=user,
             defaults={
                 'theme': 'light',
-                'language': 'en',
+                'language': default_lang,
                 'timezone': 'UTC',
             }
         )

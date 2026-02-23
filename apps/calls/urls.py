@@ -11,19 +11,13 @@ app_name = "calls"
 urlpatterns = [
     # DRF API endpoints
     path("api/", include(router.urls)),
-    # Existing template views
-    path("", template_views.call_list, name="call_list"),
-    path("bulk-action/", template_views.calls_bulk_action, name="call_bulk_action"),
-    path("dialpad/", template_views.dialpad, name="dialpad"),
-    path("<int:pk>/", template_views.call_detail, name="call_detail"),
-    # Call actions (template views)
+    # Internal call action endpoints (used by JS / WebRTC layer)
     path("initiate/", template_views.initiate_call, name="initiate_call"),
     path("inbound/register/", template_views.register_inbound_call, name="register_inbound_call"),
     path("<int:pk>/ended/", template_views.call_ended, name="call_ended"),
     path("<int:pk>/hangup/", template_views.hangup_call, name="hangup_call"),
     path("<int:pk>/answer/", template_views.answer_call, name="answer_call"),
     path("<int:pk>/status/", template_views.call_status, name="call_status"),
-    # Call management (template views)
     path("<int:pk>/notes/", template_views.update_call_notes, name="update_call_notes"),
     path(
         "<int:pk>/link-contact/",
@@ -46,4 +40,6 @@ urlpatterns = [
     path("<int:pk>/transcript/cancel/", template_views.cancel_transcription, name="cancel_transcription"),
     # Legacy API endpoint (kept for backward compatibility)
     path("api/active/", template_views.active_calls, name="active_calls"),
+    # SIP settings (accessed via user settings, but route kept here)
+    path("sip-settings/", template_views.sip_settings_view, name="sip_settings"),
 ]

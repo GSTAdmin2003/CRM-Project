@@ -2,15 +2,29 @@ from django import forms
 from .models import Company, Contact
 
 
+_COMPANY_LANG_CHOICES = [('', 'System Default'), ('en', 'English'), ('ka', 'Georgian')]
+_CONTACT_LANG_CHOICES = [('', 'Company Default'), ('en', 'English'), ('ka', 'Georgian')]
+
+
 class CompanyForm(forms.ModelForm):
+    preferred_language = forms.ChoiceField(
+        choices=_COMPANY_LANG_CHOICES,
+        widget=forms.RadioSelect(),
+        required=False,
+        label="Preferred Pitch Language",
+    )
+
     class Meta:
         model = Company
         fields = [
-            'legal_id', 'legal_name', 'brand_name', 
+            'contact_type',
+            'preferred_language',
+            'legal_id', 'legal_name', 'brand_name',
             'company_phone', 'company_mobile', 'company_email',
-            'industry', 'category'
+            'industry', 'category',
         ]
         widgets = {
+            'contact_type': forms.RadioSelect(),
             'legal_id': forms.TextInput(attrs={'class': 'form-control'}),
             'legal_name': forms.TextInput(attrs={'class': 'form-control'}),
             'brand_name': forms.TextInput(attrs={'class': 'form-control'}),
@@ -23,9 +37,16 @@ class CompanyForm(forms.ModelForm):
 
 
 class ContactForm(forms.ModelForm):
+    preferred_language = forms.ChoiceField(
+        choices=_CONTACT_LANG_CHOICES,
+        widget=forms.RadioSelect(),
+        required=False,
+        label="Preferred Pitch Language",
+    )
+
     class Meta:
         model = Contact
-        fields = ['name', 'position', 'email', 'phone', 'mobile']
+        fields = ['name', 'position', 'email', 'phone', 'mobile', 'preferred_language']
         widgets = {
             'name': forms.TextInput(attrs={'class': 'form-control'}),
             'position': forms.TextInput(attrs={'class': 'form-control'}),

@@ -23,7 +23,7 @@ class UserListView(SettingsBaseMixin, AdminRequiredMixin, ListView):
     template_name = 'settings/users/list.html'
     context_object_name = 'users'
     paginate_by = 20
-    settings_section = 'users'
+    settings_section = 'general'
 
     def get_queryset(self):
         qs = User.objects.prefetch_related(
@@ -68,7 +68,7 @@ class UserCreateView(SettingsBaseMixin, AdminRequiredMixin, SuccessMessageMixin,
     template_name = 'settings/users/form.html'
     success_message = "User '%(username)s' was created successfully."
     success_url = reverse_lazy('settings:users:list')
-    settings_section = 'users'
+    settings_section = 'general'
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
@@ -96,7 +96,7 @@ class UserEditView(SettingsBaseMixin, AdminRequiredMixin, SuccessMessageMixin, U
     form_class = UserEditForm
     template_name = 'settings/users/form.html'
     success_url = reverse_lazy('settings:users:list')
-    settings_section = 'users'
+    settings_section = 'general'
 
     def get_success_message(self, cleaned_data):
         return f"User '{self.object.username}' was updated successfully."

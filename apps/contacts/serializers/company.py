@@ -13,6 +13,8 @@ class CompanyListSerializer(serializers.ModelSerializer):
         model = Company
         fields = [
             "id",
+            "contact_type",
+            "preferred_language",
             "legal_id",
             "legal_name",
             "brand_name",
@@ -42,6 +44,8 @@ class CompanyDetailSerializer(serializers.ModelSerializer):
         model = Company
         fields = [
             "id",
+            "contact_type",
+            "preferred_language",
             "legal_id",
             "legal_name",
             "brand_name",
@@ -73,6 +77,17 @@ class CompanyDetailSerializer(serializers.ModelSerializer):
 class CompanyCreateUpdateSerializer(serializers.Serializer):
     """Write serializer -- delegates to CompanyService."""
 
+    contact_type = serializers.ChoiceField(
+        choices=[('company', 'Company'), ('individual', 'Individual')],
+        required=False,
+        default='company',
+    )
+    preferred_language = serializers.ChoiceField(
+        choices=[('', 'System Default'), ('en', 'English'), ('ka', 'Georgian')],
+        required=False,
+        default='',
+        allow_blank=True,
+    )
     legal_id = serializers.CharField(max_length=100)
     legal_name = serializers.CharField(max_length=200)
     brand_name = serializers.CharField(max_length=200, required=False, allow_blank=True, default="")

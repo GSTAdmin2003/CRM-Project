@@ -1,6 +1,6 @@
 {% extends 'base.html' %}
 
-{% block title %}Import Companies - CRM System{% endblock %}
+{% block title %}Import Contacts - CRM System{% endblock %}
 
 {% block extra_css %}
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
@@ -87,9 +87,9 @@
     <!-- Page Header -->
     <div class="mb-8 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div>
-            <h1 class="text-3xl font-bold tracking-tight text-gray-900">Import Companies</h1>
+            <h1 class="text-3xl font-bold tracking-tight text-gray-900">Import Contacts</h1>
             <p class="mt-2 text-sm text-gray-600">
-                Upload an Excel file to bulk-import companies with contacts.
+                Upload an Excel file to bulk-import contacts with representatives.
             </p>
         </div>
         <div class="flex gap-3">
@@ -101,7 +101,7 @@
             <a href="{% url 'contacts:company_list' %}"
                class="inline-flex items-center bg-gray-600 hover:bg-gray-700 text-white px-4 py-2 rounded-md text-sm font-medium transition">
                 <i class="fas fa-arrow-left mr-2"></i>
-                Back to Companies
+                Back to Contacts
             </a>
         </div>
     </div>
@@ -176,8 +176,8 @@
                 <ol class="instructions-list text-sm text-gray-600 list-decimal list-inside space-y-1">
                     <li>Download the template using the button above</li>
                     <li>Fill in your data following the column structure</li>
-                    <li>Company ID is used to match existing companies</li>
-                    <li>Contacts are optional (0 or more per row)</li>
+                    <li>Company ID is used to match existing contacts</li>
+                    <li>Representatives are optional (0 or more per row)</li>
                     <li>Upload the file and review the preview</li>
                     <li>Confirm to import valid rows</li>
                 </ol>
@@ -187,9 +187,9 @@
                     <div class="text-sm text-blue-800 space-y-2">
                         <p><span class="inline-block w-3 h-3 rounded" style="background: #FEE2E2;"></span> <strong>Required:</strong> Company ID, Company Name</p>
                         <p><span class="inline-block w-3 h-3 rounded" style="background: #DBEAFE;"></span> <strong>Company:</strong> Brand, Phone, Mobile, Email, Industry, Category</p>
-                        <p><span class="inline-block w-3 h-3 rounded" style="background: #FEF9C3;"></span> <strong>Contacts:</strong> Position (name) | Email | Phone | Mobile (repeating)</p>
+                        <p><span class="inline-block w-3 h-3 rounded" style="background: #FEF9C3;"></span> <strong>Representatives:</strong> Position (name) | Email | Phone | Mobile (repeating)</p>
                     </div>
-                    <p class="text-xs text-blue-700 mt-2">Contact format: Use any position as header (e.g., "Director"), cell value = contact name</p>
+                    <p class="text-xs text-blue-700 mt-2">Representative format: Use any position as header (e.g., "Director"), cell value = representative name</p>
                 </div>
             </div>
         </div>
@@ -225,7 +225,7 @@
                 <div class="flex items-center">
                     <i class="fas fa-users text-yellow-600 text-2xl mr-3"></i>
                     <div>
-                        <div class="text-sm text-gray-500">Contact Groups</div>
+                        <div class="text-sm text-gray-500">Representative Groups</div>
                         <div class="text-xl font-bold text-gray-900">{{ preview_data.num_contact_groups }}</div>
                     </div>
                 </div>
@@ -239,8 +239,8 @@
                     <tr>
                         <th class="px-4 py-3 text-left text-gray-600">Row</th>
                         <th class="px-4 py-3 text-left text-gray-600">Status</th>
-                        <th class="px-4 py-3 text-left text-gray-600">Company</th>
-                        <th class="px-4 py-3 text-left text-gray-600">Contacts</th>
+                        <th class="px-4 py-3 text-left text-gray-600">Contact</th>
+                        <th class="px-4 py-3 text-left text-gray-600">Representatives</th>
                         <th class="px-4 py-3 text-left text-gray-600">Errors</th>
                     </tr>
                 </thead>
@@ -272,7 +272,7 @@
                         </td>
                         <td class="px-4 py-3 text-gray-900">
                             <span class="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-gray-100 text-gray-800">
-                                {{ row.contacts|length }} contact{{ row.contacts|length|pluralize }}
+                                {{ row.contacts|length }} representative{{ row.contacts|length|pluralize }}
                             </span>
                             {% for contact in row.contacts %}
                             <div class="text-xs text-gray-500 mt-1">{{ contact.position }}: {{ contact.name }}</div>
@@ -329,7 +329,7 @@
             <div class="stat-card">
                 <div class="flex items-center justify-between">
                     <div>
-                        <p class="text-sm font-medium text-gray-500">Companies Created</p>
+                        <p class="text-sm font-medium text-gray-500">Contacts Created</p>
                         <p class="stat-value text-green-600">{{ import_results.companies_created }}</p>
                     </div>
                     <div class="h-12 w-12 rounded-full bg-green-100 flex items-center justify-center">
@@ -340,7 +340,7 @@
             <div class="stat-card">
                 <div class="flex items-center justify-between">
                     <div>
-                        <p class="text-sm font-medium text-gray-500">Companies Matched</p>
+                        <p class="text-sm font-medium text-gray-500">Contacts Matched</p>
                         <p class="stat-value text-blue-600">{{ import_results.companies_matched }}</p>
                     </div>
                     <div class="h-12 w-12 rounded-full bg-blue-100 flex items-center justify-center">
@@ -351,7 +351,7 @@
             <div class="stat-card">
                 <div class="flex items-center justify-between">
                     <div>
-                        <p class="text-sm font-medium text-gray-500">Contacts Created</p>
+                        <p class="text-sm font-medium text-gray-500">Representatives Created</p>
                         <p class="stat-value text-yellow-600">{{ import_results.contacts_created }}</p>
                     </div>
                     <div class="h-12 w-12 rounded-full bg-yellow-100 flex items-center justify-center">
@@ -376,7 +376,7 @@
                         <tr>
                             <th class="px-4 py-3 text-left text-gray-600">Row</th>
                             <th class="px-4 py-3 text-left text-gray-600">Status</th>
-                            <th class="px-4 py-3 text-left text-gray-600">Company</th>
+                            <th class="px-4 py-3 text-left text-gray-600">Contact</th>
                             <th class="px-4 py-3 text-left text-gray-600">Details</th>
                         </tr>
                     </thead>
@@ -418,7 +418,7 @@
                 <a href="{% url 'contacts:company_list' %}"
                    class="inline-flex items-center px-4 py-2 bg-gray-200 hover:bg-gray-300 text-gray-700 font-medium rounded-md transition">
                     <i class="fas fa-building mr-2"></i>
-                    View Companies
+                    View Contacts
                 </a>
                 <a href="{% url 'contacts:company_import' %}"
                    class="inline-flex items-center px-6 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-medium rounded-md transition">

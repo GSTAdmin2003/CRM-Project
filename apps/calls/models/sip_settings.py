@@ -36,6 +36,39 @@ class SIPSettings(models.Model):
         verbose_name="Custom Hold Music",
         help_text="Upload a custom hold music file (mp3 or wav)",
     )
+    welcome_sound = models.FileField(
+        upload_to="custom_sounds/",
+        blank=True,
+        null=True,
+        verbose_name="Welcome Sound",
+        help_text="Audio greeting played to callers before ringing the agent (mp3 or wav)",
+    )
+    non_working_hours_sound = models.FileField(
+        upload_to="custom_sounds/",
+        blank=True,
+        null=True,
+        verbose_name="Non-Working Hours Sound",
+        help_text="Audio message played outside business hours (mp3 or wav)",
+    )
+    working_hours_start = models.TimeField(
+        null=True,
+        blank=True,
+        verbose_name="Working Hours Start",
+        help_text="e.g. 09:00",
+    )
+    working_hours_end = models.TimeField(
+        null=True,
+        blank=True,
+        verbose_name="Working Hours End",
+        help_text="e.g. 17:00",
+    )
+    working_days = models.CharField(
+        max_length=100,
+        blank=True,
+        default="",
+        verbose_name="Working Days",
+        help_text="Comma-separated Asterisk day names, e.g. mon,tue,wed,thu,fri",
+    )
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 

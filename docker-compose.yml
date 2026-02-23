@@ -16,9 +16,11 @@ services:
       - "8000:8000"
     volumes:
       - .:/app
+      - /var/run/docker.sock:/var/run/docker.sock
       - asterisk_recordings:/var/spool/asterisk/monitor
       - asterisk_config:/etc/asterisk/dynamic
       - custom_moh:/var/lib/asterisk/custom-moh
+      - custom_sounds:/var/lib/asterisk/custom-sounds
     environment:
       - DEBUG=${DEBUG:-0}
       - SECRET_KEY=${SECRET_KEY}
@@ -34,7 +36,7 @@ services:
       - db
       - redis
       - asterisk
-    command: sh -c "python manage.py migrate && python manage.py runserver 0.0.0.0:8000"
+    command: sh -c "python manage.py migrate && python manage.py collectstatic --noinput && uvicorn core.asgi:application --host 0.0.0.0 --port 8000 --reload --reload-dir /app"
 
   asterisk:
     build: ./docker/asterisk
@@ -46,7 +48,9 @@ services:
       - asterisk_recordings:/var/spool/asterisk/monitor
       - asterisk_config:/etc/asterisk/dynamic
       - custom_moh:/var/lib/asterisk/custom-moh
+      - custom_sounds:/var/lib/asterisk/custom-sounds
     environment:
+      - TZ=${TZ:-Asia/Tbilisi}
       - ARI_PASSWORD=${ARI_PASSWORD}
       - WEBRTC_AGENT_PASSWORD=${WEBRTC_AGENT_PASSWORD:-changeme}
 
@@ -97,4 +101,5 @@ volumes:
   asterisk_recordings:
   asterisk_config:
   custom_moh:
+  custom_sounds:
   redis_data:

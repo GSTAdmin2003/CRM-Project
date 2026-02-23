@@ -1,10 +1,5 @@
 # CRM Serializers Package
 
-from .incoming_lead import (
-    IncomingLeadCreateSerializer,
-    IncomingLeadDetailSerializer,
-    IncomingLeadListSerializer,
-)
 from .kanban import (
     KanbanDataSerializer,
     KanbanStageSerializer,
@@ -13,6 +8,7 @@ from .kanban import (
 from .lead import (
     LeadCreateUpdateSerializer,
     LeadDetailSerializer,
+    LeadIncomingCreateSerializer,
     LeadListSerializer,
 )
 from .stage import (
@@ -30,6 +26,7 @@ __all__ = [
     "LeadListSerializer",
     "LeadDetailSerializer",
     "LeadCreateUpdateSerializer",
+    "LeadIncomingCreateSerializer",
     # Team serializers
     "SalesTeamListSerializer",
     "SalesTeamDetailSerializer",
@@ -37,10 +34,6 @@ __all__ = [
     # Stage serializers
     "LeadStageSerializer",
     "LeadStageCreateUpdateSerializer",
-    # Incoming lead serializers
-    "IncomingLeadListSerializer",
-    "IncomingLeadDetailSerializer",
-    "IncomingLeadCreateSerializer",
     # Kanban serializers
     "KanbanStageSerializer",
     "KanbanDataSerializer",

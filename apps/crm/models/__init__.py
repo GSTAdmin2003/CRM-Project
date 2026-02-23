@@ -1,4 +1,3 @@
-from apps.crm.models.incoming_lead import IncomingLead
 from apps.crm.models.lead import Lead
 from apps.crm.models.lead_activity import LeadActivity
 from apps.crm.models.lead_file import LeadFile
@@ -11,5 +10,4 @@ __all__ = [
     "Lead",
     "LeadActivity",
     "LeadFile",
-    "IncomingLead",
 ]

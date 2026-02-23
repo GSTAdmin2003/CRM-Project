@@ -154,6 +154,178 @@
             </div>
             {% endif %}
 
+            <!-- Transcript -->
+            {% if call.transcript %}
+            <div class="bg-white shadow rounded-lg p-6">
+                <div class="flex items-center justify-between mb-4">
+                    <h2 class="text-lg font-medium text-gray-900">
+                        <i class="fas fa-file-alt mr-2 text-green-600"></i>Transcript
+                        <span class="ml-2 text-xs font-normal px-2 py-0.5 rounded-full
+                            {% if call.transcript.status == 'completed' %}bg-green-100 text-green-700
+                            {% elif call.transcript.status == 'processing' %}bg-yellow-100 text-yellow-700
+                            {% elif call.transcript.status == 'failed' %}bg-red-100 text-red-700
+                            {% else %}bg-gray-100 text-gray-600{% endif %}">
+                            {{ call.transcript.get_status_display }}
+                        </span>
+                    </h2>
+                    <!-- Action buttons top-right -->
+                    <div class="flex items-center gap-2">
+                        {% if call.transcript.status == 'completed' %}
+                        <button onclick="openLangModal()"
+                                class="flex items-center gap-1 text-xs px-3 py-1.5 border border-indigo-300 text-indigo-600 hover:bg-indigo-50 rounded-md font-medium">
+                            <i class="fas fa-redo"></i> Retranscribe
+                        </button>
+                        {% elif call.transcript.status == 'processing' or call.transcript.status == 'pending' and call.transcript.language_code %}
+                        <button onclick="cancelTranscription()"
+                                class="flex items-center gap-1 text-xs px-3 py-1.5 border border-red-300 text-red-600 hover:bg-red-50 rounded-md font-medium">
+                            <i class="fas fa-times"></i> Cancel
+                        </button>
+                        {% elif call.transcript.status == 'failed' %}
+                        <button onclick="openLangModal()"
+                                class="flex items-center gap-1 text-xs px-3 py-1.5 bg-green-600 hover:bg-green-700 text-white rounded-md font-medium">
+                            <i class="fas fa-redo"></i> Retry
+                        </button>
+                        {% endif %}
+                    </div>
+                </div>
+
+                {% if call.transcript.status == 'completed' %}
+                {{ call.transcript.caller_words|json_script:"caller-words-data" }}
+                {{ call.transcript.agent_words|json_script:"agent-words-data" }}
+                <div class="space-y-4">
+                    {% if call.transcript.caller_text or call.transcript.caller_words %}
+                    <div>
+                        <p class="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Caller</p>
+                        <div id="caller-transcript" class="text-sm text-gray-900 bg-blue-50 rounded-lg p-3 leading-relaxed">{{ call.transcript.caller_text }}</div>
+                    </div>
+                    {% endif %}
+                    {% if call.transcript.agent_text or call.transcript.agent_words %}
+                    <div>
+                        <p class="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Agent</p>
+                        <div id="agent-transcript" class="text-sm text-gray-900 bg-indigo-50 rounded-lg p-3 leading-relaxed">{{ call.transcript.agent_text }}</div>
+                    </div>
+                    {% endif %}
+                    {% if not call.transcript.caller_text and not call.transcript.agent_text and not call.transcript.caller_words and not call.transcript.agent_words %}
+                    <p class="text-sm text-gray-400 italic">No speech detected in the recording.</p>
+                    {% endif %}
+                </div>
+                <script>
+                function renderTimed(words, containerId) {
+                    var el = document.getElementById(containerId);
+                    if (!el || !words || !words.length) return;
+                    var html = '', segStart = null, segText = '';
+                    words.forEach(function(w) {
+                        if (segStart === null) segStart = w.start;
+                        if (w.start - segStart > 5 && segText) {
+                            var m = Math.floor(segStart / 60), s = Math.floor(segStart % 60);
+                            html += '<span class="text-xs text-gray-400">[' + m + ':' + String(s).padStart(2, '0') + ']</span> ' + segText.trim() + '<br>';
+                            segStart = w.start; segText = '';
+                        }
+                        segText += w.text + ' ';
+                    });
+                    if (segText) {
+                        var m = Math.floor(segStart / 60), s = Math.floor(segStart % 60);
+                        html += '<span class="text-xs text-gray-400">[' + m + ':' + String(s).padStart(2, '0') + ']</span> ' + segText.trim();
+                    }
+                    el.innerHTML = html;
+                }
+                (function() {
+                    var callerData = document.getElementById('caller-words-data');
+                    var agentData  = document.getElementById('agent-words-data');
+                    if (callerData) renderTimed(JSON.parse(callerData.textContent), 'caller-transcript');
+                    if (agentData)  renderTimed(JSON.parse(agentData.textContent),  'agent-transcript');
+                })();
+                </script>
+
+                {% elif call.transcript.status == 'processing' %}
+                <div class="flex items-center text-sm text-yellow-700">
+                    <i class="fas fa-spinner fa-spin mr-2"></i>Transcription in progress...
+                </div>
+
+                {% elif call.transcript.status == 'failed' %}
+                <div class="text-sm text-red-600">
+                    <i class="fas fa-exclamation-circle mr-1"></i>
+                    Transcription failed: {{ call.transcript.error_message }}
+                </div>
+
+                {% elif call.transcript.status == 'pending' and not call.transcript.language_code %}
+                <div class="flex items-center justify-between">
+                    <p class="text-sm text-gray-500">Recording is ready. Choose a language to begin transcription.</p>
+                    <button onclick="openLangModal()"
+                            class="ml-4 bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-md text-sm font-medium whitespace-nowrap">
+                        <i class="fas fa-language mr-1"></i>Choose Language
+                    </button>
+                </div>
+
+                {% else %}
+                <div class="flex items-center text-sm text-gray-500">
+                    <i class="fas fa-clock mr-2"></i>Queued for transcription...
+                </div>
+                {% endif %}
+            </div>
+
+            <!-- Shared language selection modal -->
+            <div id="lang-modal" class="hidden fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50">
+                <div class="bg-white rounded-lg shadow-xl p-6 w-80">
+                    <h3 class="text-lg font-medium text-gray-900 mb-4" id="lang-modal-title">Select Language</h3>
+                    <form id="lang-form">
+                        {% csrf_token %}
+                        <div class="space-y-2 mb-4">
+                            <label class="flex items-center gap-3 p-3 rounded-lg border cursor-pointer hover:bg-gray-50">
+                                <input type="radio" name="language" value="en" class="text-indigo-600"
+                                       {% if call.transcript.language_code|slice:":2" == 'en' %}checked{% endif %}>
+                                <span class="text-sm font-medium">English</span>
+                            </label>
+                            <label class="flex items-center gap-3 p-3 rounded-lg border cursor-pointer hover:bg-gray-50">
+                                <input type="radio" name="language" value="ka" class="text-indigo-600"
+                                       {% if call.transcript.language_code|slice:":2" == 'ka' %}checked{% endif %}>
+                                <span class="text-sm font-medium">Georgian (ქართული)</span>
+                            </label>
+                        </div>
+                        <div class="flex gap-2">
+                            <button type="button" onclick="closeLangModal()"
+                                    class="flex-1 border border-gray-300 text-gray-700 px-4 py-2 rounded-md text-sm">Close</button>
+                            <button type="submit" id="lang-submit-btn"
+                                    class="flex-1 bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-md text-sm font-medium">
+                                Start Transcription
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+            <script>
+            function openLangModal() {
+                document.getElementById('lang-modal').classList.remove('hidden');
+            }
+            function closeLangModal() {
+                document.getElementById('lang-modal').classList.add('hidden');
+            }
+            function cancelTranscription() {
+                if (!confirm('Cancel transcription? You can start it again later.')) return;
+                fetch("{% url 'calls:cancel_transcription' call.pk %}", {
+                    method: 'POST',
+                    headers: {'X-CSRFToken': getCsrfToken()},
+                }).then(function(r) { return r.json(); }).then(function(data) {
+                    if (data.success) location.reload();
+                    else alert('Error: ' + (data.error || 'Unknown error'));
+                });
+            }
+            document.getElementById('lang-form').addEventListener('submit', function(e) {
+                e.preventDefault();
+                var lang = this.querySelector('input[name=language]:checked');
+                if (!lang) { alert('Please select a language.'); return; }
+                fetch("{% url 'calls:start_transcription' call.pk %}", {
+                    method: 'POST',
+                    headers: {'X-CSRFToken': getCsrfToken(), 'Content-Type': 'application/x-www-form-urlencoded'},
+                    body: 'language=' + lang.value,
+                }).then(function(r) { return r.json(); }).then(function(data) {
+                    if (data.success) location.reload();
+                    else alert('Error: ' + (data.error || 'Unknown error'));
+                });
+            });
+            </script>
+            {% endif %}
+
             <!-- Notes -->
             <div class="bg-white shadow rounded-lg p-6">
                 <h2 class="text-lg font-medium text-gray-900 mb-4">
@@ -261,9 +433,9 @@
                 </h2>
 
                 <div class="space-y-2">
-                    <a href="{% url 'calls:dialpad' %}?number={% if call.direction == 'inbound' %}{{ call.from_number }}{% else %}{{ call.to_number }}{% endif %}" class="block w-full bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-md text-sm font-medium text-center">
+                    <button onclick="document.getElementById('phone-number').value='{% if call.direction == 'inbound' %}{{ call.from_number }}{% else %}{{ call.to_number }}{% endif %}'; if(!dialpadOpen) toggleDialpadPanel();" class="block w-full bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-md text-sm font-medium text-center">
                         <i class="fas fa-phone mr-2"></i>Call Back
-                    </a>
+                    </button>
                     {% if call.contact %}
                     <a href="{% url 'contacts:contact_detail' call.contact.pk %}" class="block w-full bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-md text-sm font-medium text-center">
                         <i class="fas fa-user mr-2"></i>View Contact
@@ -281,7 +453,7 @@ function hangupCall() {
         fetch('{% url "calls:hangup_call" call.pk %}', {
             method: 'POST',
             headers: {
-                'X-CSRFToken': '{{ csrf_token }}',
+                'X-CSRFToken': getCsrfToken(),
             },
         })
         .then(response => response.json())
@@ -305,7 +477,7 @@ document.getElementById('notes-form').addEventListener('submit', function(e) {
         method: 'POST',
         body: formData,
         headers: {
-            'X-CSRFToken': '{{ csrf_token }}',
+            'X-CSRFToken': getCsrfToken(),
         },
     })
     .then(response => response.json())

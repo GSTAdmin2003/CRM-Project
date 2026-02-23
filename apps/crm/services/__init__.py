@@ -1,6 +1,5 @@
 # CRM Services Package
 
-from .incoming_lead_service import IncomingLeadService
 from .kanban_service import KanbanService
 from .lead_service import LeadService
 from .stage_service import StageService
@@ -10,6 +9,5 @@ __all__ = [
     "LeadService",
     "KanbanService",
     "TeamService",
-    "IncomingLeadService",
     "StageService",
 ]

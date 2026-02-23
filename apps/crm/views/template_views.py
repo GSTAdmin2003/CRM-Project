@@ -22,7 +22,7 @@ from apps.contacts.models import Company, Contact
 from core.models import User
 
 from ..forms import IncomingLeadForm
-from ..models import IncomingLead, Lead, LeadActivity, LeadStage, SalesTeam
+from ..models import Lead, LeadActivity, LeadStage, SalesTeam
 
 from datetime import timedelta
 
@@ -351,6 +351,14 @@ def api_quick_activity_create(request):
         return JsonResponse({'error': str(e)}, status=500)
 
 
+@csrf_exempt
+@login_required
+@require_http_methods(["POST"])
+def api_lead_quick_activity_create(request):
+    """API endpoint for quick activity creation from lead form (alias for api_quick_activity_create)"""
+    return api_quick_activity_create(request)
+
+
 # Regular views (for non-API usage)
 @login_required
 def lead_list(request):
@@ -598,6 +606,13 @@ def lead_edit(request, pk):
     from apps.activities.models import ActivityType
     activity_types = ActivityType.objects.filter(is_active=True)
 
+    # WhatsApp conversation linked to this lead
+    try:
+        from apps.messaging.models import WhatsAppConversation
+        wa_conversation = lead.whatsapp_conversations.select_related().prefetch_related('messages').first()
+    except Exception:
+        wa_conversation = None
+
     return render(request, 'crm/lead_form.html', {
         'form': form,
         'lead': lead,
@@ -611,6 +626,7 @@ def lead_edit(request, pk):
         'nav_params': nav_params,
         'current_lead_index': nav_lead_ids.index(lead.pk) + 1 if lead.pk in nav_lead_ids else 0,
         'total_leads_count': len(nav_lead_ids),
+        'wa_conversation': wa_conversation,
     })
 
 
@@ -639,6 +655,26 @@ def lead_delete(request, pk):
         return JsonResponse({'error': 'Method not allowed'}, status=405)
 
     return render(request, 'crm/lead_confirm_delete.html', {'lead': lead})
+
+
+@login_required
+@require_http_methods(["POST"])
+def send_sales_pitch(request, pk):
+    """Send sales pitch PDF via WhatsApp for an opportunity"""
+    lead = get_object_or_404(Lead, pk=pk)
+    if not lead.can_be_edited_by(request.user):
+        messages.error(request, 'Permission denied.')
+        return redirect('crm:opportunity_edit', pk=pk)
+
+    try:
+        from apps.messaging.services import WhatsAppService
+        from core.exceptions import NotFoundError, ValidationError as ServiceValidationError
+        WhatsAppService.send_sales_pitch(lead_id=pk, sent_by=request.user)
+        messages.success(request, 'Sales pitch sent successfully via WhatsApp!')
+    except (ServiceValidationError, Exception) as e:
+        messages.error(request, str(e))
+
+    return redirect('crm:opportunity_edit', pk=pk)
 
 
 @login_required
@@ -1019,11 +1055,11 @@ def incoming_lead_list(request):
 
     # Base queryset based on user permissions
     if request.user.is_sales_executive():
-        leads = IncomingLead.objects.all()
+        leads = Lead.objects.filter(lead_type=Lead.TYPE_LEAD)
     elif request.user.is_sales_manager() and request.user.sales_team:
-        leads = IncomingLead.objects.filter(sales_team=request.user.sales_team)
+        leads = Lead.objects.filter(lead_type=Lead.TYPE_LEAD, sales_team=request.user.sales_team)
     else:
-        leads = IncomingLead.objects.filter(assigned_to=request.user)
+        leads = Lead.objects.filter(lead_type=Lead.TYPE_LEAD, assigned_to=request.user)
 
     # Apply status filter
     if status_filter != 'all':
@@ -1048,7 +1084,7 @@ def incoming_lead_list(request):
         'status_filter': status_filter,
         'team_filter': team_filter,
         'teams': teams,
-        'status_choices': IncomingLead.STATUS_CHOICES,
+        'status_choices': Lead.STATUS_CHOICES,
     }
 
     return render(request, 'crm/incoming_lead_list.html', context)
@@ -1143,7 +1179,7 @@ def incoming_lead_create(request):
 @login_required
 def incoming_lead_detail(request, pk):
     """Detail view for incoming lead"""
-    lead = get_object_or_404(IncomingLead, pk=pk)
+    lead = get_object_or_404(Lead, lead_type=Lead.TYPE_LEAD, pk=pk)
 
     # Check permissions
     if not lead.can_be_viewed_by(request.user):
@@ -1160,7 +1196,7 @@ def incoming_lead_detail(request, pk):
 @login_required
 def incoming_lead_edit(request, pk):
     """Edit incoming lead"""
-    lead = get_object_or_404(IncomingLead, pk=pk)
+    lead = get_object_or_404(Lead, lead_type=Lead.TYPE_LEAD, pk=pk)
 
     # Check permissions
     if not lead.can_be_edited_by(request.user):
@@ -1249,7 +1285,7 @@ def incoming_lead_edit(request, pk):
 @login_required
 def incoming_lead_delete(request, pk):
     """Delete incoming lead"""
-    lead = get_object_or_404(IncomingLead, pk=pk)
+    lead = get_object_or_404(Lead, lead_type=Lead.TYPE_LEAD, pk=pk)
 
     # Check permissions
     if not lead.can_be_edited_by(request.user):
@@ -1279,7 +1315,7 @@ def incoming_lead_delete(request, pk):
 @login_required
 def incoming_lead_convert(request, pk):
     """Convert incoming lead to opportunity"""
-    lead = get_object_or_404(IncomingLead, pk=pk)
+    lead = get_object_or_404(Lead, lead_type=Lead.TYPE_LEAD, pk=pk)
 
     # Check permissions
     if not lead.can_be_edited_by(request.user):
@@ -1288,8 +1324,9 @@ def incoming_lead_convert(request, pk):
 
     if lead.status == 'converted':
         messages.warning(request, 'This lead has already been converted.')
-        if lead.converted_opportunity:
-            return redirect('crm:opportunity_edit', pk=lead.converted_opportunity.pk)
+        converted = lead.converted_opportunities.first()
+        if converted:
+            return redirect('crm:opportunity_edit', pk=converted.pk)
         return redirect('crm:lead_detail', pk=lead.pk)
 
     if request.method == 'POST':
@@ -1318,6 +1355,7 @@ def incoming_lead_convert(request, pk):
 
         # Create opportunity from lead
         opportunity = Lead.objects.create(
+            lead_type=Lead.TYPE_OPPORTUNITY,
             title=title,
             full_name=full_name,
             email=email,
@@ -1333,10 +1371,11 @@ def incoming_lead_convert(request, pk):
             notes=f"Converted from incoming lead.\n\nOriginal Message:\n{lead.message}\n\n{lead.notes if lead.notes else ''}"
         )
 
-        # Update lead status
+        # Update lead status and link converted opportunity
         lead.status = 'converted'
-        lead.converted_opportunity = opportunity
         lead.save()
+        opportunity.converted_from = lead
+        opportunity.save(update_fields=['converted_from'])
 
         messages.success(request, f'Lead converted to opportunity successfully.')
         return redirect('crm:opportunity_edit', pk=opportunity.pk)
@@ -1433,6 +1472,56 @@ def lead_import_confirm(request):
     request.session['lead_import_results'] = results
 
     return redirect('crm:opportunity_import')
+
+
+@login_required
+@require_http_methods(["POST"])
+def leads_bulk_action(request):
+    """Bulk action on opportunities"""
+    action = request.POST.get('action')
+    selected_ids = request.POST.getlist('selected_ids')
+
+    if not selected_ids:
+        messages.warning(request, 'No opportunities selected.')
+        return redirect('crm:opportunity_list')
+
+    leads = Lead.objects.filter(
+        id__in=selected_ids, lead_type=Lead.TYPE_OPPORTUNITY
+    )
+
+    if action == 'delete':
+        count = leads.count()
+        leads.delete()
+        messages.success(request, f'{count} opportunity(ies) deleted successfully.')
+    else:
+        messages.warning(request, 'Unknown action.')
+
+    return redirect('crm:opportunity_list')
+
+
+@login_required
+@require_http_methods(["POST"])
+def incoming_leads_bulk_action(request):
+    """Bulk action on incoming leads"""
+    action = request.POST.get('action')
+    selected_ids = request.POST.getlist('selected_ids')
+
+    if not selected_ids:
+        messages.warning(request, 'No leads selected.')
+        return redirect('crm:lead_list')
+
+    leads = Lead.objects.filter(
+        id__in=selected_ids, lead_type=Lead.TYPE_LEAD
+    )
+
+    if action == 'delete':
+        count = leads.count()
+        leads.delete()
+        messages.success(request, f'{count} lead(s) deleted successfully.')
+    else:
+        messages.warning(request, 'Unknown action.')
+
+    return redirect('crm:lead_list')
 
 
 @login_required

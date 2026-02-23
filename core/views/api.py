@@ -72,9 +72,10 @@ def api_autocomplete_search(request):
 
     config = AUTOCOMPLETE_REGISTRY[model_name]
 
-    # Get the model class
+    # Resolve actual model class (may differ from registry key via model_class override)
+    actual_model_name = config.get('model_class', model_name)
     try:
-        app_label, model_class_name = model_name.split('.')
+        app_label, model_class_name = actual_model_name.split('.')
         Model = apps.get_model(app_label, model_class_name)
     except (ValueError, LookupError) as e:
         return JsonResponse({
@@ -89,8 +90,10 @@ def api_autocomplete_search(request):
     secondary_field = config.get('secondary_field')
     id_display_field = config.get('id_display_field')
 
-    # Start with base queryset
+    # Start with base queryset, applying any mandatory filters from registry
     queryset = Model.objects.all()
+    if config.get('filter_kwargs'):
+        queryset = queryset.filter(**config['filter_kwargs'])
 
     # Apply filter_active if configured
     if config.get('filter_active'):

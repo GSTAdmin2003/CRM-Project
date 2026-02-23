@@ -22,19 +22,20 @@ def handle_team_stage_deleted(sender, instance, **kwargs):
     or back to global stages if no team stages remain.
     """
     # Only trigger for team-specific stages (not global stages)
-    if instance.sales_team:
+    # Use sales_team_id to avoid a DB lookup when the team may already be deleted (cascade).
+    if instance.sales_team_id:
         from .models import Lead, LeadActivity
         from django.db.models import Q
         
-        # Find leads that were on the deleted stage
+        # Find leads that were on the deleted stage (use _id to avoid re-fetching deleted team)
         leads_on_deleted_stage = Lead.objects.filter(
-            Q(sales_team=instance.sales_team) | Q(assigned_to__sales_team=instance.sales_team),
+            Q(sales_team_id=instance.sales_team_id) | Q(assigned_to__sales_team_id=instance.sales_team_id),
             stage=instance
         )
-        
+
         # Get remaining team stages (excluding closed stages)
         remaining_team_stages = LeadStage.objects.filter(
-            sales_team=instance.sales_team,
+            sales_team_id=instance.sales_team_id,
             is_active=True,
             is_closed_stage=False
         ).order_by('probability', 'order')

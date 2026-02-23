@@ -49,22 +49,28 @@ class LeadFileNestedSerializer(serializers.ModelSerializer):
 class LeadListSerializer(serializers.ModelSerializer):
     """Lightweight serializer for list views."""
 
-    stage_name = serializers.CharField(source="stage.name", read_only=True)
+    stage_name = serializers.CharField(source="stage.name", read_only=True, default="")
     assigned_to_name = serializers.CharField(
         source="assigned_to.get_full_name", read_only=True, default=""
+    )
+    company_name_display = serializers.CharField(
+        source="company.display_name", read_only=True, default=""
     )
 
     class Meta:
         model = Lead
         fields = [
             "id",
+            "lead_type",
             "title",
             "company_name",
+            "company_name_display",
             "estimated_value",
             "probability",
             "stage_name",
             "assigned_to_name",
             "status",
+            "message",
             "created_at",
         ]
 
@@ -83,11 +89,15 @@ class LeadDetailSerializer(serializers.ModelSerializer):
     )
     contact_full_name = serializers.CharField(read_only=True)
     weighted_value = serializers.FloatField(read_only=True)
+    converted_from_id = serializers.IntegerField(
+        source="converted_from.id", read_only=True, default=None
+    )
 
     class Meta:
         model = Lead
         fields = [
             "id",
+            "lead_type",
             "title",
             "full_name",
             "first_name",
@@ -96,6 +106,7 @@ class LeadDetailSerializer(serializers.ModelSerializer):
             "phone",
             "company_name",
             "position",
+            "message",
             "stage",
             "estimated_value",
             "probability",
@@ -109,6 +120,7 @@ class LeadDetailSerializer(serializers.ModelSerializer):
             "sales_team",
             "company",
             "contact",
+            "converted_from_id",
             "created_by",
             "created_by_name",
             "contact_full_name",
@@ -129,7 +141,7 @@ class LeadDetailSerializer(serializers.ModelSerializer):
 
 
 class LeadCreateUpdateSerializer(serializers.Serializer):
-    """Write serializer -- delegates to LeadService."""
+    """Write serializer for opportunities -- delegates to LeadService."""
 
     title = serializers.CharField(max_length=200)
     full_name = serializers.CharField(max_length=200, required=False, allow_blank=True, default="")
@@ -152,3 +164,17 @@ class LeadCreateUpdateSerializer(serializers.Serializer):
     company_id = serializers.IntegerField(required=False, allow_null=True)
     contact_id = serializers.IntegerField(required=False, allow_null=True)
     sales_team_id = serializers.IntegerField(required=False, allow_null=True)
+
+
+class LeadIncomingCreateSerializer(serializers.Serializer):
+    """Write serializer for incoming leads -- delegates to LeadService.create_incoming_lead()."""
+
+    company_id = serializers.IntegerField(required=False, allow_null=True)
+    contact_id = serializers.IntegerField(required=False, allow_null=True)
+    message = serializers.CharField(required=False, allow_blank=True, default="")
+    sales_team_id = serializers.IntegerField(required=False, allow_null=True)
+    assigned_to_id = serializers.IntegerField(required=False, allow_null=True)
+    status = serializers.ChoiceField(
+        choices=Lead.STATUS_CHOICES, required=False, default="new"
+    )
+    notes = serializers.CharField(required=False, allow_blank=True, default="")

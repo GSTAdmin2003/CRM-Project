@@ -2,7 +2,6 @@ from django.urls import include, path
 from rest_framework.routers import DefaultRouter
 
 from .views import (
-    incoming_lead_views,
     kanban_views,
     lead_views,
     stage_views,
@@ -14,7 +13,6 @@ router = DefaultRouter()
 router.register(r"leads", lead_views.LeadViewSet, basename="lead")
 router.register(r"teams", team_views.SalesTeamViewSet, basename="salesteam")
 router.register(r"stages", stage_views.LeadStageViewSet, basename="leadstage")
-router.register(r"incoming-leads", incoming_lead_views.IncomingLeadViewSet, basename="incoming-lead")
 
 app_name = "crm"
 
@@ -69,6 +67,11 @@ urlpatterns = [
         template_views.api_quick_activity_create,
         name="api_quick_activity_create",
     ),
+    path(
+        "api/activity/lead-quick-create/",
+        template_views.api_lead_quick_activity_create,
+        name="api_lead_quick_activity_create",
+    ),
 
     # Dashboard
     path("", template_views.crm_dashboard, name="dashboard"),
@@ -78,6 +81,7 @@ urlpatterns = [
 
     # Opportunity management
     path("opportunities/", template_views.lead_list, name="opportunity_list"),
+    path("opportunities/bulk-action/", template_views.leads_bulk_action, name="opportunity_bulk_action"),
     path("opportunities/create/", template_views.lead_create, name="opportunity_create"),
     path("opportunities/import/", template_views.lead_import, name="opportunity_import"),
     path(
@@ -102,6 +106,7 @@ urlpatterns = [
     ),  # Redirect detail to edit
     path("opportunities/<int:pk>/edit/", template_views.lead_edit, name="opportunity_edit"),
     path("opportunities/<int:pk>/delete/", template_views.lead_delete, name="opportunity_delete"),
+    path("opportunities/<int:pk>/send-pitch/", template_views.send_sales_pitch, name="send_sales_pitch"),
 
     # Sales Team management
     path("teams/", template_views.team_list, name="team_list"),
@@ -128,8 +133,9 @@ urlpatterns = [
 
     # Incoming leads management
     path("leads/", template_views.incoming_lead_list, name="lead_list"),
+    path("leads/bulk-action/", template_views.incoming_leads_bulk_action, name="lead_bulk_action"),
     path("leads/create/", template_views.incoming_lead_create, name="lead_create"),
-    path("leads/<int:pk>/", template_views.incoming_lead_detail, name="lead_detail"),
+    path("leads/<int:pk>/", template_views.incoming_lead_edit, name="lead_detail"),
     path("leads/<int:pk>/edit/", template_views.incoming_lead_edit, name="lead_edit"),
     path("leads/<int:pk>/delete/", template_views.incoming_lead_delete, name="lead_delete"),
     path("leads/<int:pk>/convert/", template_views.incoming_lead_convert, name="lead_convert"),

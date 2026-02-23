@@ -68,21 +68,8 @@ def call_detail(request, pk):
 
 @login_required
 def dialpad(request):
-    """Display dialpad for making calls"""
-    from apps.contacts.models import Contact
-
-    recent_contacts = Contact.objects.all()[:10]
-
-    # Agent's WebRTC extension (default 100)
-    agent_extension = getattr(request.user, "extension", None) or "100"
-
-    context = {
-        "recent_contacts": recent_contacts,
-        "ws_url": "ws://localhost:8088/ws",
-        "sip_extension": agent_extension,
-        "sip_domain": "localhost",
-    }
-    return render(request, "calls/dialpad.html", context)
+    """Redirect to call list — dialpad is now in the navbar."""
+    return redirect("calls:call_list")
 
 
 @login_required
@@ -145,6 +132,7 @@ def initiate_call(request):
             "success": True,
             "call_id": call.id,
             "channel_id": call.asterisk_channel_id,
+            "activity_id": call.activity_id,
         })
     except Exception as e:
         return JsonResponse({"error": str(e)}, status=400 if "required" in str(e) else 500)
@@ -245,32 +233,208 @@ def active_calls(request):
     return JsonResponse({"calls": calls_data})
 
 
+def _calls_xlsx_response(ids):
+    """Build a formatted .xlsx response for the given call IDs."""
+    import io
+
+    from openpyxl import Workbook
+    from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
+    from openpyxl.utils import get_column_letter
+
+    calls = Call.objects.filter(id__in=ids).select_related("contact", "user")
+    headers = ["Direction", "From", "To", "Contact", "Status", "Duration (s)", "User", "Started At"]
+    rows = [
+        [
+            call.direction,
+            call.from_number or "",
+            call.to_number or "",
+            call.contact.name if call.contact else "",
+            call.status,
+            call.duration or "",
+            call.user.get_full_name() if call.user else "",
+            call.started_at.strftime("%Y-%m-%d %H:%M") if call.started_at else "",
+        ]
+        for call in calls
+    ]
+
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "Calls"
+    header_fill = PatternFill(start_color="4F46E5", end_color="4F46E5", fill_type="solid")
+    header_font = Font(bold=True, color="FFFFFF", size=11)
+    alt_fill = PatternFill(start_color="F5F3FF", end_color="F5F3FF", fill_type="solid")
+    thin = Side(style="thin", color="D1D5DB")
+    border = Border(left=thin, right=thin, top=thin, bottom=thin)
+
+    for col_idx, h in enumerate(headers, 1):
+        cell = ws.cell(row=1, column=col_idx, value=h)
+        cell.font = header_font
+        cell.fill = header_fill
+        cell.border = border
+        cell.alignment = Alignment(horizontal="center", vertical="center")
+
+    for row_idx, row in enumerate(rows, 2):
+        fill = alt_fill if row_idx % 2 == 0 else None
+        for col_idx, value in enumerate(row, 1):
+            cell = ws.cell(row=row_idx, column=col_idx, value=value)
+            cell.border = border
+            cell.alignment = Alignment(vertical="center")
+            if fill:
+                cell.fill = fill
+
+    for col_idx, h in enumerate(headers, 1):
+        col_letter = get_column_letter(col_idx)
+        max_len = len(h)
+        for row_idx in range(2, ws.max_row + 1):
+            val = ws.cell(row=row_idx, column=col_idx).value
+            if val:
+                max_len = max(max_len, len(str(val)))
+        ws.column_dimensions[col_letter].width = min(max_len + 4, 50)
+
+    ws.freeze_panes = "A2"
+    ws.row_dimensions[1].height = 22
+
+    buf = io.BytesIO()
+    wb.save(buf)
+    buf.seek(0)
+    response = HttpResponse(
+        buf.read(),
+        content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    )
+    response["Content-Disposition"] = 'attachment; filename="calls_export.xlsx"'
+    return response
+
+
+@login_required
+@require_POST
+def calls_bulk_action(request):
+    """Handle bulk actions on calls."""
+    import csv
+
+    from core.exceptions import NotFoundError, PermissionDeniedError, ValidationError
+
+    action = request.POST.get("action")
+    ids = [int(i) for i in request.POST.getlist("selected_ids") if i.isdigit()]
+    if not ids:
+        messages.warning(request, "No items selected.")
+        return redirect("calls:call_list")
+    try:
+        if action == "export_csv":
+            calls = Call.objects.filter(id__in=ids).select_related("contact", "user")
+            response = HttpResponse(content_type="text/csv")
+            response["Content-Disposition"] = 'attachment; filename="calls_export.csv"'
+            writer = csv.writer(response)
+            writer.writerow(
+                ["Direction", "From", "To", "Contact", "Status", "Duration (s)", "User", "Started At"]
+            )
+            for call in calls:
+                writer.writerow([
+                    call.direction,
+                    call.from_number or "",
+                    call.to_number or "",
+                    call.contact.name if call.contact else "",
+                    call.status,
+                    call.duration or "",
+                    call.user.get_full_name() if call.user else "",
+                    call.started_at.strftime("%Y-%m-%d %H:%M") if call.started_at else "",
+                ])
+            return response
+        elif action == "export_excel":
+            return _calls_xlsx_response(ids)
+        elif action == "delete":
+            count = CallService.bulk_delete(ids=ids, user=request.user)
+            messages.success(request, f"{count} call{'s' if count != 1 else ''} deleted.")
+        else:
+            messages.warning(request, "Unknown action.")
+    except (NotFoundError, PermissionDeniedError, ValidationError) as e:
+        messages.error(request, str(e))
+    return redirect("calls:call_list")
+
+
+WEEKDAY_CHOICES = [
+    ("mon", "Monday"),
+    ("tue", "Tuesday"),
+    ("wed", "Wednesday"),
+    ("thu", "Thursday"),
+    ("fri", "Friday"),
+    ("sat", "Saturday"),
+    ("sun", "Sunday"),
+]
+
+
 class SIPSettingsForm(forms.ModelForm):
     password = forms.CharField(
         widget=forms.PasswordInput(render_value=True, attrs={"autocomplete": "new-password"}),
         required=False,
     )
+    working_days_choices = forms.MultipleChoiceField(
+        choices=WEEKDAY_CHOICES,
+        widget=forms.CheckboxSelectMultiple,
+        required=False,
+        label="Working Days",
+    )
 
     class Meta:
         model = SIPSettings
-        fields = ["server_ip", "server_port", "username", "caller_id", "is_active", "hold_music"]
+        fields = [
+            "server_ip", "server_port", "username", "caller_id", "is_active",
+            "hold_music", "welcome_sound", "non_working_hours_sound",
+            "working_hours_start", "working_hours_end",
+        ]
+        widgets = {
+            "working_hours_start": forms.TimeInput(
+                format="%H:%M",
+                attrs={"type": "time", "class": "form-control"},
+            ),
+            "working_hours_end": forms.TimeInput(
+                format="%H:%M",
+                attrs={"type": "time", "class": "form-control"},
+            ),
+        }
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         if self.instance and self.instance.pk:
             self.fields["password"].initial = self.instance.password
+            # Populate working_days_choices from CSV field
+            if self.instance.working_days:
+                self.fields["working_days_choices"].initial = [
+                    d.strip() for d in self.instance.working_days.split(",") if d.strip()
+                ]
         else:
             self.fields["password"].required = True
+
+    def _validate_sound_field(self, field_name):
+        sound = self.cleaned_data.get(field_name)
+        if sound and hasattr(sound, "name"):
+            ext = sound.name.rsplit(".", 1)[-1].lower() if "." in sound.name else ""
+            if ext not in ("mp3", "wav"):
+                self.add_error(field_name, "Only mp3 and wav files are supported.")
 
     def clean(self):
         cleaned = super().clean()
 
-        # Validate hold_music file extension
-        hold_music = cleaned.get("hold_music")
-        if hold_music and hasattr(hold_music, "name"):
-            ext = hold_music.name.rsplit(".", 1)[-1].lower() if "." in hold_music.name else ""
-            if ext not in ("mp3", "wav"):
-                self.add_error("hold_music", "Only mp3 and wav files are supported.")
+        # Validate sound file extensions
+        self._validate_sound_field("hold_music")
+        self._validate_sound_field("welcome_sound")
+        self._validate_sound_field("non_working_hours_sound")
+
+        # Convert working_days_choices to CSV string
+        days = cleaned.get("working_days_choices", [])
+        cleaned["working_days"] = ",".join(days)
+
+        # Validate working hours: both start+end required together
+        start = cleaned.get("working_hours_start")
+        end = cleaned.get("working_hours_end")
+        if start and not end:
+            self.add_error("working_hours_end", "End time is required when start time is set.")
+        if end and not start:
+            self.add_error("working_hours_start", "Start time is required when end time is set.")
+        if (start and end) and not days:
+            self.add_error(
+                "working_days_choices",
+                "Select at least one working day when hours are set."
+            )
 
         server_ip = cleaned.get("server_ip")
         server_port = cleaned.get("server_port")
@@ -288,6 +452,19 @@ class SIPSettingsForm(forms.ModelForm):
         if not cleaned.get("is_active", True):
             return cleaned
 
+        # Skip SIP validation if credentials haven't changed (avoids blocking
+        # saves for schedule/sound-only changes when SIP server is slow/flaky)
+        if self.instance and self.instance.pk:
+            creds_changed = (
+                server_ip != self.instance.server_ip
+                or server_port != self.instance.server_port
+                or username != self.instance.username
+                or (cleaned.get("password") and cleaned["password"] != self.instance.password)
+                or cleaned.get("is_active") != self.instance.is_active
+            )
+            if not creds_changed:
+                return cleaned
+
         from ..sip_validator import validate_sip_credentials
 
         is_valid, error = validate_sip_credentials(
@@ -303,6 +480,10 @@ class SIPSettingsForm(forms.ModelForm):
         password = self.cleaned_data.get("password")
         if password:
             instance.password = password  # uses the encrypting setter
+        # Explicitly set schedule fields from cleaned_data
+        instance.working_days = self.cleaned_data.get("working_days", "")
+        instance.working_hours_start = self.cleaned_data.get("working_hours_start")
+        instance.working_hours_end = self.cleaned_data.get("working_hours_end")
         if commit:
             instance.save()
         return instance
@@ -311,7 +492,7 @@ class SIPSettingsForm(forms.ModelForm):
 @login_required
 def sip_settings_view(request):
     """SIP credentials settings page"""
-    from ..asterisk_config import apply_moh_settings, apply_sip_settings
+    from ..asterisk_config import apply_moh_settings, apply_schedule_settings, apply_sip_settings
 
     try:
         sip = request.user.sip_settings
@@ -323,8 +504,9 @@ def sip_settings_view(request):
             if sip:
                 sip.delete()
                 apply_sip_settings(None)
+                apply_schedule_settings(None)
                 messages.success(request, "SIP credentials deleted. Asterisk config cleared.")
-            return redirect("settings_voip")
+            return redirect("settings:voip:sip_credentials")
 
         # Handle hold music removal
         if "remove_hold_music" in request.POST and sip and sip.hold_music:
@@ -333,10 +515,52 @@ def sip_settings_view(request):
             sip.save()
             apply_moh_settings(sip)
             messages.success(request, "Hold music removed. Default music will be used.")
-            return redirect("settings_voip")
+            return redirect("settings:voip:sip_credentials")
+
+        # Handle welcome sound removal
+        if "remove_welcome_sound" in request.POST and sip and sip.welcome_sound:
+            sip.welcome_sound.delete(save=False)
+            sip.welcome_sound = None
+            sip.save()
+            apply_schedule_settings(sip)
+            messages.success(request, "Welcome sound removed.")
+            return redirect("settings:voip:sip_credentials")
+
+        # Handle non-working hours sound removal
+        if "remove_non_working_sound" in request.POST and sip and sip.non_working_hours_sound:
+            sip.non_working_hours_sound.delete(save=False)
+            sip.non_working_hours_sound = None
+            sip.save()
+            apply_schedule_settings(sip)
+            messages.success(request, "Non-working hours sound removed.")
+            return redirect("settings:voip:sip_credentials")
+
+        # Snapshot current trunk values BEFORE form binding modifies the instance
+        old_trunk = None
+        if sip:
+            old_trunk = {
+                "server_ip": sip.server_ip,
+                "server_port": sip.server_port,
+                "username": sip.username,
+                "is_active": sip.is_active,
+                "password": sip.password,
+            }
 
         form = SIPSettingsForm(request.POST, request.FILES, instance=sip)
         if form.is_valid():
+            # Detect if SIP trunk credentials changed (to avoid unnecessary PJSIP reload
+            # which drops the trunk registration and causes inbound calls to fail briefly)
+            trunk_changed = old_trunk is None  # new settings = always apply trunk
+            if old_trunk:
+                for field in ("server_ip", "server_port", "username", "is_active"):
+                    if form.cleaned_data.get(field) != old_trunk[field]:
+                        trunk_changed = True
+                        break
+                # Password change
+                pwd = form.cleaned_data.get("password")
+                if pwd and pwd != old_trunk["password"]:
+                    trunk_changed = True
+
             obj = form.save(commit=False)
             obj.user = request.user
             obj.save()
@@ -345,19 +569,100 @@ def sip_settings_view(request):
             if "hold_music" in request.FILES:
                 apply_moh_settings(obj)
 
-            if apply_sip_settings(obj):
-                messages.success(request, "SIP credentials saved and Asterisk reloaded.")
+            # Always apply schedule settings on save — the generated dialplan
+            # depends on working hours + sounds, and it's cheap to regenerate.
+            # This only reloads pbx_config (dialplan), NOT pjsip, so it's safe.
+            apply_schedule_settings(obj)
+
+            # Only reload PJSIP (trunk config) if credentials actually changed.
+            # Reloading res_pjsip.so drops the trunk registration temporarily,
+            # causing inbound calls to fail until the trunk re-registers.
+            if trunk_changed:
+                if apply_sip_settings(obj):
+                    messages.success(request, "SIP credentials saved and Asterisk reloaded.")
+                else:
+                    messages.warning(
+                        request,
+                        "SIP credentials saved but Asterisk reload failed. "
+                        "You may need to restart the Asterisk container.",
+                    )
             else:
-                messages.warning(
-                    request,
-                    "SIP credentials saved but Asterisk reload failed. "
-                    "You may need to restart the Asterisk container.",
-                )
-            return redirect("settings_voip")
+                messages.success(request, "Settings saved.")
+            return redirect("settings:voip:sip_credentials")
     else:
         form = SIPSettingsForm(instance=sip)
 
     return render(request, "calls/sip_settings.html", {
         "form": form,
         "sip_settings": sip,
+        "weekday_choices": WEEKDAY_CHOICES,
+        "current_section": "voip",
+        "current_page": "sip_credentials",
     })
+
+
+@login_required
+@require_POST
+def start_transcription(request, pk):
+    """Set language and trigger transcription (or re-transcription) for a call."""
+    from ..models import CallTranscript, LANGUAGE_TO_STT_CODE
+    from ..tasks import transcribe_call
+
+    call = get_object_or_404(Call, pk=pk)
+
+    language_short = request.POST.get('language', '')
+    lang_code = LANGUAGE_TO_STT_CODE.get(language_short, '')
+    if not lang_code:
+        return JsonResponse({'error': 'Invalid or missing language'}, status=400)
+
+    transcript, _ = CallTranscript.objects.get_or_create(call=call)
+
+    # Block if already processing to avoid double-submission
+    if transcript.status == CallTranscript.STATUS_PROCESSING:
+        return JsonResponse({'error': 'Transcription already in progress'}, status=400)
+
+    transcript.language_code = lang_code
+    transcript.status = CallTranscript.STATUS_PENDING
+    transcript.error_message = ''
+    transcript.save(update_fields=['language_code', 'status', 'error_message', 'updated_at'])
+
+    result = transcribe_call.delay(call.id)
+    transcript.celery_task_id = result.id
+    transcript.save(update_fields=['celery_task_id'])
+
+    return JsonResponse({'success': True})
+
+
+@login_required
+@require_POST
+def cancel_transcription(request, pk):
+    """Cancel a pending or processing transcription."""
+    from ..models import CallTranscript
+
+    call = get_object_or_404(Call, pk=pk)
+
+    try:
+        transcript = call.transcript
+    except CallTranscript.DoesNotExist:
+        return JsonResponse({'error': 'No transcript found'}, status=404)
+
+    if transcript.status not in (CallTranscript.STATUS_PENDING, CallTranscript.STATUS_PROCESSING):
+        return JsonResponse({'error': 'Transcript is not pending or processing'}, status=400)
+
+    # Revoke the Celery task if we have its ID
+    if transcript.celery_task_id:
+        try:
+            from celery import current_app
+            current_app.control.revoke(
+                transcript.celery_task_id, terminate=True, signal='SIGTERM'
+            )
+        except Exception:
+            pass  # Best-effort — reset status regardless
+
+    transcript.status = CallTranscript.STATUS_PENDING
+    transcript.language_code = ''
+    transcript.celery_task_id = ''
+    transcript.error_message = ''
+    transcript.save(update_fields=['status', 'language_code', 'celery_task_id', 'error_message', 'updated_at'])
+
+    return JsonResponse({'success': True})

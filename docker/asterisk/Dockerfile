@@ -6,7 +6,9 @@ RUN apk add --no-cache \
     asterisk-sample-config \
     asterisk-sounds-en \
     asterisk-sounds-moh \
-    asterisk-srtp
+    asterisk-srtp \
+    tzdata \
+    ffmpeg
 
 # Copy configuration files (overwrite defaults)
 COPY pjsip.conf /etc/asterisk/pjsip.conf
@@ -27,6 +29,10 @@ RUN mkdir -p /var/spool/asterisk/recording && \
 # Create custom MOH directory
 RUN mkdir -p /var/lib/asterisk/custom-moh && \
     chown asterisk:asterisk /var/lib/asterisk/custom-moh
+
+# Create custom sounds directory (welcome/non-working hours)
+RUN mkdir -p /var/lib/asterisk/custom-sounds && \
+    chown asterisk:asterisk /var/lib/asterisk/custom-sounds
 
 EXPOSE 5060/udp 8088 10000-10100/udp
 

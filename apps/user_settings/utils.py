@@ -95,7 +95,7 @@ def initialize_settings_navigation():
                 'name': 'users',
                 'display_name': 'User Management',
                 'description': 'Manage system users',
-                'url_name': 'settings:general:users',
+                'url_name': 'settings:users:list',
                 'icon': 'fas fa-users',
                 'order': 2,
             },

@@ -34,6 +34,7 @@ ALLOWED_HOSTS = os.getenv('ALLOWED_HOSTS', 'localhost,127.0.0.1').split(',')
 # Application definition
 
 DJANGO_APPS = [
+    'daphne',
     'django.contrib.admin',
     'django.contrib.auth',
     'django.contrib.contenttypes',
@@ -49,11 +50,13 @@ LOCAL_APPS = [
     'apps.activities',
     'apps.calls',
     'apps.user_settings',
+    'apps.messaging',
 ]
 
 THIRD_PARTY_APPS = [
     'rest_framework',
     'django_filters',
+    'channels',
 ]
 
 INSTALLED_APPS = DJANGO_APPS + LOCAL_APPS + THIRD_PARTY_APPS
@@ -82,6 +85,7 @@ TEMPLATES = [
                 'django.template.context_processors.request',
                 'django.contrib.auth.context_processors.auth',
                 'django.contrib.messages.context_processors.messages',
+                'apps.calls.context_processors.dialpad_context',
             ],
         },
     },
@@ -215,4 +219,23 @@ REST_FRAMEWORK = {
         'rest_framework.filters.SearchFilter',
         'rest_framework.filters.OrderingFilter',
     ],
+}
+
+# =============================================================================
+# WhatsApp / Meta Cloud API Configuration
+# Credentials are managed via Settings > WhatsApp in the UI (stored in DB).
+# =============================================================================
+
+# =============================================================================
+# Django Channels — WebSocket support
+# =============================================================================
+ASGI_APPLICATION = 'core.asgi.application'
+
+CHANNEL_LAYERS = {
+    'default': {
+        'BACKEND': 'channels_redis.core.RedisChannelLayer',
+        'CONFIG': {
+            'hosts': [('redis', 6379)],
+        },
+    },
 }

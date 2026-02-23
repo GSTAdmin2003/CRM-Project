@@ -137,6 +137,8 @@ class CallService:
 
         # Clean phone number -- remove spaces, dashes, etc.
         cleaned_number = "".join(c for c in phone_number if c.isdigit() or c == "+")
+        # Strip leading + so Asterisk dialplan _X. pattern can match
+        cleaned_number = cleaned_number.lstrip("+")
 
         if not cleaned_number:
             raise ValidationError("Phone number is invalid")
@@ -175,6 +177,23 @@ class CallService:
                 "channel_id": channel.id,
             },
         )
+
+        if lead_id:
+            from apps.activities.models import Activity, ActivityType
+
+            phone_call_type = ActivityType.objects.filter(name="Phone Call", is_active=True).first()
+            if phone_call_type:
+                activity = Activity.objects.create(
+                    lead_id=lead_id,
+                    activity_type=phone_call_type,
+                    title=f"Call to {cleaned_number}",
+                    scheduled_date=timezone.now().date(),
+                    status="planned",
+                    assigned_to=user,
+                    created_by=user,
+                )
+                call.activity = activity
+                call.save(update_fields=["activity", "updated_at"])
 
         return call
 
@@ -410,3 +429,15 @@ class CallService:
         call.opportunity = lead
         call.save(update_fields=["opportunity", "updated_at"])
         return call
+
+    @staticmethod
+    @transaction.atomic
+    def bulk_delete(*, ids: list[int], user) -> int:
+        """Delete calls by ID list scoped by user role. Returns count deleted."""
+        if user.is_sales_executive():
+            qs = Call.objects.filter(id__in=ids)
+        else:
+            qs = Call.objects.filter(id__in=ids, user=user)
+        count = qs.count()
+        qs.delete()
+        return count

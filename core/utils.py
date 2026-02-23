@@ -5,6 +5,61 @@ from django.conf import settings
 from .models import AppRegistry, Role
 
 
+def normalize_phone(phone: str) -> str:
+    """Normalize a phone number to E.164 format (+XXXXXXXXX) on save.
+
+    Reads the system default country code from SystemConfiguration
+    (key: 'default_country_code') to handle local numbers without a prefix.
+
+    Rules:
+      - Empty/blank input → returned as-is (no change)
+      - Already starts with '+' → strip non-digit chars, keep as E.164
+      - Starts with '00' → treat as international prefix (00 → +)
+      - Otherwise: prepend default country code if configured
+        - Leading '0' (trunk prefix) is stripped before prepending cc
+        - If number already starts with cc digits → just add '+'
+    """
+    if not phone or not phone.strip():
+        return phone
+
+    # Lazy import to avoid circular deps at module load time
+    try:
+        from apps.user_settings.models import SystemConfiguration
+        default_cc = SystemConfiguration.get_setting("default_country_code", default="")
+    except Exception:
+        default_cc = ""
+
+    cleaned = (
+        phone.strip()
+        .replace(" ", "")
+        .replace("-", "")
+        .replace("(", "")
+        .replace(")", "")
+        .replace(".", "")
+    )
+
+    if cleaned.startswith("+"):
+        return cleaned  # Already E.164
+
+    if cleaned.startswith("00"):
+        return "+" + cleaned[2:]  # International with 00 prefix
+
+    if not default_cc:
+        return phone  # Nothing to infer from — leave as entered
+
+    cc = default_cc.strip().lstrip("+").lstrip("0")
+    if not cc:
+        return phone
+
+    if cleaned.startswith(cc):
+        return "+" + cleaned  # Already contains country code digits
+
+    if cleaned.startswith("0"):
+        return "+" + cc + cleaned[1:]  # Local trunk prefix — strip 0, prepend cc
+
+    return "+" + cc + cleaned  # Bare local number — prepend cc
+
+
 def discover_and_register_apps():
     """Discover apps in the apps directory and register them"""
     apps_dir = os.path.join(settings.BASE_DIR, 'apps')
@@ -90,7 +145,7 @@ def setup_default_apps():
             'display_name': 'Settings',
             'description': 'System configuration and user management',
             'icon': 'settings-icon.svg',
-            'url_name': 'settings:index',
+            'url_name': 'settings:home',
             'required_roles': ['Owner'],
         },
     ]

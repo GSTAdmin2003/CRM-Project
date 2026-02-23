@@ -1,6 +1,6 @@
 from django.urls import path
+from apps.calls.views.template_views import sip_settings_view
 
-
-# VoIP settings are handled by the calls app view via core/urls.py → settings/voip/
-# See apps/calls/views/template_views.py:sip_settings_view
-voip_urls = []
+voip_urls = [
+    path('sip-credentials/', sip_settings_view, name='sip_credentials'),
+]

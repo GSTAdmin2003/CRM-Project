@@ -63,6 +63,17 @@ class KanbanService:
             target_team=target_team,
         )
 
+        # Bulk-fetch unread WhatsApp counts to avoid N+1 queries
+        unread_counts: dict[int, int] = {}
+        try:
+            from apps.messaging.models import WhatsAppConversation
+            for conv in WhatsAppConversation.objects.filter(
+                lead__in=leads, unread_count__gt=0
+            ).only("lead_id", "unread_count"):
+                unread_counts[conv.lead_id] = conv.unread_count
+        except Exception:
+            pass
+
         # Build kanban data per stage
         kanban_stages = []
         for stage in stages:
@@ -82,6 +93,7 @@ class KanbanService:
                     ),
                     "created_at": lead.created_at.isoformat(),
                     "last_activity": lead.last_activity.isoformat(),
+                    "unread_message_count": unread_counts.get(lead.id, 0),
                 })
 
             kanban_stages.append({

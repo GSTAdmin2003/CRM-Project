@@ -1,6 +1,6 @@
 from django.contrib import admin
 
-from .models import Call, CallLog, CallRecording
+from .models import Call, CallLog, CallRecording, CallTranscript
 
 
 class CallLogInline(admin.TabularInline):
@@ -59,3 +59,11 @@ class CallLogAdmin(admin.ModelAdmin):
     list_display = ["id", "call", "event", "timestamp"]
     list_filter = ["event", "timestamp"]
     readonly_fields = ["call", "event", "data", "timestamp"]
+
+
+@admin.register(CallTranscript)
+class CallTranscriptAdmin(admin.ModelAdmin):
+    list_display = ["id", "call", "status", "language_code", "created_at"]
+    list_filter = ["status", "language_code"]
+    search_fields = ["call__from_number", "call__to_number", "caller_text", "agent_text"]
+    readonly_fields = ["call", "caller_text", "agent_text", "error_message", "created_at", "updated_at"]

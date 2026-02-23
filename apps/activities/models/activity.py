@@ -9,7 +9,7 @@ from .activity_type import ActivityType
 
 
 class Activity(models.Model):
-    """Activity scheduled for an opportunity"""
+    """Activity scheduled for a lead or opportunity"""
 
     STATUS_CHOICES = [
         ("planned", "Planned"),
@@ -21,7 +21,9 @@ class Activity(models.Model):
         Lead,
         on_delete=models.CASCADE,
         related_name="scheduled_activities",
-        verbose_name="Opportunity",
+        verbose_name="Lead / Opportunity",
+        null=True,
+        blank=True,
     )
     activity_type = models.ForeignKey(
         ActivityType, on_delete=models.PROTECT, related_name="activities"
@@ -55,21 +57,23 @@ class Activity(models.Model):
         verbose_name_plural = "Activities"
 
     def __str__(self):
-        return f"{self.activity_type.name}: {self.title} ({self.lead.title})"
+        if self.lead:
+            return f"{self.activity_type.name}: {self.title} ({self.lead.title})"
+        return f"{self.activity_type.name}: {self.title}"
 
     def can_be_viewed_by(self, user):
         """Check if user can view this activity based on lead ownership/team"""
         if user.is_sales_executive():
             return True
 
-        if user.is_sales_manager() and user.sales_team:
-            if self.lead.assigned_to and self.lead.assigned_to.sales_team == user.sales_team:
+        if self.lead:
+            if user.is_sales_manager() and user.sales_team:
+                if self.lead.assigned_to and self.lead.assigned_to.sales_team == user.sales_team:
+                    return True
+                if self.lead.sales_team == user.sales_team:
+                    return True
+            if self.lead.assigned_to == user:
                 return True
-            if self.lead.sales_team == user.sales_team:
-                return True
-
-        if self.lead.assigned_to == user:
-            return True
 
         return self.created_by == user
 
@@ -78,11 +82,12 @@ class Activity(models.Model):
         if user.is_sales_executive():
             return True
 
-        if user.is_sales_manager() and user.sales_team:
-            if self.lead.assigned_to and self.lead.assigned_to.sales_team == user.sales_team:
-                return True
-            if self.lead.sales_team == user.sales_team:
-                return True
+        if self.lead:
+            if user.is_sales_manager() and user.sales_team:
+                if self.lead.assigned_to and self.lead.assigned_to.sales_team == user.sales_team:
+                    return True
+                if self.lead.sales_team == user.sales_team:
+                    return True
 
         if self.assigned_to == user:
             return True

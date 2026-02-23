@@ -1,20 +1,22 @@
 """
-DRF ViewSets for the Lead (Opportunity) model.
+DRF ViewSets for the Lead model (covers both opportunities and incoming leads).
 
 All business logic is delegated to LeadService.
 """
 
 from rest_framework import status, viewsets
+from rest_framework.decorators import action
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
-from core.exceptions import NotFoundError, PermissionDeniedError, ValidationError
+from core.exceptions import ConflictError, NotFoundError, PermissionDeniedError, ValidationError
 from core.models import User
 
 from ..models import Lead
 from ..serializers import (
     LeadCreateUpdateSerializer,
     LeadDetailSerializer,
+    LeadIncomingCreateSerializer,
     LeadListSerializer,
 )
 from ..services import LeadService
@@ -22,25 +24,37 @@ from ..services import LeadService
 
 class LeadViewSet(viewsets.ModelViewSet):
     """
-    CRUD for leads (opportunities) with permission-scoped listing.
+    CRUD for leads with permission-scoped listing.
+
+    Supports ?type=opportunity (default) or ?type=lead query parameter
+    to switch between opportunities and incoming leads.
 
     list:    GET    /crm/api/leads/
     create:  POST   /crm/api/leads/
     read:    GET    /crm/api/leads/{id}/
     update:  PUT    /crm/api/leads/{id}/
     delete:  DELETE /crm/api/leads/{id}/
+    convert: POST   /crm/api/leads/{id}/convert/
     """
 
     permission_classes = [IsAuthenticated]
 
     def get_serializer_class(self):
+        lead_type = self.request.query_params.get("type", "opportunity")
         if self.action == "list":
             return LeadListSerializer
-        if self.action in ("create", "update", "partial_update"):
+        if self.action == "create":
+            if lead_type == "lead":
+                return LeadIncomingCreateSerializer
+            return LeadCreateUpdateSerializer
+        if self.action in ("update", "partial_update"):
             return LeadCreateUpdateSerializer
         return LeadDetailSerializer
 
     def get_queryset(self):
+        lead_type = self.request.query_params.get("type", "opportunity")
+        if lead_type == "lead":
+            return LeadService.list_incoming_leads_for_user(user=self.request.user)
         return LeadService.list_leads_for_user(user=self.request.user)
 
     def retrieve(self, request, *args, **kwargs):
@@ -51,17 +65,23 @@ class LeadViewSet(viewsets.ModelViewSet):
 
         if not lead.can_be_viewed_by(request.user):
             return Response(
-                {"detail": "You do not have permission to view this opportunity"},
+                {"detail": "You do not have permission to view this lead"},
                 status=status.HTTP_403_FORBIDDEN,
             )
 
         return Response(LeadDetailSerializer(lead).data)
 
     def create(self, request, *args, **kwargs):
+        lead_type = request.query_params.get("type", "opportunity")
+
+        if lead_type == "lead":
+            return self._create_incoming_lead(request)
+        return self._create_opportunity(request)
+
+    def _create_opportunity(self, request):
         serializer = LeadCreateUpdateSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
 
-        # Resolve assigned_to from ID
         assigned_to = None
         assigned_to_id = serializer.validated_data.get("assigned_to_id")
         if assigned_to_id:
@@ -98,9 +118,40 @@ class LeadViewSet(viewsets.ModelViewSet):
         except ValidationError as e:
             return Response({"detail": e.message}, status=status.HTTP_400_BAD_REQUEST)
 
-        return Response(
-            LeadDetailSerializer(lead).data, status=status.HTTP_201_CREATED
-        )
+        return Response(LeadDetailSerializer(lead).data, status=status.HTTP_201_CREATED)
+
+    def _create_incoming_lead(self, request):
+        serializer = LeadIncomingCreateSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        assigned_to = None
+        assigned_to_id = serializer.validated_data.get("assigned_to_id")
+        if assigned_to_id:
+            try:
+                assigned_to = User.objects.get(pk=assigned_to_id)
+            except User.DoesNotExist:
+                return Response(
+                    {"detail": "Assigned user not found"},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
+        try:
+            lead = LeadService.create_incoming_lead(
+                created_by=request.user,
+                company_id=serializer.validated_data.get("company_id"),
+                contact_id=serializer.validated_data.get("contact_id"),
+                message=serializer.validated_data.get("message", ""),
+                sales_team_id=serializer.validated_data.get("sales_team_id"),
+                assigned_to=assigned_to,
+                status=serializer.validated_data.get("status", "new"),
+                notes=serializer.validated_data.get("notes", ""),
+            )
+        except NotFoundError as e:
+            return Response({"detail": e.message}, status=status.HTTP_404_NOT_FOUND)
+        except ValidationError as e:
+            return Response({"detail": e.message}, status=status.HTTP_400_BAD_REQUEST)
+
+        return Response(LeadDetailSerializer(lead).data, status=status.HTTP_201_CREATED)
 
     def update(self, request, *args, **kwargs):
         serializer = LeadCreateUpdateSerializer(
@@ -118,7 +169,6 @@ class LeadViewSet(viewsets.ModelViewSet):
             if field in serializer.validated_data:
                 update_fields[field] = serializer.validated_data[field]
 
-        # Handle assigned_to_id
         assigned_to_id = serializer.validated_data.get("assigned_to_id")
         if assigned_to_id is not None:
             update_fields["assigned_to_id"] = assigned_to_id
@@ -145,3 +195,28 @@ class LeadViewSet(viewsets.ModelViewSet):
             return Response({"detail": e.message}, status=status.HTTP_403_FORBIDDEN)
 
         return Response(status=status.HTTP_204_NO_CONTENT)
+
+    @action(detail=True, methods=["post"])
+    def convert(self, request, pk=None):
+        """Convert an incoming lead (lead_type='lead') into an opportunity."""
+        try:
+            lead = LeadService.get_lead_or_raise(pk=pk)
+        except NotFoundError as e:
+            return Response({"detail": e.message}, status=status.HTTP_404_NOT_FOUND)
+
+        if not lead.can_be_edited_by(request.user):
+            return Response(
+                {"detail": "You do not have permission to convert this lead"},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        try:
+            opportunity = LeadService.convert_lead_to_opportunity(
+                lead=lead, user=request.user
+            )
+        except ValidationError as e:
+            return Response({"detail": e.message}, status=status.HTTP_400_BAD_REQUEST)
+        except ConflictError as e:
+            return Response({"detail": e.message}, status=status.HTTP_409_CONFLICT)
+
+        return Response(LeadDetailSerializer(opportunity).data, status=status.HTTP_201_CREATED)

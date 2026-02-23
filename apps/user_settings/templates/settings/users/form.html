@@ -1,0 +1,173 @@
+{% extends 'settings/base.html' %}
+
+{% block page_title %}{{ page_title }}{% endblock %}
+{% block page_description %}
+{% if edit_mode %}Update account details, roles, and team assignment{% else %}Create a new user account{% endif %}
+{% endblock %}
+
+{% block settings_content %}
+<form method="post" novalidate>
+    {% csrf_token %}
+    <div class="space-y-6">
+
+        <!-- Account Info -->
+        <div>
+            <h3 class="text-base font-semibold text-gray-900 mb-4 pb-2 border-b border-gray-200">
+                <i class="fas fa-id-card text-indigo-400 mr-2"></i>Account Information
+            </h3>
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+
+                {% if not edit_mode %}
+                <!-- Username — create only -->
+                <div class="sm:col-span-2">
+                    <label for="{{ form.username.id_for_label }}" class="block text-sm font-medium text-gray-700 mb-1">
+                        Username <span class="text-red-500">*</span>
+                    </label>
+                    {{ form.username }}
+                    {% if form.username.errors %}
+                    <p class="mt-1 text-xs text-red-600">{{ form.username.errors.0 }}</p>
+                    {% endif %}
+                </div>
+                {% else %}
+                <!-- Username display — edit mode (read-only) -->
+                <div class="sm:col-span-2">
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Username</label>
+                    <p class="px-3 py-2 text-sm text-gray-900 bg-gray-50 border border-gray-200 rounded-lg font-mono">
+                        {{ object.username }}
+                    </p>
+                    <p class="mt-1 text-xs text-gray-400">Username cannot be changed after account creation.</p>
+                </div>
+                {% endif %}
+
+                <!-- First name -->
+                <div>
+                    <label for="{{ form.first_name.id_for_label }}" class="block text-sm font-medium text-gray-700 mb-1">
+                        First Name
+                    </label>
+                    {{ form.first_name }}
+                    {% if form.first_name.errors %}
+                    <p class="mt-1 text-xs text-red-600">{{ form.first_name.errors.0 }}</p>
+                    {% endif %}
+                </div>
+
+                <!-- Last name -->
+                <div>
+                    <label for="{{ form.last_name.id_for_label }}" class="block text-sm font-medium text-gray-700 mb-1">
+                        Last Name
+                    </label>
+                    {{ form.last_name }}
+                    {% if form.last_name.errors %}
+                    <p class="mt-1 text-xs text-red-600">{{ form.last_name.errors.0 }}</p>
+                    {% endif %}
+                </div>
+
+                <!-- Email -->
+                <div class="sm:col-span-2">
+                    <label for="{{ form.email.id_for_label }}" class="block text-sm font-medium text-gray-700 mb-1">
+                        Email <span class="text-red-500">*</span>
+                    </label>
+                    {{ form.email }}
+                    {% if form.email.errors %}
+                    <p class="mt-1 text-xs text-red-600">{{ form.email.errors.0 }}</p>
+                    {% endif %}
+                </div>
+
+                {% if not edit_mode %}
+                <!-- Password — create only -->
+                <div>
+                    <label for="{{ form.password1.id_for_label }}" class="block text-sm font-medium text-gray-700 mb-1">
+                        Password <span class="text-red-500">*</span>
+                    </label>
+                    {{ form.password1 }}
+                    {% if form.password1.errors %}
+                    <p class="mt-1 text-xs text-red-600">{{ form.password1.errors.0 }}</p>
+                    {% endif %}
+                </div>
+                <div>
+                    <label for="{{ form.password2.id_for_label }}" class="block text-sm font-medium text-gray-700 mb-1">
+                        Confirm Password <span class="text-red-500">*</span>
+                    </label>
+                    {{ form.password2 }}
+                    {% if form.password2.errors %}
+                    <p class="mt-1 text-xs text-red-600">{{ form.password2.errors.0 }}</p>
+                    {% endif %}
+                    <p class="mt-1 text-xs text-gray-400">Minimum 8 characters.</p>
+                </div>
+                {% endif %}
+
+            </div>
+        </div>
+
+        <!-- Roles & Access -->
+        <div>
+            <h3 class="text-base font-semibold text-gray-900 mb-4 pb-2 border-b border-gray-200">
+                <i class="fas fa-shield-alt text-indigo-400 mr-2"></i>Roles & Access
+            </h3>
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-6">
+
+                <!-- Roles checkboxes -->
+                <div>
+                    <p class="text-sm font-medium text-gray-700 mb-2">Roles</p>
+                    <div class="space-y-2 border border-gray-200 rounded-lg p-3 bg-gray-50">
+                        {% for role in form.roles %}
+                        <label class="flex items-center gap-3 cursor-pointer group">
+                            {{ role.tag }}
+                            <span class="text-sm text-gray-700 group-hover:text-gray-900">{{ role.choice_label }}</span>
+                        </label>
+                        {% empty %}
+                        <p class="text-sm text-gray-400 italic">No roles defined.</p>
+                        {% endfor %}
+                    </div>
+                    {% if form.roles.errors %}
+                    <p class="mt-1 text-xs text-red-600">{{ form.roles.errors.0 }}</p>
+                    {% endif %}
+                </div>
+
+                <!-- Team & Status -->
+                <div class="space-y-4">
+                    <div>
+                        <label for="{{ form.sales_team.id_for_label }}" class="block text-sm font-medium text-gray-700 mb-1">
+                            Sales Team
+                        </label>
+                        {{ form.sales_team }}
+                        {% if form.sales_team.errors %}
+                        <p class="mt-1 text-xs text-red-600">{{ form.sales_team.errors.0 }}</p>
+                        {% endif %}
+                    </div>
+
+                    <div class="flex items-center gap-3 mt-2">
+                        {{ form.is_active }}
+                        <label for="{{ form.is_active.id_for_label }}" class="text-sm font-medium text-gray-700 cursor-pointer">
+                            Active Account
+                        </label>
+                    </div>
+                    <p class="text-xs text-gray-400 -mt-2">Inactive users cannot log in.</p>
+                    {% if form.is_active.errors %}
+                    <p class="mt-1 text-xs text-red-600">{{ form.is_active.errors.0 }}</p>
+                    {% endif %}
+                </div>
+
+            </div>
+        </div>
+
+        <!-- Non-field errors -->
+        {% if form.non_field_errors %}
+        <div class="px-4 py-3 rounded-lg bg-red-50 border border-red-200 text-sm text-red-800">
+            <i class="fas fa-exclamation-circle mr-2"></i>
+            {% for error in form.non_field_errors %}{{ error }}{% endfor %}
+        </div>
+        {% endif %}
+
+        <!-- Form footer -->
+        <div class="flex items-center justify-end gap-3 pt-4 border-t border-gray-200">
+            <a href="{% url 'settings:users:list' %}" class="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50">
+                Cancel
+            </a>
+            <button type="submit" class="px-6 py-2 text-sm font-medium text-white bg-indigo-600 border border-transparent rounded-lg hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500">
+                {% if edit_mode %}Save Changes{% else %}Create User{% endif %}
+            </button>
+        </div>
+
+    </div>
+</form>
+{% endblock %}

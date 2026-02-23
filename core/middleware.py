@@ -15,6 +15,7 @@ class RoleBasedAccessMiddleware:
             reverse('logout'),
             reverse('admin:login'),
             '/admin/login/',
+            '/messaging/webhook/',
         ]
     
     def __call__(self, request):

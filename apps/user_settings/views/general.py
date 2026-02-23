@@ -1,9 +1,11 @@
-from django.views.generic import ListView, CreateView, UpdateView, DeleteView, TemplateView
+from django.contrib import messages
+from django.contrib.auth import get_user_model
 from django.contrib.auth.mixins import UserPassesTestMixin
 from django.contrib.messages.views import SuccessMessageMixin
+from django.shortcuts import get_object_or_404, redirect
 from django.urls import reverse_lazy, path
-from django.contrib.auth import get_user_model
-from django.shortcuts import get_object_or_404
+from django.views import View
+from django.views.generic import ListView, CreateView, UpdateView, DeleteView, TemplateView
 from .base import SettingsBaseMixin
 from ..models import SystemConfiguration
 from ..forms import SystemConfigurationForm
@@ -19,6 +21,31 @@ class AdminRequiredMixin(UserPassesTestMixin):
         return self.request.user.has_role('Owner') or self.request.user.is_staff
 
 
+class PhoneSettingsView(SettingsBaseMixin, AdminRequiredMixin, View):
+    """Save the system-wide default country code for phone number normalization."""
+
+    settings_section = "general"
+    settings_page = "phone_settings"
+
+    def post(self, request, *args, **kwargs):
+        cc = request.POST.get("default_country_code", "").strip().lstrip("+").lstrip("0")
+        if cc:
+            SystemConfiguration.set_setting(
+                key="default_country_code",
+                value=cc,
+                description=(
+                    "Default country calling code used to normalize local phone numbers "
+                    "(digits only, e.g. 995 for Georgia)."
+                ),
+                data_type="string",
+                user=request.user,
+            )
+            messages.success(request, f"Default country code set to +{cc}.")
+        else:
+            messages.error(request, "Please enter a valid country code (digits only).")
+        return redirect("settings:general:index")
+
+
 class GeneralIndexView(SettingsBaseMixin, AdminRequiredMixin, TemplateView):
     """General settings overview page"""
     template_name = 'settings/general/index.html'
@@ -30,6 +57,7 @@ class GeneralIndexView(SettingsBaseMixin, AdminRequiredMixin, TemplateView):
         context['roles_count'] = Role.objects.count()
         context['users_count'] = User.objects.count()
         context['apps_count'] = AppRegistry.objects.count()
+        context['current_cc'] = SystemConfiguration.get_setting("default_country_code", default="")
         return context
 
 
@@ -90,24 +118,6 @@ class RoleManagementView(SettingsBaseMixin, AdminRequiredMixin, ListView):
         return context
 
 
-class UserManagementView(SettingsBaseMixin, AdminRequiredMixin, ListView):
-    """User management page"""
-    model = User
-    template_name = 'settings/general/users.html'
-    context_object_name = 'users'
-    paginate_by = 20
-    settings_section = 'general'
-    settings_page = 'users'
-    
-    def get_queryset(self):
-        return User.objects.select_related().prefetch_related('user_roles__role').order_by('-date_joined')
-    
-    def get_context_data(self, **kwargs):
-        context = super().get_context_data(**kwargs)
-        context['roles'] = Role.objects.filter(is_active=True)
-        return context
-
-
 class AppRegistryView(SettingsBaseMixin, AdminRequiredMixin, ListView):
     """App registry management page"""
     model = AppRegistry
@@ -123,10 +133,10 @@ class AppRegistryView(SettingsBaseMixin, AdminRequiredMixin, ListView):
 # URL patterns for general section
 general_urls = [
     path('', GeneralIndexView.as_view(), name='index'),
+    path('phone-settings/', PhoneSettingsView.as_view(), name='phone_settings'),
     path('system-config/', SystemConfigView.as_view(), name='system_config'),
     path('system-config/create/', SystemConfigCreateView.as_view(), name='system_config_create'),
     path('system-config/<int:pk>/edit/', SystemConfigUpdateView.as_view(), name='system_config_edit'),
     path('roles/', RoleManagementView.as_view(), name='roles'),
-    path('users/', UserManagementView.as_view(), name='users'),
     path('app-registry/', AppRegistryView.as_view(), name='app_registry'),
 ]

@@ -31,10 +31,8 @@ urlpatterns = [
     path('dashboard/', views.dashboard_view, name='dashboard'),
     path('login/', views.CustomLoginView.as_view(), name='login'),
     path('logout/', views.custom_logout_view, name='logout'),
-    path('settings/', views.settings_view, name='settings'),
-    path('settings/profile/', views.settings_profile_view, name='settings_profile'),
-    path('settings/general/', views.settings_general_view, name='settings_general'),
-    path('settings/voip/', views.settings_voip_view, name='settings_voip'),
+    # Settings — new namespaced app (replaces legacy flat routes)
+    path('settings/', include('apps.user_settings.urls')),
 ]
 
 # Dynamically include app URLs

@@ -2,12 +2,15 @@
 Generate Asterisk PJSIP trunk configuration from SIPSettings model
 and reload Asterisk when credentials change.
 
-Also handles Music on Hold (MOH) configuration for custom hold music.
+Also handles Music on Hold (MOH) configuration for custom hold music,
+and dynamic dialplan generation for welcome sounds / working-hours scheduling.
 """
+import glob as _glob
 import logging
 import os
 import re
 import shutil
+import subprocess
 
 import requests
 from django.conf import settings
@@ -18,6 +21,8 @@ logger = logging.getLogger(__name__)
 DYNAMIC_CONFIG_PATH = '/etc/asterisk/dynamic/pjsip_trunk.conf'
 MOH_CONFIG_PATH = '/etc/asterisk/dynamic/musiconhold_custom.conf'
 CUSTOM_MOH_DIR = '/var/lib/asterisk/custom-moh'
+EXTENSIONS_CUSTOM_PATH = '/etc/asterisk/dynamic/extensions_custom.conf'
+CUSTOM_SOUNDS_DIR = '/var/lib/asterisk/custom-sounds'
 
 
 def generate_trunk_config(sip_settings):
@@ -80,6 +85,8 @@ def write_trunk_config(sip_settings=None):
     try:
         with open(DYNAMIC_CONFIG_PATH, 'w') as f:
             f.write(content)
+            f.flush()
+            os.fsync(f.fileno())
         logger.info("Wrote pjsip_trunk.conf successfully")
         return True
     except Exception as e:
@@ -111,14 +118,47 @@ def reload_asterisk_pjsip():
         return False
 
 
+def restart_asterisk_container():
+    """Restart the Asterisk Docker container via Docker API unix socket."""
+    import urllib3
+
+    try:
+        http = urllib3.HTTPConnectionPool(
+            host='localhost', port=None,
+            scheme='http+unix',
+        )
+        # Use requests_unixsocket-style or raw socket
+        import socket as _socket
+        import http.client
+
+        class DockerConnection(http.client.HTTPConnection):
+            def connect(self):
+                self.sock = _socket.socket(_socket.AF_UNIX, _socket.SOCK_STREAM)
+                self.sock.connect('/var/run/docker.sock')
+
+        conn = DockerConnection('localhost')
+        conn.request('POST', '/v1.41/containers/crmproject-asterisk-1/restart?t=5')
+        resp = conn.getresponse()
+        if resp.status == 204:
+            logger.info("Asterisk container restarted successfully via Docker API")
+            return True
+        else:
+            body = resp.read().decode()
+            logger.warning(f"Docker restart returned {resp.status}: {body}")
+            return reload_asterisk_pjsip()
+    except Exception as e:
+        logger.error(f"Failed to restart Asterisk container: {e}")
+        return reload_asterisk_pjsip()
+
+
 def apply_sip_settings(sip_settings=None):
     """
-    Full pipeline: write config and reload Asterisk.
+    Full pipeline: write config and restart Asterisk container.
     Called when user saves/deletes SIP credentials.
     """
     written = write_trunk_config(sip_settings)
     if written:
-        return reload_asterisk_pjsip()
+        return restart_asterisk_container()
     return False
 
 
@@ -241,8 +281,12 @@ def update_agents_moh_suggest(moh_class):
 def apply_moh_settings(sip_settings=None):
     """
     Full pipeline: write MOH config, copy audio file, update agent endpoints,
-    and reload Asterisk MOH + PJSIP.
+    and reload Asterisk MOH.
     Called when user uploads/removes hold music.
+
+    NOTE: We intentionally do NOT reload res_pjsip.so here because that drops
+    the trunk registration and causes inbound calls to fail until re-registration.
+    The agent moh_suggest change is picked up on the next PJSIP reload or restart.
     """
     has_custom = sip_settings and sip_settings.hold_music
     moh_class = 'crm-custom' if has_custom else 'default'
@@ -252,5 +296,236 @@ def apply_moh_settings(sip_settings=None):
         return False
 
     update_agents_moh_suggest(moh_class)
-    reload_asterisk_pjsip()
     return reload_asterisk_moh()
+
+
+# =============================================================================
+# Dynamic dialplan generation (welcome sound & working-hours scheduling)
+# =============================================================================
+
+def _get_ext(filepath):
+    """Return file extension (without dot) from a path or FieldFile."""
+    name = filepath if isinstance(filepath, str) else filepath.name
+    return name.rsplit('.', 1)[-1].lower() if '.' in name else ''
+
+
+def _remove_files_by_prefix(directory, prefix):
+    """Remove all files in *directory* whose name starts with *prefix*."""
+    for path in _glob.glob(os.path.join(directory, f'{prefix}.*')):
+        try:
+            os.remove(path)
+        except OSError:
+            pass
+
+
+def _convert_to_asterisk_wav(src_path, dst_path):
+    """
+    Convert any audio file to Asterisk-native WAV (8kHz, 16-bit, mono PCM).
+    Uses ffmpeg. Falls back to a plain copy if ffmpeg is unavailable.
+    """
+    try:
+        subprocess.run(
+            [
+                'ffmpeg', '-y', '-i', src_path,
+                '-ar', '8000', '-ac', '1', '-sample_fmt', 's16',
+                dst_path,
+            ],
+            capture_output=True, check=True, timeout=30,
+        )
+        logger.info(f"Converted {src_path} -> {dst_path}")
+        return True
+    except FileNotFoundError:
+        logger.warning("ffmpeg not found, falling back to plain copy")
+        shutil.copy2(src_path, dst_path)
+        return True
+    except subprocess.CalledProcessError as e:
+        logger.error(f"ffmpeg conversion failed: {e.stderr.decode()}")
+        return False
+
+
+def generate_extensions_config(sip_settings):
+    """
+    Build [from-trunk-ring] dialplan with optional:
+    - GotoIfTime() for working-hours gating
+    - Playback() for non-working-hours announcement
+    - Playback() for welcome greeting
+
+    The dialplan runs entirely inside Asterisk and works independently
+    of the Django app or any browser sessions. If no agent is registered,
+    Dial() times out and the call hangs up gracefully.
+    """
+    lines = [
+        '; =============================================================================',
+        '; Auto-generated inbound call routing from CRM settings',
+        '; Do not edit manually - changes will be overwritten.',
+        '; =============================================================================',
+        '',
+        '[from-trunk-ring]',
+    ]
+
+    has_schedule = (
+        sip_settings.working_hours_start
+        and sip_settings.working_hours_end
+        and sip_settings.working_days
+    )
+    has_welcome = bool(sip_settings.welcome_sound)
+    has_non_working = bool(sip_settings.non_working_hours_sound)
+
+    priority = 1
+
+    def _add(app_line):
+        nonlocal priority
+        if priority == 1:
+            lines.append(f'exten => s,{priority},{app_line}')
+        else:
+            lines.append(f' same => n,{app_line}')
+        priority += 1
+
+    _add('Answer()')
+    _add('NoOp(Inbound call from ${CALLERID(num)})')
+
+    if has_schedule:
+        start = sip_settings.working_hours_start.strftime('%H:%M')
+        end = sip_settings.working_hours_end.strftime('%H:%M')
+        # Asterisk uses & to separate days in GotoIfTime (commas are field separators)
+        days = sip_settings.working_days.replace(',', '&')  # "mon&tue&wed&thu&fri"
+        _add(f'GotoIfTime({start}-{end},{days},*,*?s,working)')
+
+        # Outside working hours path
+        if has_non_working:
+            _add(f'Playback({CUSTOM_SOUNDS_DIR}/non_working)')
+        _add('Hangup()')
+
+        # Working hours label
+        lines.append(f' same => n(working),NoOp(Within working hours)')
+        priority += 1
+
+    # Welcome sound (played during working hours, or always if no schedule)
+    if has_welcome:
+        _add(f'Playback({CUSTOM_SOUNDS_DIR}/welcome)')
+
+    # Check if agent is available before dialing — if not registered, skip to voicemail
+    _add('GotoIf($["${DEVICE_STATE(PJSIP/100)}" = "UNAVAILABLE"]?s,unavail)')
+
+    # Standard call handling — Dial the agent, gracefully handle no answer/unavailable
+    _add('Set(CHANNEL(hangup_handler_push)=hangup-handler,s,1)')
+    _add('MixMonitor(${UNIQUEID}.wav,br(${UNIQUEID}-rx.wav)t(${UNIQUEID}-tx.wav))')
+    _add('Dial(PJSIP/100,30)')
+
+    # After Dial — agent didn't answer or was busy
+    _add('NoOp(Dial ended with status ${DIALSTATUS})')
+
+    # Unavailable label — reached when agent not registered or Dial fails
+    lines.append(f' same => n(unavail),NoOp(Agent unavailable)')
+    priority += 1
+    _add('Playback(vm-nobodyavail)')
+    _add('Playback(vm-goodbye)')
+    _add('Hangup()')
+
+    return '\n'.join(lines) + '\n'
+
+
+def generate_empty_extensions_config():
+    """Default [from-trunk-ring] with no schedule or sounds."""
+    return """; Default inbound call routing — no schedule or sounds configured.
+[from-trunk-ring]
+exten => s,1,Answer()
+ same => n,NoOp(Inbound call from ${CALLERID(num)})
+ same => n,GotoIf($["${DEVICE_STATE(PJSIP/100)}" = "UNAVAILABLE"]?s,unavail)
+ same => n,Set(CHANNEL(hangup_handler_push)=hangup-handler,s,1)
+ same => n,MixMonitor(${UNIQUEID}.wav,br(${UNIQUEID}-rx.wav)t(${UNIQUEID}-tx.wav))
+ same => n,Dial(PJSIP/100,30)
+ same => n,NoOp(Dial ended with status ${DIALSTATUS})
+ same => n(unavail),NoOp(Agent unavailable)
+ same => n,Playback(vm-nobodyavail)
+ same => n,Playback(vm-goodbye)
+ same => n,Hangup()
+"""
+
+
+def write_extensions_config(sip_settings=None):
+    """
+    Write extensions_custom.conf and copy sound files to the shared volume.
+    If sip_settings is None, writes the default (no schedule) config.
+    """
+    has_any = sip_settings and (
+        sip_settings.welcome_sound
+        or sip_settings.non_working_hours_sound
+        or sip_settings.working_hours_start
+    )
+
+    if has_any:
+        content = generate_extensions_config(sip_settings)
+    else:
+        content = generate_empty_extensions_config()
+
+    try:
+        with open(EXTENSIONS_CUSTOM_PATH, 'w') as f:
+            f.write(content)
+            f.flush()
+            os.fsync(f.fileno())
+        logger.info("Wrote extensions_custom.conf successfully")
+    except Exception as e:
+        logger.error(f"Failed to write extensions_custom.conf: {e}")
+        return False
+
+    # Copy sound files to shared volume
+    os.makedirs(CUSTOM_SOUNDS_DIR, exist_ok=True)
+
+    # Welcome sound — always convert to .wav for Asterisk native playback
+    _remove_files_by_prefix(CUSTOM_SOUNDS_DIR, 'welcome')
+    if sip_settings and sip_settings.welcome_sound:
+        try:
+            dst = os.path.join(CUSTOM_SOUNDS_DIR, 'welcome.wav')
+            _convert_to_asterisk_wav(sip_settings.welcome_sound.path, dst)
+        except Exception as e:
+            logger.error(f"Failed to copy welcome sound: {e}")
+            return False
+
+    # Non-working hours sound — always convert to .wav
+    _remove_files_by_prefix(CUSTOM_SOUNDS_DIR, 'non_working')
+    if sip_settings and sip_settings.non_working_hours_sound:
+        try:
+            dst = os.path.join(CUSTOM_SOUNDS_DIR, 'non_working.wav')
+            _convert_to_asterisk_wav(sip_settings.non_working_hours_sound.path, dst)
+        except Exception as e:
+            logger.error(f"Failed to copy non-working hours sound: {e}")
+            return False
+
+    return True
+
+
+def reload_asterisk_dialplan():
+    """Tell Asterisk to reload the dialplan (pbx_config) via ARI."""
+    ari_url = getattr(settings, 'ASTERISK_ARI_URL', 'http://asterisk:8088')
+    ari_user = getattr(settings, 'ASTERISK_ARI_USER', '')
+    ari_password = getattr(settings, 'ASTERISK_ARI_PASSWORD', '')
+
+    try:
+        response = requests.put(
+            f'{ari_url}/ari/asterisk/modules/pbx_config.so',
+            auth=HTTPBasicAuth(ari_user, ari_password),
+            timeout=10,
+        )
+        if response.status_code in (200, 204):
+            logger.info("Asterisk dialplan reloaded successfully")
+            return True
+        else:
+            logger.warning(
+                f"Asterisk dialplan reload returned {response.status_code}: {response.text}"
+            )
+            return False
+    except Exception as e:
+        logger.error(f"Failed to reload Asterisk dialplan: {e}")
+        return False
+
+
+def apply_schedule_settings(sip_settings=None):
+    """
+    Full pipeline: write extensions_custom.conf, copy sound files, reload dialplan.
+    Called when user saves/deletes schedule or sound settings.
+    """
+    written = write_extensions_config(sip_settings)
+    if written:
+        return reload_asterisk_dialplan()
+    return False

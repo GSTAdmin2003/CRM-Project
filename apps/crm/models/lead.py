@@ -7,7 +7,14 @@ from core.models import User
 
 
 class Lead(models.Model):
-    """Lead model for CRM pipeline"""
+    """Unified Lead model — covers both incoming leads (lead_type='lead') and opportunities (lead_type='opportunity')."""
+
+    TYPE_LEAD = "lead"
+    TYPE_OPPORTUNITY = "opportunity"
+    TYPE_CHOICES = [
+        ("lead", "Lead"),
+        ("opportunity", "Opportunity"),
+    ]
 
     SOURCE_CHOICES = [
         ("website", "Website"),
@@ -24,7 +31,14 @@ class Lead(models.Model):
         ("contacted", "Contacted"),
         ("qualified", "Qualified"),
         ("unqualified", "Unqualified"),
+        ("converted", "Converted"),
+        ("rejected", "Rejected"),
     ]
+
+    # Type discriminator
+    lead_type = models.CharField(
+        max_length=20, choices=TYPE_CHOICES, default="opportunity", db_index=True
+    )
 
     # Basic Information
     title = models.CharField(max_length=200, verbose_name="Opportunity Title")
@@ -36,9 +50,20 @@ class Lead(models.Model):
     company_name = models.CharField(max_length=200, blank=True)
     position = models.CharField(max_length=100, blank=True)
 
+    # Incoming lead fields
+    message = models.TextField(blank=True, help_text="Initial inquiry (for incoming leads)")
+    converted_from = models.ForeignKey(
+        "self",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="converted_opportunities",
+    )
+
     # Sales Information
     stage = models.ForeignKey(
-        "crm.LeadStage", on_delete=models.PROTECT, related_name="leads"
+        "crm.LeadStage", on_delete=models.PROTECT, related_name="leads",
+        null=True, blank=True,
     )
     estimated_value = models.DecimalField(max_digits=12, decimal_places=2, default=0)
     probability = models.IntegerField(

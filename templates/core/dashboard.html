@@ -28,6 +28,8 @@
                         {% elif app.name == 'reports' %}📈
                         {% elif app.name == 'documents' %}📄
                         {% elif app.name == 'calls' %}📞
+                        {% elif app.name == 'messaging' %}
+                            <span style="color:#25D366;font-size:1.6rem;line-height:1;"><i class="fab fa-whatsapp"></i></span>
                         {% else %}📱{% endif %}
                     </div>
                     <h3 class="app-card-title">{{ app.display_name }}</h3>

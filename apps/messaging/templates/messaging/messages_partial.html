@@ -1,0 +1,32 @@
+{% if messages %}
+    {% for msg in messages %}
+    <div class="flex {% if msg.direction == 'outbound' %}justify-end{% else %}justify-start{% endif %}">
+        <div class="max-w-xs lg:max-w-md">
+            <div class="px-4 py-2.5 text-sm {% if msg.direction == 'outbound' %}chat-bubble-outbound{% else %}chat-bubble-inbound{% endif %}">
+                {{ msg.body }}
+            </div>
+            <div class="flex items-center mt-1 space-x-1 {% if msg.direction == 'outbound' %}justify-end{% endif %}">
+                <span class="text-xs text-gray-400">{{ msg.timestamp|time:"H:i" }}</span>
+                {% if msg.direction == 'outbound' %}
+                <span class="status-icon text-gray-400">
+                    {% if msg.status == 'read' %}
+                        <i class="fas fa-check-double text-blue-400"></i>
+                    {% elif msg.status == 'delivered' %}
+                        <i class="fas fa-check-double"></i>
+                    {% elif msg.status == 'failed' %}
+                        <i class="fas fa-exclamation-circle text-red-400"></i>
+                    {% else %}
+                        <i class="fas fa-check"></i>
+                    {% endif %}
+                </span>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+    {% endfor %}
+{% else %}
+    <div class="text-center py-12 text-gray-400">
+        <i class="fab fa-whatsapp text-4xl mb-3 block text-green-200"></i>
+        <p class="text-sm">No messages yet. Send the first message below.</p>
+    </div>
+{% endif %}

@@ -5,6 +5,9 @@ from django.dispatch import receiver
 from .company import Company
 
 
+LANGUAGE_CHOICES = [('en', 'English'), ('ka', 'Georgian')]
+
+
 class Contact(models.Model):
     company = models.ForeignKey(Company, on_delete=models.CASCADE, related_name='contacts')
     name = models.CharField(max_length=200, verbose_name="Full Name")
@@ -12,6 +15,10 @@ class Contact(models.Model):
     email = models.EmailField(blank=True, verbose_name="Email")
     phone = models.CharField(max_length=20, blank=True, verbose_name="Phone")
     mobile = models.CharField(max_length=20, blank=True, verbose_name="Mobile")
+    preferred_language = models.CharField(
+        max_length=10, choices=LANGUAGE_CHOICES, default='en', blank=True,
+        verbose_name="Preferred Language"
+    )
 
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
@@ -22,6 +29,10 @@ class Contact(models.Model):
 
     def __str__(self):
         return f"{self.name} - {self.position} at {self.company.display_name}"
+
+    @property
+    def effective_language(self):
+        return self.preferred_language or 'en'
 
 
 @receiver(post_save, sender=Contact)

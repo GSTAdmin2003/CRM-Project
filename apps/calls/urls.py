@@ -13,6 +13,7 @@ urlpatterns = [
     path("api/", include(router.urls)),
     # Existing template views
     path("", template_views.call_list, name="call_list"),
+    path("bulk-action/", template_views.calls_bulk_action, name="call_bulk_action"),
     path("dialpad/", template_views.dialpad, name="dialpad"),
     path("<int:pk>/", template_views.call_detail, name="call_detail"),
     # Call actions (template views)
@@ -40,6 +41,9 @@ urlpatterns = [
         template_views.recording_download,
         name="recording_download",
     ),
+    # Transcription
+    path("<int:pk>/transcript/start/", template_views.start_transcription, name="start_transcription"),
+    path("<int:pk>/transcript/cancel/", template_views.cancel_transcription, name="cancel_transcription"),
     # Legacy API endpoint (kept for backward compatibility)
     path("api/active/", template_views.active_calls, name="active_calls"),
 ]

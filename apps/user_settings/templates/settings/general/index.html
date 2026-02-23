@@ -111,7 +111,7 @@
                     </div>
                 </div>
                 <div class="space-y-2">
-                    <a href="{% url 'settings:general:users' %}" class="block text-sm text-indigo-600 hover:text-indigo-500">
+                    <a href="{% url 'settings:users:list' %}" class="block text-sm text-indigo-600 hover:text-indigo-500">
                         <i class="fas fa-list mr-2"></i>
                         View All Users
                     </a>
@@ -163,6 +163,62 @@
                     </div>
                 </div>
             </div>
+        </div>
+    </div>
+
+    <!-- Phone Number Settings -->
+    <div>
+        <h3 class="text-lg leading-6 font-medium text-gray-900 mb-4">Regional Settings</h3>
+        <div class="bg-white border border-gray-200 rounded-lg">
+            <div class="px-6 py-4 border-b border-gray-100">
+                <h4 class="text-base font-medium text-gray-900 flex items-center">
+                    <i class="fas fa-phone text-indigo-400 mr-2"></i>Default Country Code
+                </h4>
+                <p class="text-sm text-gray-500 mt-1">
+                    Applied automatically to phone numbers entered without a country code throughout the system.
+                </p>
+            </div>
+            {% if messages %}
+            {% for message in messages %}
+            <div class="mx-6 mt-4 px-4 py-3 rounded-lg text-sm {% if message.tags == 'success' %}bg-green-50 border border-green-200 text-green-800{% else %}bg-red-50 border border-red-200 text-red-800{% endif %}">
+                {{ message }}
+            </div>
+            {% endfor %}
+            {% endif %}
+            <form method="post" action="{% url 'settings:general:phone_settings' %}" class="px-6 py-5">
+                {% csrf_token %}
+                <div class="flex items-end gap-4">
+                    <div class="flex-1 max-w-xs">
+                        <label for="default_country_code" class="block text-sm font-medium text-gray-700 mb-1">
+                            Country Code
+                        </label>
+                        <div class="flex rounded-lg border border-gray-300 overflow-hidden focus-within:ring-2 focus-within:ring-indigo-500 focus-within:border-transparent">
+                            <span class="inline-flex items-center px-3 bg-gray-50 border-r border-gray-300 text-gray-500 text-sm font-medium select-none">+</span>
+                            <input type="text" id="default_country_code" name="default_country_code"
+                                   value="{{ current_cc|default:'' }}"
+                                   placeholder="e.g. 995"
+                                   maxlength="5"
+                                   pattern="[0-9]+"
+                                   title="Digits only"
+                                   class="flex-1 px-3 py-2 text-sm focus:outline-none bg-white">
+                        </div>
+                        <p class="mt-1 text-xs text-gray-500">
+                            Digits only — e.g. <strong>995</strong> for Georgia, <strong>1</strong> for USA, <strong>44</strong> for UK.
+                        </p>
+                    </div>
+                    <button type="submit"
+                        class="inline-flex items-center px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-medium rounded-lg transition-colors">
+                        <i class="fas fa-save mr-2"></i>Save
+                    </button>
+                </div>
+                {% if current_cc %}
+                <p class="mt-3 text-xs text-gray-500">
+                    <i class="fas fa-info-circle mr-1 text-indigo-400"></i>
+                    A number like <code class="font-mono bg-gray-100 px-1 rounded">571535389</code>
+                    will be saved as <code class="font-mono bg-gray-100 px-1 rounded">+{{ current_cc }}571535389</code>.
+                </p>
+                {% endif %}
+            </form>
         </div>
     </div>
 

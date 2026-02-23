@@ -59,28 +59,32 @@
         </div>
         
         <div class="{% if current_section != 'general' %}hidden{% endif %} space-y-1 pl-11" id="general-submenu">
-            <a href="{% url 'settings:general:system_config' %}" 
+            <a href="{% url 'settings:general:system_config' %}"
                class="{% if current_page == 'system_config' %}bg-gray-200 text-gray-900{% else %}text-gray-600 hover:bg-gray-50 hover:text-gray-900{% endif %} group flex items-center px-2 py-2 text-sm rounded-md">
                 <i class="fas fa-server text-gray-400 mr-3 flex-shrink-0 h-4 w-4"></i>
                 System Config
             </a>
-            <a href="{% url 'settings:general:roles' %}" 
+            <a href="{% url 'settings:general:roles' %}"
                class="{% if current_page == 'roles' %}bg-gray-200 text-gray-900{% else %}text-gray-600 hover:bg-gray-50 hover:text-gray-900{% endif %} group flex items-center px-2 py-2 text-sm rounded-md">
                 <i class="fas fa-users-cog text-gray-400 mr-3 flex-shrink-0 h-4 w-4"></i>
                 Role Management
             </a>
-            <a href="{% url 'settings:general:users' %}" 
-               class="{% if current_page == 'users' %}bg-gray-200 text-gray-900{% else %}text-gray-600 hover:bg-gray-50 hover:text-gray-900{% endif %} group flex items-center px-2 py-2 text-sm rounded-md">
-                <i class="fas fa-users text-gray-400 mr-3 flex-shrink-0 h-4 w-4"></i>
-                User Management
-            </a>
-            <a href="{% url 'settings:general:app_registry' %}" 
+            <a href="{% url 'settings:general:app_registry' %}"
                class="{% if current_page == 'app_registry' %}bg-gray-200 text-gray-900{% else %}text-gray-600 hover:bg-gray-50 hover:text-gray-900{% endif %} group flex items-center px-2 py-2 text-sm rounded-md">
                 <i class="fas fa-th-list text-gray-400 mr-3 flex-shrink-0 h-4 w-4"></i>
                 App Registry
             </a>
         </div>
     </div>
+    {% endif %}
+
+    <!-- User Management (Admin Only) — top-level section -->
+    {% if is_admin %}
+    <a href="{% url 'settings:users:list' %}"
+       class="{% if current_section == 'users' %}bg-gray-200 text-gray-900{% else %}text-gray-600 hover:bg-gray-50 hover:text-gray-900{% endif %} group flex items-center px-2 py-2 text-sm font-medium rounded-md">
+        <i class="fas fa-users text-gray-400 mr-3 flex-shrink-0 h-6 w-6"></i>
+        User Management
+    </a>
     {% endif %}
 
     <!-- CRM Section (Admin/Manager Only) -->
@@ -106,6 +110,66 @@
                 Global Pipeline Stages
             </a>
             {% endif %}
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- WhatsApp Section (Admin Only) -->
+    {% if is_admin %}
+    <div class="space-y-1">
+        <div class="{% if current_section == 'whatsapp' %}bg-gray-100{% else %}hover:bg-gray-50{% endif %} rounded-md">
+            <button type="button"
+                    class="{% if current_section == 'whatsapp' %}text-gray-900{% else %}text-gray-600 hover:text-gray-900{% endif %} group flex w-full items-center px-2 py-2 text-sm font-medium rounded-md"
+                    aria-expanded="{% if current_section == 'whatsapp' %}true{% else %}false{% endif %}"
+                    data-toggle="collapse"
+                    data-target="whatsapp-submenu">
+                <i class="fab fa-whatsapp text-gray-400 mr-3 flex-shrink-0 h-6 w-6" style="font-size:1.1rem;line-height:1.5rem;"></i>
+                <span class="flex-1 text-left">WhatsApp</span>
+                <i class="fas fa-chevron-right transform transition-transform duration-200 {% if current_section == 'whatsapp' %}rotate-90{% endif %} text-gray-400 ml-3 h-5 w-5 flex-shrink-0"></i>
+            </button>
+        </div>
+
+        <div class="{% if current_section != 'whatsapp' %}hidden{% endif %} space-y-1 pl-11" id="whatsapp-submenu">
+            <a href="{% url 'settings:whatsapp:config' %}"
+               class="{% if current_page == 'whatsapp_config' %}bg-gray-200 text-gray-900{% else %}text-gray-600 hover:bg-gray-50 hover:text-gray-900{% endif %} group flex items-center px-2 py-2 text-sm rounded-md">
+                <i class="fas fa-cog text-gray-400 mr-3 flex-shrink-0 h-4 w-4"></i>
+                Configuration
+            </a>
+            <a href="{% url 'settings:whatsapp:templates_list' %}"
+               class="{% if current_page == 'whatsapp_templates' %}bg-gray-200 text-gray-900{% else %}text-gray-600 hover:bg-gray-50 hover:text-gray-900{% endif %} group flex items-center px-2 py-2 text-sm rounded-md">
+                <i class="fas fa-file-alt text-gray-400 mr-3 flex-shrink-0 h-4 w-4"></i>
+                Templates
+            </a>
+            <a href="{% url 'settings:whatsapp:sales_team_pitch_list' %}"
+               class="{% if current_page == 'whatsapp_sales_teams' %}bg-gray-200 text-gray-900{% else %}text-gray-600 hover:bg-gray-50 hover:text-gray-900{% endif %} group flex items-center px-2 py-2 text-sm rounded-md">
+                <i class="fas fa-users text-gray-400 mr-3 flex-shrink-0 h-4 w-4"></i>
+                Sales Teams
+            </a>
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- Transcription Section (Admin Only) -->
+    {% if is_admin %}
+    <div class="space-y-1">
+        <div class="{% if current_section == 'google' %}bg-gray-100{% else %}hover:bg-gray-50{% endif %} rounded-md">
+            <button type="button"
+                    class="{% if current_section == 'google' %}text-gray-900{% else %}text-gray-600 hover:text-gray-900{% endif %} group flex w-full items-center px-2 py-2 text-sm font-medium rounded-md"
+                    aria-expanded="{% if current_section == 'google' %}true{% else %}false{% endif %}"
+                    data-toggle="collapse"
+                    data-target="google-submenu">
+                <i class="fas fa-microphone text-gray-400 mr-3 flex-shrink-0 h-6 w-6"></i>
+                <span class="flex-1 text-left">Transcription</span>
+                <i class="fas fa-chevron-right transform transition-transform duration-200 {% if current_section == 'google' %}rotate-90{% endif %} text-gray-400 ml-3 h-5 w-5 flex-shrink-0"></i>
+            </button>
+        </div>
+
+        <div class="{% if current_section != 'google' %}hidden{% endif %} space-y-1 pl-11" id="google-submenu">
+            <a href="{% url 'settings:google:credentials' %}"
+               class="{% if current_page == 'credentials' %}bg-gray-200 text-gray-900{% else %}text-gray-600 hover:bg-gray-50 hover:text-gray-900{% endif %} group flex items-center px-2 py-2 text-sm rounded-md">
+                <i class="fas fa-key text-gray-400 mr-3 flex-shrink-0 h-4 w-4"></i>
+                Credentials
+            </a>
         </div>
     </div>
     {% endif %}

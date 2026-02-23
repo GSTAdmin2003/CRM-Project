@@ -1,0 +1,104 @@
+{% extends 'settings/base.html' %}
+
+{% block page_title %}
+<span class="text-green-600 mr-2"><i class="fab fa-whatsapp"></i></span>
+Manage Pitch PDFs — {{ team.name }}
+{% endblock %}
+
+{% block page_description %}Upload pitch PDFs for each language. Each PDF is registered with Meta and attached when sending the sales pitch to contacts.{% endblock %}
+
+{% block settings_content %}
+<div class="space-y-6 max-w-2xl">
+
+    {% if messages %}
+    {% for message in messages %}
+    <div class="{% if message.tags == 'success' %}bg-green-50 border-green-300 text-green-800{% else %}bg-red-50 border-red-300 text-red-800{% endif %} border rounded-lg px-4 py-3 text-sm">
+        {{ message }}
+    </div>
+    {% endfor %}
+    {% endif %}
+
+    <!-- English PDF -->
+    <div class="bg-white border border-gray-200 rounded-lg overflow-hidden">
+        <div class="px-5 py-3 bg-gray-50 border-b border-gray-200 flex items-center gap-2">
+            <span class="inline-block px-2 py-0.5 rounded font-mono text-xs font-semibold bg-indigo-100 text-indigo-700 border border-indigo-200">en</span>
+            <h3 class="text-sm font-semibold text-gray-900">English Pitch PDF</h3>
+            {% if team.pitch_pdf_media_id %}
+            <span class="ml-auto inline-flex items-center px-2 py-0.5 rounded-full text-xs bg-green-100 text-green-800 font-medium">
+                <i class="fas fa-check-circle mr-1"></i>Uploaded
+            </span>
+            {% else %}
+            <span class="ml-auto inline-flex items-center px-2 py-0.5 rounded-full text-xs bg-gray-100 text-gray-500 font-medium">
+                <i class="fas fa-minus-circle mr-1"></i>Not set
+            </span>
+            {% endif %}
+        </div>
+        <div class="p-5">
+            {% if team.pitch_pdf_media_id %}
+            <p class="text-xs text-gray-500 mb-3">
+                Current: <span class="font-mono">{{ team.pitch_pdf_filename }}</span>
+                &nbsp;·&nbsp; Media ID: <span class="font-mono text-gray-400">…{{ team.pitch_pdf_media_id|slice:"-8:" }}</span>
+            </p>
+            {% endif %}
+            <form method="post" enctype="multipart/form-data">
+                {% csrf_token %}
+                <input type="hidden" name="language" value="en">
+                <div class="flex items-center gap-3">
+                    <input type="file" name="pitch_pdf" accept=".pdf" required
+                           class="block w-full text-sm text-gray-500 file:mr-3 file:py-1.5 file:px-3 file:rounded file:border-0 file:text-sm file:font-medium file:bg-indigo-50 file:text-indigo-700 hover:file:bg-indigo-100 cursor-pointer">
+                    <button type="submit"
+                            class="flex-shrink-0 inline-flex items-center px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-medium rounded-lg shadow-sm transition-colors">
+                        <i class="fas fa-upload mr-2"></i>{% if team.pitch_pdf_media_id %}Replace{% else %}Upload{% endif %}
+                    </button>
+                </div>
+                <p class="mt-1 text-xs text-gray-400">PDF only. Uploaded to Meta's media servers and the media ID stored for sending.</p>
+            </form>
+        </div>
+    </div>
+
+    <!-- Georgian PDF -->
+    <div class="bg-white border border-gray-200 rounded-lg overflow-hidden">
+        <div class="px-5 py-3 bg-gray-50 border-b border-gray-200 flex items-center gap-2">
+            <span class="inline-block px-2 py-0.5 rounded font-mono text-xs font-semibold bg-indigo-100 text-indigo-700 border border-indigo-200">ka</span>
+            <h3 class="text-sm font-semibold text-gray-900">Georgian Pitch PDF</h3>
+            {% if team.pitch_pdf_media_id_ka %}
+            <span class="ml-auto inline-flex items-center px-2 py-0.5 rounded-full text-xs bg-green-100 text-green-800 font-medium">
+                <i class="fas fa-check-circle mr-1"></i>Uploaded
+            </span>
+            {% else %}
+            <span class="ml-auto inline-flex items-center px-2 py-0.5 rounded-full text-xs bg-gray-100 text-gray-500 font-medium">
+                <i class="fas fa-minus-circle mr-1"></i>Not set
+            </span>
+            {% endif %}
+        </div>
+        <div class="p-5">
+            {% if team.pitch_pdf_media_id_ka %}
+            <p class="text-xs text-gray-500 mb-3">
+                Current: <span class="font-mono">{{ team.pitch_pdf_filename_ka }}</span>
+                &nbsp;·&nbsp; Media ID: <span class="font-mono text-gray-400">…{{ team.pitch_pdf_media_id_ka|slice:"-8:" }}</span>
+            </p>
+            {% endif %}
+            <form method="post" enctype="multipart/form-data">
+                {% csrf_token %}
+                <input type="hidden" name="language" value="ka">
+                <div class="flex items-center gap-3">
+                    <input type="file" name="pitch_pdf" accept=".pdf" required
+                           class="block w-full text-sm text-gray-500 file:mr-3 file:py-1.5 file:px-3 file:rounded file:border-0 file:text-sm file:font-medium file:bg-indigo-50 file:text-indigo-700 hover:file:bg-indigo-100 cursor-pointer">
+                    <button type="submit"
+                            class="flex-shrink-0 inline-flex items-center px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-medium rounded-lg shadow-sm transition-colors">
+                        <i class="fas fa-upload mr-2"></i>{% if team.pitch_pdf_media_id_ka %}Replace{% else %}Upload{% endif %}
+                    </button>
+                </div>
+                <p class="mt-1 text-xs text-gray-400">PDF only. Uploaded to Meta's media servers and the media ID stored for sending.</p>
+            </form>
+        </div>
+    </div>
+
+    <div class="pt-2">
+        <a href="{% url 'settings:whatsapp:sales_team_pitch_list' %}"
+           class="inline-flex items-center text-sm text-gray-500 hover:text-gray-700 font-medium">
+            <i class="fas fa-arrow-left mr-2"></i>Back to Sales Teams
+        </a>
+    </div>
+</div>
+{% endblock %}

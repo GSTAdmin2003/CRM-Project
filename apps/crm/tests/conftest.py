@@ -5,7 +5,7 @@ CRM app test fixtures using factory_boy.
 import factory
 
 from apps.contacts.models import Company, Contact
-from apps.crm.models import IncomingLead, Lead, LeadActivity, LeadFile, LeadStage, SalesTeam
+from apps.crm.models import Lead, LeadActivity, LeadFile, LeadStage, SalesTeam
 from core.models import User
 
 
@@ -105,9 +105,13 @@ class LeadFileFactory(factory.django.DjangoModelFactory):
 
 
 class IncomingLeadFactory(factory.django.DjangoModelFactory):
-    class Meta:
-        model = IncomingLead
+    """Factory for incoming leads (Lead with lead_type='lead')."""
 
+    class Meta:
+        model = Lead
+
+    lead_type = "lead"
+    title = factory.Sequence(lambda n: f"Incoming Lead {n}")
     message = factory.Faker("paragraph")
     status = "new"
     created_by = factory.SubFactory(UserFactory)

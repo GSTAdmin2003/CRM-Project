@@ -13,6 +13,7 @@ class KanbanLeadSerializer(serializers.Serializer):
     assigned_to = serializers.CharField(read_only=True)
     created_at = serializers.CharField(read_only=True)
     last_activity = serializers.CharField(read_only=True)
+    unread_message_count = serializers.IntegerField(read_only=True)
 
 
 class KanbanStageInfoSerializer(serializers.Serializer):

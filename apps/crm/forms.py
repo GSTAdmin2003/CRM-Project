@@ -1,6 +1,6 @@
 from django import forms
 from django.contrib.auth import get_user_model
-from .models import Lead, LeadStage, SalesTeam, IncomingLead
+from .models import Lead, LeadStage, SalesTeam
 from apps.contacts.models import Company, Contact
 from core.widgets.autocomplete import (
     CompanyAutocompleteField,
@@ -253,13 +253,13 @@ class LeadForm(forms.ModelForm):
                 lead.company.save(update_fields=['company_email'])
 
 class IncomingLeadForm(forms.ModelForm):
-    """Form for creating/editing incoming leads"""
+    """Form for creating/editing incoming leads (backed by unified Lead model)"""
     company = CompanyAutocompleteField()
     sales_team = SalesTeamAutocompleteField(required=False)
     assigned_to = UserAutocompleteField(required=False)
 
     class Meta:
-        model = IncomingLead
+        model = Lead
         fields = ['message', 'status', 'notes']
         widgets = {
             'message': forms.Textarea(attrs={

@@ -31,6 +31,7 @@ class CallListSerializer(serializers.ModelSerializer):
     )
     duration_formatted = serializers.CharField(read_only=True)
     has_recording = serializers.SerializerMethodField()
+    activity_id = serializers.IntegerField(read_only=True)
 
     class Meta:
         model = Call
@@ -47,6 +48,7 @@ class CallListSerializer(serializers.ModelSerializer):
             "duration_formatted",
             "started_at",
             "has_recording",
+            "activity_id",
             "created_at",
         ]
 
@@ -71,6 +73,7 @@ class CallDetailSerializer(serializers.ModelSerializer):
     duration_formatted = serializers.CharField(read_only=True)
     recording = CallRecordingSerializer(read_only=True)
     logs = CallLogSerializer(many=True, read_only=True)
+    activity_id = serializers.IntegerField(read_only=True)
 
     class Meta:
         model = Call
@@ -86,6 +89,7 @@ class CallDetailSerializer(serializers.ModelSerializer):
             "contact_name",
             "opportunity_id",
             "opportunity_title",
+            "activity_id",
             "user",
             "user_name",
             "duration",

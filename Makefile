@@ -1,7 +1,7 @@
 # Django CRM Project Makefile
 # Commands for running, restarting, and managing the application
 
-.PHONY: help run restart stop start dev logs db-start db-stop db-restart setup migrate init-db reset-db
+.PHONY: help run restart stop start dev logs db-start db-stop db-restart setup migrate init-db reset-db ngrok
 
 # Default target
 help:
@@ -9,6 +9,7 @@ help:
 	@echo ""
 	@echo "🚀 Application Commands:"
 	@echo "  make run        - Start the Django development server"
+	@echo "  make ngrok      - Start ngrok tunnel for WhatsApp webhooks"
 	@echo "  make restart    - Stop and restart the Django server"
 	@echo "  make stop       - Stop Django server (uses sudo)"
 	@echo "  make start      - Start the Django server (alias for run)"
@@ -30,6 +31,11 @@ help:
 run:
 	@echo "Starting Django development server with Docker..."
 	docker compose up web
+
+# Start ngrok tunnel for WhatsApp webhooks
+ngrok:
+	@echo "Starting ngrok tunnel → https://lorenzo-fatter-lovingly.ngrok-free.dev"
+	ngrok http --domain=lorenzo-fatter-lovingly.ngrok-free.dev 8000
 
 # Alias for run
 start: run

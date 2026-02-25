@@ -73,34 +73,211 @@ def dialpad(request):
 
 
 @login_required
+@require_GET
+def lookup_inbound_call(request):
+    """Read-only lead/contact lookup for an inbound call while it is still ringing.
+
+    Called immediately when the browser receives the SIP INVITE so the agent can
+    see who is calling before deciding to answer. Does NOT create any DB records.
+    """
+    from django.db.models import Q
+    from apps.contacts.models import Contact
+    from apps.crm.models import Lead
+    from core.utils import normalize_phone
+
+    from_number = request.GET.get("from_number", "").strip()
+    normalized = normalize_phone(from_number) if from_number else ""
+
+    if not from_number:
+        return JsonResponse({"success": False, "error": "from_number required"}, status=400)
+
+    # ── 1. Lookup contacts by phone or mobile ──────────────────────────────
+    phone_q = Q(phone=from_number) | Q(mobile=from_number)
+    if normalized and normalized != from_number:
+        phone_q |= Q(phone=normalized) | Q(mobile=normalized)
+
+    contacts_qs = Contact.objects.filter(phone_q).distinct()
+    primary_contact = contacts_qs.first()
+
+    # ── 2. Find opportunities for those contacts ───────────────────────────
+    leads = []
+    if primary_contact:
+        if primary_contact.company_id:
+            sibling_ids = Contact.objects.filter(
+                company_id=primary_contact.company_id
+            ).values_list("id", flat=True)
+            leads = list(
+                Lead.objects.filter(
+                    contact_id__in=sibling_ids,
+                    lead_type=Lead.TYPE_OPPORTUNITY,
+                ).order_by("-updated_at")
+            )
+        if not leads:
+            leads = list(
+                Lead.objects.filter(
+                    contact__in=contacts_qs,
+                    lead_type=Lead.TYPE_OPPORTUNITY,
+                ).order_by("-updated_at")
+            )
+
+    # ── 3. Fallback: search Lead.phone directly ────────────────────────────
+    if not leads:
+        lead_phone_q = Q(phone=from_number)
+        if normalized and normalized != from_number:
+            lead_phone_q |= Q(phone=normalized)
+        leads = list(
+            Lead.objects.filter(lead_phone_q, lead_type=Lead.TYPE_OPPORTUNITY)
+            .order_by("-updated_at")
+        )
+
+    # NOTE: We do NOT create a new Lead here — that only happens when the agent
+    # actually answers via register_inbound_call.
+
+    return JsonResponse({
+        "success": True,
+        "contact_name": primary_contact.name if primary_contact else None,
+        "lead_url": leads[0].get_absolute_url() if leads else None,
+        "all_leads": [
+            {"id": l.id, "title": l.title, "url": l.get_absolute_url()}
+            for l in leads
+        ],
+    })
+
+
+@login_required
 @require_POST
 def register_inbound_call(request):
-    """Register an inbound call when the agent answers it in the browser."""
-    from_number = request.POST.get("from_number", "").strip()
+    """Register an inbound call when the agent answers it in the browser.
 
-    call = Call.objects.create(
-        direction="inbound",
-        from_number=from_number,
-        to_number=getattr(request.user, "extension", None) or "100",
-        status="answered",
-        user=request.user,
-        started_at=timezone.now(),
-        answered_at=timezone.now(),
+    Looks up the caller number against Contact.phone/mobile and Lead.phone.
+    If found, returns the matching lead(s) for automatic redirect.
+    If not found, creates a new opportunity and returns it.
+    """
+    from django.db.models import Q
+    from apps.contacts.models import Contact
+    from apps.crm.models import Lead
+    from core.utils import normalize_phone
+
+    from_number = request.POST.get("from_number", "").strip()
+    normalized = normalize_phone(from_number) if from_number else ""
+
+    # ── 1. Lookup contacts by phone or mobile ──────────────────────────────
+    phone_q = Q(phone=from_number) | Q(mobile=from_number)
+    if normalized and normalized != from_number:
+        phone_q |= Q(phone=normalized) | Q(mobile=normalized)
+
+    contacts_qs = Contact.objects.filter(phone_q).distinct()
+    primary_contact = contacts_qs.first()
+
+    # ── 2. Find opportunities for those contacts (inc. company colleagues) ─
+    leads = []
+    if primary_contact:
+        if primary_contact.company_id:
+            sibling_ids = Contact.objects.filter(
+                company_id=primary_contact.company_id
+            ).values_list("id", flat=True)
+            leads = list(
+                Lead.objects.filter(
+                    contact_id__in=sibling_ids,
+                    lead_type=Lead.TYPE_OPPORTUNITY,
+                ).order_by("-updated_at")
+            )
+        if not leads:
+            leads = list(
+                Lead.objects.filter(
+                    contact__in=contacts_qs,
+                    lead_type=Lead.TYPE_OPPORTUNITY,
+                ).order_by("-updated_at")
+            )
+
+    # ── 3. Fallback: search Lead.phone directly ────────────────────────────
+    if not leads:
+        lead_phone_q = Q(phone=from_number)
+        if normalized and normalized != from_number:
+            lead_phone_q |= Q(phone=normalized)
+        leads = list(
+            Lead.objects.filter(lead_phone_q, lead_type=Lead.TYPE_OPPORTUNITY)
+            .order_by("-updated_at")
+        )
+
+    # ── 4. Nothing found — create opportunity ─────────────────────────────
+    if not leads:
+        display_name = primary_contact.name if primary_contact else from_number
+        new_lead = Lead.objects.create(
+            title=f"Inbound call from {display_name}",
+            lead_type=Lead.TYPE_OPPORTUNITY,
+            phone=from_number,
+            full_name=display_name,
+            contact=primary_contact,
+            source="cold_call",
+            status="contacted",
+            assigned_to=request.user,
+            created_by=request.user,
+        )
+        leads = [new_lead]
+
+    primary_lead = leads[0]
+
+    # ── 5. Find or create Call record ──────────────────────────────────────
+    # The ARI event handler already creates the Call when Asterisk receives the
+    # inbound channel. We look that up and update it rather than creating a
+    # duplicate (which would violate the asterisk_channel_id unique constraint).
+    import datetime
+    import uuid
+
+    cutoff = timezone.now() - datetime.timedelta(minutes=5)
+    phone_variants = [from_number]
+    if normalized and normalized != from_number:
+        phone_variants.append(normalized)
+
+    call = (
+        Call.objects.filter(
+            direction="inbound",
+            from_number__in=phone_variants,
+            started_at__gte=cutoff,
+            status__in=["ringing", "answered"],
+        )
+        .order_by("-started_at")
+        .first()
     )
 
-    # Create a Phone Call activity + extension so the browser can track via activity_id
+    if call:
+        call.contact = primary_contact
+        call.opportunity = primary_lead
+        call.user = request.user
+        call.answered_at = timezone.now()
+        call.status = "answered"
+        call.save(update_fields=["contact", "opportunity", "user", "answered_at", "status", "updated_at"])
+    else:
+        # Fallback: ARI call not found (e.g. call answered before ARI event arrived)
+        call = Call.objects.create(
+            asterisk_channel_id=f"inbound-{uuid.uuid4().hex[:16]}",
+            direction="inbound",
+            from_number=from_number,
+            to_number=getattr(request.user, "extension", None) or "100",
+            status="answered",
+            user=request.user,
+            contact=primary_contact,
+            opportunity=primary_lead,
+            started_at=timezone.now(),
+            answered_at=timezone.now(),
+        )
+
+    # ── 6. Create Activity linked to the lead ─────────────────────────────
     activity_id = None
     try:
         from apps.activities.models import Activity, ActivityType, PhoneCallExtension
         phone_call_type = ActivityType.objects.filter(name="Phone Call", is_active=True).first()
         if phone_call_type:
+            display_name = primary_contact.name if primary_contact else from_number
             activity = Activity.objects.create(
                 activity_type=phone_call_type,
-                title=f"Inbound call from {from_number}",
+                title=f"Inbound call from {display_name}",
                 scheduled_date=timezone.now().date(),
                 status="planned",
                 assigned_to=request.user,
                 created_by=request.user,
+                lead=primary_lead,
             )
             call.activity = activity
             call.save(update_fields=["activity", "updated_at"])
@@ -117,12 +294,155 @@ def register_inbound_call(request):
                 started_at=call.started_at,
                 answered_at=call.answered_at,
             )
-
             activity_id = activity.id
     except Exception:
         pass
 
-    return JsonResponse({"success": True, "call_id": call.id, "activity_id": activity_id})
+    return JsonResponse({
+        "success": True,
+        "call_id": call.id,
+        "activity_id": activity_id,
+        "lead_id": primary_lead.id,
+        "lead_url": primary_lead.get_absolute_url(),
+        "contact_name": primary_contact.name if primary_contact else None,
+        "all_leads": [
+            {"id": l.id, "title": l.title, "url": l.get_absolute_url()}
+            for l in leads
+        ],
+    })
+
+
+@login_required
+@require_POST
+def record_missed_call(request):
+    """Record an inbound call that rang but was never answered.
+
+    Called from the browser when the SIP INVITE times out or is rejected by
+    the agent clicking Reject.  Creates (or updates) the Call record with
+    status='no_answer' and logs a 'Missed call' Activity against the lead.
+    """
+    import datetime
+    import uuid
+
+    from django.db.models import Q
+
+    from apps.contacts.models import Contact
+    from apps.crm.models import Lead
+    from core.utils import normalize_phone
+
+    from_number = request.POST.get("from_number", "").strip()
+    if not from_number:
+        return JsonResponse({"success": False, "error": "from_number required"}, status=400)
+
+    normalized = normalize_phone(from_number) if from_number else ""
+
+    # ── 1. Contact lookup ──────────────────────────────────────────────────
+    phone_q = Q(phone=from_number) | Q(mobile=from_number)
+    if normalized and normalized != from_number:
+        phone_q |= Q(phone=normalized) | Q(mobile=normalized)
+    contacts_qs = Contact.objects.filter(phone_q).distinct()
+    primary_contact = contacts_qs.first()
+
+    # ── 2. Lead lookup ─────────────────────────────────────────────────────
+    leads = []
+    if primary_contact:
+        if primary_contact.company_id:
+            sibling_ids = Contact.objects.filter(
+                company_id=primary_contact.company_id
+            ).values_list("id", flat=True)
+            leads = list(
+                Lead.objects.filter(
+                    contact_id__in=sibling_ids, lead_type=Lead.TYPE_OPPORTUNITY
+                ).order_by("-updated_at")
+            )
+        if not leads:
+            leads = list(
+                Lead.objects.filter(
+                    contact__in=contacts_qs, lead_type=Lead.TYPE_OPPORTUNITY
+                ).order_by("-updated_at")
+            )
+    if not leads:
+        lead_phone_q = Q(phone=from_number)
+        if normalized and normalized != from_number:
+            lead_phone_q |= Q(phone=normalized)
+        leads = list(
+            Lead.objects.filter(lead_phone_q, lead_type=Lead.TYPE_OPPORTUNITY).order_by(
+                "-updated_at"
+            )
+        )
+
+    primary_lead = leads[0] if leads else None
+
+    # ── 3. Update ARI call record (if it exists) or create a new one ───────
+    cutoff = timezone.now() - datetime.timedelta(minutes=5)
+    phone_variants = [from_number]
+    if normalized and normalized != from_number:
+        phone_variants.append(normalized)
+
+    call = (
+        Call.objects.filter(
+            direction="inbound",
+            from_number__in=phone_variants,
+            started_at__gte=cutoff,
+            status="ringing",
+        )
+        .order_by("-started_at")
+        .first()
+    )
+
+    if call:
+        call.status = "no_answer"
+        call.ended_at = timezone.now()
+        call.contact = primary_contact
+        call.opportunity = primary_lead
+        call.save(update_fields=["status", "ended_at", "contact", "opportunity", "updated_at"])
+    else:
+        call = Call.objects.create(
+            asterisk_channel_id=f"missed-{uuid.uuid4().hex[:16]}",
+            direction="inbound",
+            from_number=from_number,
+            status="no_answer",
+            contact=primary_contact,
+            opportunity=primary_lead,
+            started_at=timezone.now(),
+            ended_at=timezone.now(),
+        )
+
+    # ── 4. Create a 'Missed call' Activity ─────────────────────────────────
+    if primary_lead:
+        try:
+            from apps.activities.models import Activity, ActivityType, PhoneCallExtension
+
+            phone_call_type = ActivityType.objects.filter(
+                name="Phone Call", is_active=True
+            ).first()
+            if phone_call_type:
+                display = primary_contact.name if primary_contact else from_number
+                activity = Activity.objects.create(
+                    activity_type=phone_call_type,
+                    title=f"Missed inbound call from {display}",
+                    scheduled_date=timezone.now().date(),
+                    status="completed",
+                    outcome="Missed call — agent did not answer",
+                    assigned_to=request.user,
+                    created_by=request.user,
+                    lead=primary_lead,
+                )
+                PhoneCallExtension.objects.create(
+                    activity=activity,
+                    ari_call=call,
+                    direction="inbound",
+                    call_status="no_answer",
+                    from_number=from_number,
+                    to_number=getattr(request.user, "extension", None) or "100",
+                    asterisk_channel_id=call.asterisk_channel_id,
+                    user=request.user,
+                    started_at=call.started_at,
+                )
+        except Exception:
+            pass
+
+    return JsonResponse({"success": True})
 
 
 @login_required

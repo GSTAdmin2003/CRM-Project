@@ -6,6 +6,16 @@ if [ -n "$ARI_PASSWORD" ]; then
     sed -i "s/ARI_PASSWORD_PLACEHOLDER/$ARI_PASSWORD/g" /etc/asterisk/ari.conf
 fi
 
+# Set external IP for SIP trunk NAT traversal (needed when Asterisk is inside Docker)
+if [ -n "$EXTERNAL_IP" ]; then
+    sed -i "s/EXTERNAL_IP_PLACEHOLDER/$EXTERNAL_IP/g" /etc/asterisk/pjsip.conf
+    echo "Configured external SIP IP: $EXTERNAL_IP"
+else
+    # No external IP: remove the placeholder lines (leave transport without NAT settings)
+    sed -i '/EXTERNAL_IP_PLACEHOLDER/d' /etc/asterisk/pjsip.conf
+    echo "Warning: EXTERNAL_IP not set — inbound SIP calls may not reach Asterisk if behind NAT"
+fi
+
 # Create empty dynamic trunk config if it doesn't exist yet
 # (will be populated by the CRM app when user saves SIP settings)
 if [ ! -f /etc/asterisk/dynamic/pjsip_trunk.conf ]; then

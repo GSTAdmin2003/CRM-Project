@@ -54,6 +54,7 @@ services:
       - TZ=${TZ:-Asia/Tbilisi}
       - ARI_PASSWORD=${ARI_PASSWORD}
       - WEBRTC_AGENT_PASSWORD=${WEBRTC_AGENT_PASSWORD:-changeme}
+      - EXTERNAL_IP=${EXTERNAL_IP}
 
   redis:
     image: redis:7-alpine

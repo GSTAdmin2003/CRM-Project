@@ -84,7 +84,11 @@ class ARIEventHandler:
         ari_pass = getattr(settings, "ASTERISK_ARI_PASSWORD", "")
 
         ws_base = ari_url.replace("http://", "ws://").replace("https://", "wss://")
-        uri = f"{ws_base}/ari/events?app=crm-app&api_key={ari_user}:{ari_pass}"
+        # subscribeAll=true: receive ChannelCreated/ChannelDestroyed for ALL channels,
+        # not just those that enter a Stasis() dialplan application.  This lets us
+        # track inbound calls that arrive via the normal dialplan (Dial(PJSIP/100))
+        # without needing Stasis(crm-app) in the extensions.conf.
+        uri = f"{ws_base}/ari/events?app=crm-app&api_key={ari_user}:{ari_pass}&subscribeAll=true"
 
         logger.info(f"Connecting to ARI WebSocket at {ari_url}/ari/events …")
 
@@ -109,6 +113,11 @@ class ARIEventHandler:
         channel = _Channel(channel_data.get("id", ""))
 
         _handlers = {
+            # ChannelCreated fires for ALL channels when subscribeAll=true.
+            # We use it to create Call records for inbound trunk channels before
+            # the agent answers — giving us the real asterisk_channel_id that
+            # matches the MixMonitor recording filename.
+            "ChannelCreated": self._on_channel_created,
             "StasisStart": self._on_stasis_start,
             "StasisEnd": self._on_stasis_end,
             "ChannelStateChange": self._on_state_change,
@@ -128,6 +137,46 @@ class ARIEventHandler:
     # ------------------------------------------------------------------
     # Event handlers
     # ------------------------------------------------------------------
+
+    def _on_channel_created(self, channel, event):
+        """Create a Call record as soon as an inbound trunk channel appears.
+
+        With subscribeAll=true this fires for every new channel.  We only act
+        on channels whose dialplan context starts with 'from-trunk' — those are
+        inbound calls arriving from the SIP trunk before the agent answers.
+
+        This ensures the Call record uses the real Asterisk channel id (= the
+        UNIQUEID used by MixMonitor when naming the recording file) rather than
+        the fake 'inbound-{uuid}' fallback created by register_inbound_call.
+        """
+        from .models import Call
+
+        channel_info = event.get("channel", {})
+        dialplan = channel_info.get("dialplan", {})
+        context = dialplan.get("context", "")
+        caller = channel_info.get("caller", {})
+        caller_id = caller.get("number", "")
+
+        # Only track inbound trunk channels
+        if not context.startswith("from-trunk"):
+            return
+        if not caller_id:
+            return
+
+        channel_id = channel.id
+        try:
+            Call.objects.get(asterisk_channel_id=channel_id)
+            logger.debug(f"ChannelCreated: Call already exists for channel {channel_id}")
+        except Call.DoesNotExist:
+            Call.objects.create(
+                asterisk_channel_id=channel_id,
+                direction="inbound",
+                from_number=caller_id,
+                to_number="",
+                status="ringing",
+                started_at=timezone.now(),
+            )
+            logger.info(f"ChannelCreated: recorded inbound call {channel_id} from {caller_id}")
 
     def _on_stasis_start(self, channel, event):
         """Handle new call entering Stasis app."""

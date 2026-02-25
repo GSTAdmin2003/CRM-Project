@@ -13,7 +13,9 @@ urlpatterns = [
     path("api/", include(router.urls)),
     # Internal call action endpoints (used by JS / WebRTC layer)
     path("initiate/", template_views.initiate_call, name="initiate_call"),
+    path("inbound/lookup/", template_views.lookup_inbound_call, name="lookup_inbound_call"),
     path("inbound/register/", template_views.register_inbound_call, name="register_inbound_call"),
+    path("inbound/missed/", template_views.record_missed_call, name="record_missed_call"),
     path("<int:pk>/ended/", template_views.call_ended, name="call_ended"),
     path("<int:pk>/hangup/", template_views.hangup_call, name="hangup_call"),
     path("<int:pk>/answer/", template_views.answer_call, name="answer_call"),

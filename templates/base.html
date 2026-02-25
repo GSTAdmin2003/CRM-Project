@@ -20,7 +20,6 @@
     {% load static %}
     <link rel="stylesheet" href="{% static 'css/dashboard.css' %}">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
-    {% block extra_css %}{% endblock %}
 </head>
 <body class="h-full bg-gray-50">
     <div class="min-h-full">
@@ -282,8 +281,17 @@
                         <i class="fas fa-phone-alt text-3xl text-green-600"></i>
                     </div>
                     <h2 class="text-xl font-bold text-gray-900 mb-1">Incoming Call</h2>
-                    <p id="incoming-caller-id" class="text-2xl font-mono text-gray-700 mb-6">Unknown</p>
-                    <div class="flex justify-center space-x-6">
+                    <p id="incoming-caller-id" class="text-2xl font-mono text-gray-700 mb-1">Unknown</p>
+                    <!-- Contact name (populated by background lookup) -->
+                    <p id="incoming-contact-name" class="text-sm font-semibold text-indigo-700 mb-1 hidden"></p>
+                    <!-- Lookup spinner -->
+                    <p id="incoming-lookup-status" class="text-xs text-gray-400 mb-3"></p>
+                    <!-- Lead selector (shown when leads found) -->
+                    <div id="incoming-lead-info" class="hidden text-left border-t border-gray-100 pt-3 mb-3">
+                        <p class="text-xs text-gray-500 mb-2">Open lead on answer:</p>
+                        <div id="incoming-lead-list" class="space-y-1 max-h-36 overflow-y-auto"></div>
+                    </div>
+                    <div class="flex justify-center space-x-6 mt-4">
                         <button onclick="rejectIncomingCall()" class="w-16 h-16 rounded-full bg-red-500 hover:bg-red-600 text-white flex items-center justify-center transition-colors">
                             <i class="fas fa-phone-slash text-xl"></i>
                         </button>
@@ -296,8 +304,9 @@
 
             <!-- Floating in-call bar — visible on every page while a call is active -->
             <div id="incall-bar" class="hidden fixed bottom-0 left-0 right-0 z-40 bg-gray-900 text-white shadow-2xl border-t-2 border-green-500">
-                <div class="max-w-7xl mx-auto px-4 py-3 flex items-center justify-between">
-                    <div class="flex items-center gap-4">
+                <div class="max-w-7xl mx-auto px-4 py-3 flex items-center justify-between gap-4">
+                    <!-- Left: call status + caller + timer -->
+                    <div class="flex items-center gap-4 shrink-0">
                         <div class="flex items-center gap-2">
                             <span class="w-2.5 h-2.5 rounded-full bg-green-400 animate-pulse"></span>
                             <span class="text-sm font-medium text-gray-300">Active Call</span>
@@ -305,7 +314,26 @@
                         <span id="incall-caller-display" class="text-sm font-mono font-semibold text-green-300"></span>
                         <span id="incall-timer-display" class="text-sm font-mono text-gray-400">00:00</span>
                     </div>
-                    <div class="flex items-center gap-2">
+                    <!-- Center: lead navigator (inbound only) -->
+                    <div id="incall-lead-nav" class="hidden flex-1 flex items-center justify-center gap-2 min-w-0">
+                        <button onclick="navigateIncallLead(-1)"
+                                class="w-6 h-6 flex items-center justify-center rounded bg-gray-700 hover:bg-gray-600 text-xs transition-colors shrink-0">
+                            <i class="fas fa-chevron-left"></i>
+                        </button>
+                        <a id="incall-lead-link" href="#"
+                           onclick="if(_inboundLeadUrl){crmNavigate(_inboundLeadUrl);return false;}"
+                           class="text-xs text-blue-300 hover:text-blue-200 underline truncate font-medium min-w-0"
+                           title="Go to lead">
+                            <span id="incall-lead-title"></span>
+                        </a>
+                        <span id="incall-lead-count" class="text-xs text-gray-500 shrink-0"></span>
+                        <button onclick="navigateIncallLead(1)"
+                                class="w-6 h-6 flex items-center justify-center rounded bg-gray-700 hover:bg-gray-600 text-xs transition-colors shrink-0">
+                            <i class="fas fa-chevron-right"></i>
+                        </button>
+                    </div>
+                    <!-- Right: controls -->
+                    <div class="flex items-center gap-2 shrink-0">
                         <button onclick="toggleMute()" id="incall-mute-btn"
                                 class="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-gray-700 hover:bg-gray-600 text-xs font-medium transition-colors">
                             <i id="incall-mute-icon" class="fas fa-microphone"></i>
@@ -325,12 +353,17 @@
                 </div>
             </div>
 
-            <!-- Hidden audio element for remote call audio -->
+            <!-- Hidden audio elements -->
             <audio id="remote-audio" autoplay></audio>
+            <!-- Ringtone: played when an inbound call arrives. Uses Web Audio API
+                 as fallback; this element is here so we can swap in a configured
+                 audio file from settings in the future. -->
+            <audio id="ringtone-audio" loop preload="auto"></audio>
         {% endif %}
 
         <!-- Main content -->
-        <main class="flex-1">
+        <main id="main-content" class="flex-1">
+            {% block extra_css %}{% endblock %}
             <!-- Floating error messages at top middle -->
             {% if messages %}
                 <div id="message-container" class="fixed top-4 left-1/2 transform -translate-x-1/2 z-50 w-full max-w-md px-4">
@@ -362,6 +395,7 @@
 
             {% block content %}
             {% endblock %}
+            {% block extra_js %}{% endblock %}
         </main>
 
         <!-- Footer -->
@@ -481,6 +515,42 @@
     }
 
     // =========================================================================
+    //  SPA navigation — swap only #main-content, leave SIP session alive
+    //  Returns a Promise that resolves once the swap is complete.
+    // =========================================================================
+    function crmNavigate(url) {
+        return new Promise(function(resolve) {
+            var curMain = document.getElementById('main-content');
+            if (!curMain) { window.location.href = url; resolve(); return; }
+
+            fetch(url, { credentials: 'same-origin' })
+                .then(function(r) { return r.text(); })
+                .then(function(html) {
+                    var parser = new DOMParser();
+                    var doc = parser.parseFromString(html, 'text/html');
+                    var newMain = doc.getElementById('main-content');
+                    if (newMain) {
+                        curMain.innerHTML = newMain.innerHTML;
+                        if (doc.title) document.title = doc.title;
+                        history.pushState({ url: url }, doc.title || '', url);
+                        // Re-execute <script> tags from the new content
+                        curMain.querySelectorAll('script').forEach(function(old) {
+                            var s = document.createElement('script');
+                            s.textContent = old.textContent;
+                            document.body.appendChild(s);
+                            document.body.removeChild(s);
+                        });
+                        window.scrollTo(0, 0);
+                    } else {
+                        window.location.href = url;
+                    }
+                    resolve();
+                })
+                .catch(function() { window.location.href = url; resolve(); });
+        });
+    }
+
+    // =========================================================================
     //  Dialpad Panel Toggle
     // =========================================================================
     var dialpadOpen = false;
@@ -502,6 +572,26 @@
     var incomingCallerNumber = '';
     var isMuted = false;
     var isOnHold = false;
+    // Inbound call lead tracking
+    var _inboundLeads = [];
+    var _inboundLeadIdx = 0;
+    var _inboundLeadUrl = null;
+    // Track whether current inbound call was answered (for missed call recording)
+    var _inboundCallAnswered = false;
+    // DB call_id returned by register_inbound_call (used as fallback recording trigger)
+    var _inboundCallId = null;
+    // Flag: call ended before register_inbound_call fetch returned (race condition)
+    var _callEndedBeforeRegistered = false;
+    // Browser notification reference (so we can close it on answer/reject)
+    var _inboundNotification = null;
+
+    // Clean up any stale sessionStorage from previous sessions
+    sessionStorage.removeItem('_inboundCallState');
+
+    // Request browser notification permission (for calls arriving in background tabs)
+    if ('Notification' in window && Notification.permission === 'default') {
+        Notification.requestPermission();
+    }
 
     // =========================================================================
     //  JsSIP — WebRTC SIP client
@@ -551,8 +641,15 @@
                 incomingCallerNumber = fromUri ? fromUri.user : 'Unknown';
                 showIncomingCall(incomingCallerNumber);
 
-                session.on('failed', function () { hideIncomingCall(); });
-                session.on('ended', function () { hideIncomingCall(); });
+                session.on('failed', function () {
+                    hideIncomingCall();
+                    if (!_inboundCallAnswered) { _recordMissedCall(incomingCallerNumber); }
+                    resetDialpad();
+                });
+                session.on('ended', function () {
+                    hideIncomingCall();
+                    if (!_inboundCallAnswered) { _recordMissedCall(incomingCallerNumber); }
+                });
             }
         });
 
@@ -589,13 +686,25 @@
         session.on('ended', function () {
             currentSession = null;
             if (currentActivityId) {
+                // Normal path: activity endpoint marks call ended + queues recording
                 fetch('/activities/' + currentActivityId + '/call/ended/', {
                     method: 'POST',
                     headers: { 'X-CSRFToken': getCsrfToken() },
                 }).catch(function (err) { console.error('Failed to notify call ended:', err); });
+            } else if (_inboundCallId) {
+                // Fallback: register_inbound_call returned but activity_id was null
+                fetch('/calls/' + _inboundCallId + '/ended/', {
+                    method: 'POST',
+                    headers: { 'X-CSRFToken': getCsrfToken() },
+                }).catch(function (err) { console.error('Failed to notify inbound call ended:', err); });
+            } else if (_inboundCallAnswered) {
+                // Race condition: register_inbound_call hasn't returned yet.
+                // Set flag so the callback triggers recording when it arrives.
+                _callEndedBeforeRegistered = true;
             }
             outboundPending = false;
             document.getElementById('remote-audio').srcObject = null;
+            resetDialpad();
         });
 
         session.on('failed', function () {
@@ -608,6 +717,7 @@
             }
             outboundPending = false;
             document.getElementById('remote-audio').srcObject = null;
+            resetDialpad();
         });
     }
 
@@ -645,12 +755,100 @@
     }
 
     // =========================================================================
+    //  Missed call recording helper
+    // =========================================================================
+    function _recordMissedCall(callerNum) {
+        if (!callerNum || callerNum === 'Unknown') return;
+        if (_inboundNotification) { try { _inboundNotification.close(); } catch(e) {} _inboundNotification = null; }
+        var fd = new FormData();
+        fd.append('from_number', callerNum);
+        fetch('/calls/inbound/missed/', {
+            method: 'POST',
+            body: fd,
+            headers: { 'X-CSRFToken': getCsrfToken() },
+        }).catch(function() {});
+    }
+
+    // =========================================================================
     //  Incoming call UI
     // =========================================================================
     function showIncomingCall(callerNumber) {
+        // Reset overlay state
+        _inboundCallAnswered = false;
+        _inboundCallId = null;
+        _callEndedBeforeRegistered = false;
         document.getElementById('incoming-caller-id').textContent = callerNumber || 'Unknown';
+        document.getElementById('incoming-contact-name').textContent = '';
+        document.getElementById('incoming-contact-name').classList.add('hidden');
+        document.getElementById('incoming-lookup-status').textContent = 'Looking up...';
+        document.getElementById('incoming-lead-info').classList.add('hidden');
+        document.getElementById('incoming-lead-list').innerHTML = '';
+        _inboundLeads = [];
+        _inboundLeadIdx = 0;
+        _inboundLeadUrl = null;
+
         document.getElementById('incoming-call-overlay').classList.remove('hidden');
         startRingtone();
+
+        // Show browser notification so the agent sees the call even if the tab
+        // is in the background or the screen is focused elsewhere.
+        if (_inboundNotification) { try { _inboundNotification.close(); } catch(e) {} }
+        if ('Notification' in window && Notification.permission === 'granted') {
+            try {
+                _inboundNotification = new Notification('📞 Incoming Call', {
+                    body: callerNumber || 'Unknown number',
+                    tag: 'crm-incoming-call',
+                    requireInteraction: true,
+                    silent: false,
+                });
+                _inboundNotification.onclick = function() {
+                    window.focus();
+                    _inboundNotification.close();
+                };
+            } catch(e) {}
+        }
+
+        // Background lookup — find contact + leads while still ringing
+        if (callerNumber && callerNumber !== 'Unknown') {
+            fetch('/calls/inbound/lookup/?from_number=' + encodeURIComponent(callerNumber), {
+                credentials: 'same-origin',
+            })
+            .then(function(r) { return r.json(); })
+            .then(function(data) {
+                document.getElementById('incoming-lookup-status').textContent = '';
+                if (!data.success) return;
+
+                if (data.contact_name) {
+                    var nameEl = document.getElementById('incoming-contact-name');
+                    nameEl.textContent = data.contact_name;
+                    nameEl.classList.remove('hidden');
+                }
+
+                if (data.all_leads && data.all_leads.length > 0) {
+                    _inboundLeads = data.all_leads;
+                    _inboundLeadIdx = 0;
+                    _inboundLeadUrl = data.lead_url || data.all_leads[0].url;
+
+                    var list = document.getElementById('incoming-lead-list');
+                    list.innerHTML = data.all_leads.map(function(l, i) {
+                        return '<label class="flex items-center gap-2 cursor-pointer px-2 py-1 rounded hover:bg-gray-50">' +
+                            '<input type="radio" name="incoming-lead-choice" value="' + i + '"' +
+                            (i === 0 ? ' checked' : '') +
+                            ' onchange="_inboundLeadIdx=parseInt(this.value);_inboundLeadUrl=_inboundLeads[_inboundLeadIdx].url;">' +
+                            '<span class="text-sm text-gray-700 truncate">' + escapeHtml(l.title) + '</span>' +
+                            '</label>';
+                    }).join('');
+                    document.getElementById('incoming-lead-info').classList.remove('hidden');
+                } else {
+                    document.getElementById('incoming-lookup-status').textContent = 'Unknown number';
+                }
+            })
+            .catch(function() {
+                document.getElementById('incoming-lookup-status').textContent = '';
+            });
+        } else {
+            document.getElementById('incoming-lookup-status').textContent = '';
+        }
     }
 
     function hideIncomingCall() {
@@ -662,6 +860,9 @@
         hideIncomingCall();
         if (!currentSession) return;
 
+        _inboundCallAnswered = true;
+        if (_inboundNotification) { try { _inboundNotification.close(); } catch(e) {} _inboundNotification = null; }
+
         document.getElementById('phone-number').value = incomingCallerNumber;
         document.getElementById('call-status').classList.remove('hidden');
         document.getElementById('status-text').textContent = 'Connected';
@@ -669,11 +870,16 @@
         document.getElementById('hangup-btn').classList.remove('hidden');
         document.getElementById('incall-caller-display').textContent = incomingCallerNumber || 'Unknown';
         startTimer();
-
         window.dispatchEvent(new CustomEvent('crm:callStarted'));
-        answerSession(currentSession);
 
-        // Register inbound call in DB
+        // Capture session reference
+        var session = currentSession;
+
+        // CRITICAL: Answer the SIP call IMMEDIATELY — never delay for navigation.
+        // Asterisk's ring timeout will kill the INVITE if we wait for a fetch/DOM swap first.
+        answerSession(session);
+
+        // Register call in DB (async, fire-and-forget)
         var formData = new FormData();
         formData.append('from_number', incomingCallerNumber);
         fetch('/calls/inbound/register/', {
@@ -681,21 +887,74 @@
             body: formData,
             headers: { 'X-CSRFToken': getCsrfToken() },
         })
-        .then(function (r) { return r.json(); })
-        .then(function (data) {
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
             if (data.success) {
                 currentActivityId = data.activity_id || null;
-                showNotebook();
+                _inboundCallId = data.call_id || null;
+                // Prefer already-selected lead; fall back to server response
+                if (!_inboundLeads.length) {
+                    _inboundLeads = data.all_leads || [];
+                    _inboundLeadIdx = 0;
+                    _inboundLeadUrl = data.lead_url || null;
+                }
+                var callerEl = document.getElementById('incall-caller-display');
+                if (callerEl && data.contact_name) callerEl.textContent = data.contact_name;
+                if (_inboundLeads.length > 0) {
+                    _updateIncallLeadNav();
+                    document.getElementById('incall-lead-nav').classList.remove('hidden');
+                }
+                // Race condition: call ended before this fetch completed.
+                // Trigger recording now that we have the IDs.
+                if (_callEndedBeforeRegistered) {
+                    _callEndedBeforeRegistered = false;
+                    var endId = currentActivityId || null;
+                    var callId = _inboundCallId || null;
+                    if (endId) {
+                        fetch('/activities/' + endId + '/call/ended/', {
+                            method: 'POST', headers: { 'X-CSRFToken': getCsrfToken() },
+                        }).catch(function() {});
+                    } else if (callId) {
+                        fetch('/calls/' + callId + '/ended/', {
+                            method: 'POST', headers: { 'X-CSRFToken': getCsrfToken() },
+                        }).catch(function() {});
+                    }
+                }
             }
         });
+
+        // Navigate to the lead page IN PARALLEL (fire-and-forget).
+        // The SIP session is already answered above — navigation cannot kill the call.
+        if (_inboundLeadUrl) {
+            crmNavigate(_inboundLeadUrl);
+        }
+    }
+
+    function _updateIncallLeadNav() {
+        var lead = _inboundLeads[_inboundLeadIdx];
+        if (!lead) return;
+        document.getElementById('incall-lead-title').textContent = lead.title;
+        document.getElementById('incall-lead-link').href = lead.url;
+        document.getElementById('incall-lead-count').textContent =
+            _inboundLeads.length > 1 ? (_inboundLeadIdx + 1) + '/' + _inboundLeads.length : '';
+        _inboundLeadUrl = lead.url;
+    }
+
+    function navigateIncallLead(dir) {
+        if (_inboundLeads.length === 0) return;
+        _inboundLeadIdx = (_inboundLeadIdx + dir + _inboundLeads.length) % _inboundLeads.length;
+        _updateIncallLeadNav();
+        crmNavigate(_inboundLeads[_inboundLeadIdx].url);
     }
 
     function rejectIncomingCall() {
         hideIncomingCall();
+        if (_inboundNotification) { try { _inboundNotification.close(); } catch(e) {} _inboundNotification = null; }
         if (currentSession) {
             try { currentSession.terminate(); } catch (e) { /* ignore */ }
             currentSession = null;
         }
+        _recordMissedCall(incomingCallerNumber);
     }
 
     // =========================================================================
@@ -974,6 +1233,13 @@
     function resetDialpad() {
         currentActivityId = null;
         outboundPending = false;
+        _inboundLeads = [];
+        _inboundLeadIdx = 0;
+        _inboundLeadUrl = null;
+        _inboundCallId = null;
+        _callEndedBeforeRegistered = false;
+        sessionStorage.removeItem('_inboundCallState');
+        document.getElementById('incall-lead-nav').classList.add('hidden');
         window.dispatchEvent(new CustomEvent('crm:callEnded'));
         if (callTimer) { clearInterval(callTimer); callTimer = null; }
         callSeconds = 0;
@@ -1464,8 +1730,13 @@
                 document.getElementById('call-outcome-text').value = '';
                 window._feedbackActivityId = null;
                 currentActivityId = null;
+                var redirectUrl = _inboundLeadUrl || null;
                 resetDialpad();
-                window.location.reload();
+                if (redirectUrl) {
+                    crmNavigate(redirectUrl);
+                } else {
+                    window.location.reload();
+                }
             } else {
                 alert('Failed to save feedback. Please try again.');
             }
@@ -1484,8 +1755,6 @@
             evt.detail.headers['X-CSRFToken'] = '{{ csrf_token }}';
         });
     </script>
-
-    {% block extra_js %}{% endblock %}
 
     <!-- Post-call feedback modal (mandatory, non-dismissible) -->
     {% if user.is_authenticated %}

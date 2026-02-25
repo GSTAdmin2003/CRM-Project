@@ -11,7 +11,7 @@ from apps.crm.models import Lead, LeadActivity, LeadFile, LeadStage, SalesTeam
 from .conftest import (
     CompanyFactory,
     ContactFactory,
-    IncomingLeadFactory,
+    LeadTypeLeadFactory,
     LeadActivityFactory,
     LeadFactory,
     LeadFileFactory,
@@ -448,35 +448,35 @@ class TestLeadFileModel:
 
 
 # =============================================================================
-# Incoming Lead (Lead with lead_type='lead')
+# Lead (lead_type='lead')
 # =============================================================================
 
 
 @pytest.mark.django_db
-class TestIncomingLeadModel:
-    """Tests for incoming leads — now stored as Lead(lead_type='lead')."""
+class TestLeadTypeModel:
+    """Tests for leads with lead_type='lead'."""
 
-    def test_create_incoming_lead(self):
-        incoming = IncomingLeadFactory(message="Interested in your product")
+    def test_create_lead(self):
+        incoming = LeadTypeLeadFactory(message="Interested in your product")
         assert incoming.pk is not None
         assert incoming.lead_type == "lead"
         assert incoming.message == "Interested in your product"
         assert incoming.status == "new"
 
     def test_str_contains_title(self):
-        incoming = IncomingLeadFactory()
+        incoming = LeadTypeLeadFactory()
         assert incoming.title in str(incoming)
 
     def test_ordering_by_last_activity_desc(self):
-        IncomingLeadFactory(message="First")
-        IncomingLeadFactory(message="Second")
+        LeadTypeLeadFactory(message="First")
+        LeadTypeLeadFactory(message="Second")
         leads = list(Lead.objects.filter(lead_type="lead").values_list("message", flat=True))
         # Just verify both are retrievable
         assert "First" in leads
         assert "Second" in leads
 
     def test_lead_type_discriminator(self):
-        incoming = IncomingLeadFactory()
+        incoming = LeadTypeLeadFactory()
         assert incoming.lead_type == "lead"
         assert Lead.objects.filter(pk=incoming.pk, lead_type="lead").exists()
 
@@ -488,69 +488,69 @@ class TestIncomingLeadModel:
         assert "contacted" in choice_values
 
     def test_status_new(self):
-        incoming = IncomingLeadFactory(status="new")
+        incoming = LeadTypeLeadFactory(status="new")
         assert incoming.status == "new"
 
     def test_status_converted(self):
-        incoming = IncomingLeadFactory(status="converted")
+        incoming = LeadTypeLeadFactory(status="converted")
         assert incoming.status == "converted"
 
     def test_can_be_viewed_by_executive(self, user_sales_executive):
-        incoming = IncomingLeadFactory()
+        incoming = LeadTypeLeadFactory()
         assert incoming.can_be_viewed_by(user_sales_executive) is True
 
     def test_can_be_viewed_by_assigned_user(self, user_sales_rep):
         """Sales Rep assigned to the lead can view it."""
-        incoming = IncomingLeadFactory(assigned_to=user_sales_rep)
+        incoming = LeadTypeLeadFactory(assigned_to=user_sales_rep)
         assert incoming.can_be_viewed_by(user_sales_rep) is True
 
     def test_can_be_viewed_by_creator(self):
         user = UserFactory()
-        incoming = IncomingLeadFactory(created_by=user)
+        incoming = LeadTypeLeadFactory(created_by=user)
         assert incoming.can_be_viewed_by(user) is True
 
     def test_cannot_be_viewed_by_unrelated_rep(self, user_sales_rep):
         other_user = UserFactory()
-        incoming = IncomingLeadFactory(
+        incoming = LeadTypeLeadFactory(
             created_by=other_user, assigned_to=other_user
         )
         assert incoming.can_be_viewed_by(user_sales_rep) is False
 
     def test_can_be_edited_by_executive(self, user_sales_executive):
-        incoming = IncomingLeadFactory()
+        incoming = LeadTypeLeadFactory()
         assert incoming.can_be_edited_by(user_sales_executive) is True
 
     def test_can_be_edited_by_assigned_user(self):
         user = UserFactory()
-        incoming = IncomingLeadFactory(assigned_to=user)
+        incoming = LeadTypeLeadFactory(assigned_to=user)
         assert incoming.can_be_edited_by(user) is True
 
     def test_cannot_be_edited_by_unrelated_user(self, user_sales_rep):
         other_user = UserFactory()
-        incoming = IncomingLeadFactory(assigned_to=other_user, created_by=other_user)
+        incoming = LeadTypeLeadFactory(assigned_to=other_user, created_by=other_user)
         assert incoming.can_be_edited_by(user_sales_rep) is False
 
     def test_company_set_null_on_delete(self):
         company = CompanyFactory()
-        incoming = IncomingLeadFactory(company=company)
+        incoming = LeadTypeLeadFactory(company=company)
         company.delete()
         incoming.refresh_from_db()
         assert incoming.company is None
 
     def test_contact_set_null_on_delete(self):
         contact = ContactFactory()
-        incoming = IncomingLeadFactory(contact=contact)
+        incoming = LeadTypeLeadFactory(contact=contact)
         contact.delete()
         incoming.refresh_from_db()
         assert incoming.contact is None
 
     def test_converted_opportunity_link(self):
         """converted_opportunity property returns opportunity converted from this lead."""
-        incoming = IncomingLeadFactory()
+        incoming = LeadTypeLeadFactory()
         opportunity = LeadFactory(converted_from=incoming, lead_type="opportunity")
         assert incoming.converted_opportunity == opportunity
 
     def test_created_at_and_updated_at_auto_set(self):
-        incoming = IncomingLeadFactory()
+        incoming = LeadTypeLeadFactory()
         assert incoming.created_at is not None
         assert incoming.updated_at is not None

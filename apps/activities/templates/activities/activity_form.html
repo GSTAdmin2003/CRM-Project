@@ -531,6 +531,15 @@
                     {% endif %}
                 </div>
                 {% endif %}
+
+                <!-- AI Analysis Section (activity form) -->
+                {% if phone_call.transcript and phone_call.transcript.status == 'completed' %}
+                <div class="mt-4 pt-4 border-t border-gray-100">
+                    <div id="ai-analysis-wrapper">
+                        {% include "calls/_analysis_section.html" with call=phone_call.ari_call analysis=phone_call.ari_call.analysis|default:None %}
+                    </div>
+                </div>
+                {% endif %}
             </div>
         </div>
         {% endif %}

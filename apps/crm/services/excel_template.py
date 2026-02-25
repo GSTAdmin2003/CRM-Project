@@ -18,9 +18,9 @@ COMPANY_HEADERS = [
     ('Category', False),
 ]
 
-# Lead fields - simplified for IncomingLead import
+# Lead fields - simplified for Lead import
 LEAD_HEADERS = [
-    ('Notes', False),  # Will be used as IncomingLead message
+    ('Notes', False),  # Will be used as Lead message
 ]
 
 # Contact columns: Position header (value=name), then Email, Phone, Mobile
@@ -121,7 +121,7 @@ def generate_import_template(num_contact_groups=3):
         cell.font = example_font
         cell.border = thin_border
 
-    # No special data validations needed for IncomingLead import
+    # No special data validations needed for Lead import
 
     # Freeze top row
     ws.freeze_panes = 'A2'

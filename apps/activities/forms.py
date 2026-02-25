@@ -93,11 +93,7 @@ class ActivityForm(forms.ModelForm):
 
             # Filter assigned_to based on user permissions
             if self.user.is_sales_executive():
-                sales_users = User.objects.filter(
-                    user_roles__role__name__in=['Sales Rep', 'Sales Manager', 'Sales Executive'],
-                    is_active=True
-                ).distinct()
-                self.fields['assigned_to'].queryset = sales_users
+                self.fields['assigned_to'].queryset = User.objects.filter(is_active=True)
             elif self.user.is_sales_manager() and self.user.sales_team:
                 team_members = self.user.sales_team.get_team_members()
                 self.fields['assigned_to'].queryset = team_members

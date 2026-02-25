@@ -1,4 +1,4 @@
-from .call import Call, CallLog, CallRecording, CallTranscript, LANGUAGE_TO_STT_CODE
+from .call import Call, CallAnalysis, CallLog, CallRecording, CallTranscript, LANGUAGE_TO_STT_CODE
 from .sip_settings import SIPSettings
 
-__all__ = ["Call", "CallLog", "CallRecording", "CallTranscript", "LANGUAGE_TO_STT_CODE", "SIPSettings"]
+__all__ = ["Call", "CallAnalysis", "CallLog", "CallRecording", "CallTranscript", "LANGUAGE_TO_STT_CODE", "SIPSettings"]

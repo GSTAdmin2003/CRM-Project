@@ -34,7 +34,10 @@ class RoleBasedAccessMiddleware:
         # Check if user is authenticated
         if not request.user.is_authenticated:
             if request.path != reverse('login'):
-                return redirect('login')
+                login_url = reverse('login')
+                if request.GET.get('debug') == '1':
+                    login_url += '?debug=1'
+                return redirect(login_url)
         
         response = self.get_response(request)
         return response

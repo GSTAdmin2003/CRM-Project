@@ -156,7 +156,17 @@
             <a href="{% url 'settings:elevenlabs:vocabulary' %}"
                class="{% if current_page == 'vocabulary' %}bg-gray-200 text-gray-900{% else %}text-gray-600 hover:bg-gray-50 hover:text-gray-900{% endif %} group flex items-center px-2 py-2 text-sm rounded-md">
                 <i class="fas fa-spell-check text-gray-400 mr-3 flex-shrink-0 h-4 w-4"></i>
-                Default Custom Vocabulary
+                Custom Vocabulary
+            </a>
+            <a href="{% url 'settings:elevenlabs:ai_config' %}"
+               class="{% if current_page == 'ai_config' %}bg-gray-200 text-gray-900{% else %}text-gray-600 hover:bg-gray-50 hover:text-gray-900{% endif %} group flex items-center px-2 py-2 text-sm rounded-md">
+                <i class="fas fa-robot text-gray-400 mr-3 flex-shrink-0 h-4 w-4"></i>
+                AI Analysis
+            </a>
+            <a href="{% url 'settings:elevenlabs:team_products' %}"
+               class="{% if current_page == 'team_products' %}bg-gray-200 text-gray-900{% else %}text-gray-600 hover:bg-gray-50 hover:text-gray-900{% endif %} group flex items-center px-2 py-2 text-sm rounded-md">
+                <i class="fas fa-box-open text-gray-400 mr-3 flex-shrink-0 h-4 w-4"></i>
+                Product Descriptions
             </a>
         </div>
     </div>

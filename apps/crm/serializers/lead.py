@@ -167,7 +167,7 @@ class LeadCreateUpdateSerializer(serializers.Serializer):
 
 
 class LeadIncomingCreateSerializer(serializers.Serializer):
-    """Write serializer for incoming leads -- delegates to LeadService.create_incoming_lead()."""
+    """Write serializer for leads -- delegates to LeadService.create_lead()."""
 
     company_id = serializers.IntegerField(required=False, allow_null=True)
     contact_id = serializers.IntegerField(required=False, allow_null=True)

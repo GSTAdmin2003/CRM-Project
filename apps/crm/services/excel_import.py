@@ -12,7 +12,7 @@ from apps.crm.models import Lead
 
 
 # Header mappings - maps header names to internal field names
-# Required headers for IncomingLead import
+# Required headers for Lead import
 REQUIRED_HEADERS = ['Company ID', 'Company Name']
 
 # Company field mappings (header -> field name)
@@ -26,9 +26,9 @@ COMPANY_HEADER_MAP = {
     'Category': 'category',
 }
 
-# Lead field mappings for IncomingLead (header -> field name)
+# Lead field mappings for Lead (header -> field name)
 LEAD_HEADER_MAP = {
-    'Notes': 'notes',  # Used as IncomingLead message
+    'Notes': 'notes',  # Used as Lead message
 }
 
 # Contact detail fields that follow a position column
@@ -143,7 +143,7 @@ def get_value_by_index(row_values, col_idx):
 
 def validate_row(row_data, row_number):
     """
-    Validate a single row's data for IncomingLead import.
+    Validate a single row's data for Lead import.
 
     Returns tuple: (is_valid, errors_list)
     """
@@ -258,7 +258,7 @@ def parse_excel_file(file_obj, user):
                 legal_id=company_data['legal_id']
             ).exists()
 
-        # Parse lead data using column map (simplified for IncomingLead)
+        # Parse lead data using column map (simplified for Lead)
         lead_cols = column_map['lead']
         lead_data = {
             'notes': get_value_by_index(row_values, lead_cols.get('notes')),
@@ -320,7 +320,7 @@ def parse_excel_file(file_obj, user):
 def execute_import(preview_data, user):
     """
     Execute the import based on validated preview data.
-    Creates IncomingLead records (not Opportunities).
+    Creates Lead records (lead_type='lead', not opportunities).
 
     Args:
         preview_data: The parsed and validated data from parse_excel_file

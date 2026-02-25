@@ -104,7 +104,7 @@ def activity_detail(request, pk):
     return render(
         request,
         "activities/activity_detail.html",
-        {"activity": activity, "phone_call": phone_call},
+        {"activity": activity, "phone_call": phone_call, "can_edit": activity.can_be_edited_by(request.user)},
     )
 
 

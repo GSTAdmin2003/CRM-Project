@@ -80,32 +80,32 @@ urlpatterns = [
     path("kanban/", template_views.kanban_board, name="kanban_board"),
 
     # Opportunity management
-    path("opportunities/", template_views.lead_list, name="opportunity_list"),
-    path("opportunities/bulk-action/", template_views.leads_bulk_action, name="opportunity_bulk_action"),
-    path("opportunities/create/", template_views.lead_create, name="opportunity_create"),
-    path("opportunities/import/", template_views.lead_import, name="opportunity_import"),
+    path("opportunities/", template_views.opportunity_list, name="opportunity_list"),
+    path("opportunities/bulk-action/", template_views.opportunities_bulk_action, name="opportunity_bulk_action"),
+    path("opportunities/create/", template_views.opportunity_create, name="opportunity_create"),
+    path("opportunities/import/", template_views.opportunity_import, name="opportunity_import"),
     path(
         "opportunities/import/upload/",
-        template_views.lead_import_upload,
+        template_views.opportunity_import_upload,
         name="opportunity_import_upload",
     ),
     path(
         "opportunities/import/confirm/",
-        template_views.lead_import_confirm,
+        template_views.opportunity_import_confirm,
         name="opportunity_import_confirm",
     ),
     path(
         "opportunities/import/template/",
-        template_views.lead_import_template,
+        template_views.opportunity_import_template,
         name="opportunity_import_template",
     ),
     path(
         "opportunities/<int:pk>/",
-        template_views.lead_edit,
+        template_views.opportunity_edit,
         name="opportunity_detail",
     ),  # Redirect detail to edit
-    path("opportunities/<int:pk>/edit/", template_views.lead_edit, name="opportunity_edit"),
-    path("opportunities/<int:pk>/delete/", template_views.lead_delete, name="opportunity_delete"),
+    path("opportunities/<int:pk>/edit/", template_views.opportunity_edit, name="opportunity_edit"),
+    path("opportunities/<int:pk>/delete/", template_views.opportunity_delete, name="opportunity_delete"),
     path("opportunities/<int:pk>/send-pitch/", template_views.send_sales_pitch, name="send_sales_pitch"),
 
     # Sales Team management
@@ -131,12 +131,12 @@ urlpatterns = [
         name="team_stage_delete",
     ),
 
-    # Incoming leads management
-    path("leads/", template_views.incoming_lead_list, name="lead_list"),
-    path("leads/bulk-action/", template_views.incoming_leads_bulk_action, name="lead_bulk_action"),
-    path("leads/create/", template_views.incoming_lead_create, name="lead_create"),
-    path("leads/<int:pk>/", template_views.incoming_lead_edit, name="lead_detail"),
-    path("leads/<int:pk>/edit/", template_views.incoming_lead_edit, name="lead_edit"),
-    path("leads/<int:pk>/delete/", template_views.incoming_lead_delete, name="lead_delete"),
-    path("leads/<int:pk>/convert/", template_views.incoming_lead_convert, name="lead_convert"),
+    # Leads management
+    path("leads/", template_views.lead_list, name="lead_list"),
+    path("leads/bulk-action/", template_views.leads_bulk_action, name="lead_bulk_action"),
+    path("leads/create/", template_views.lead_create, name="lead_create"),
+    path("leads/<int:pk>/", template_views.lead_edit, name="lead_detail"),
+    path("leads/<int:pk>/edit/", template_views.lead_edit, name="lead_edit"),
+    path("leads/<int:pk>/delete/", template_views.lead_delete, name="lead_delete"),
+    path("leads/<int:pk>/convert/", template_views.lead_convert, name="lead_convert"),
 ]

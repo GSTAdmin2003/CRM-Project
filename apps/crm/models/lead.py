@@ -7,7 +7,7 @@ from core.models import User
 
 
 class Lead(models.Model):
-    """Unified Lead model — covers both incoming leads (lead_type='lead') and opportunities (lead_type='opportunity')."""
+    """Unified Lead model — covers both leads (lead_type='lead') and opportunities (lead_type='opportunity')."""
 
     TYPE_LEAD = "lead"
     TYPE_OPPORTUNITY = "opportunity"
@@ -50,8 +50,8 @@ class Lead(models.Model):
     company_name = models.CharField(max_length=200, blank=True)
     position = models.CharField(max_length=100, blank=True)
 
-    # Incoming lead fields
-    message = models.TextField(blank=True, help_text="Initial inquiry (for incoming leads)")
+    # Lead-specific fields
+    message = models.TextField(blank=True, help_text="Initial inquiry (for leads)")
     converted_from = models.ForeignKey(
         "self",
         null=True,

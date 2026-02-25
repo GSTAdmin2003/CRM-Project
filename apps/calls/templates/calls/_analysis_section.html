@@ -1,0 +1,144 @@
+{% comment %}
+Reusable AI Analysis section partial.
+Context variables:
+  - call        : Call instance
+  - analysis    : CallAnalysis instance or None
+  - error       : optional error string to display instead of starting
+
+Buttons use hx-post directly (no <form> wrapper) so this partial can be safely
+included inside other forms (e.g. activity_form.html) without nesting forms.
+CSRF token is passed via hx-headers.
+{% endcomment %}
+
+<div id="ai-analysis-section" class="bg-white shadow rounded-lg p-6">
+    <div class="flex items-center justify-between mb-4">
+        <h2 class="text-lg font-medium text-gray-900 flex items-center">
+            <i class="fas fa-robot mr-2 text-indigo-500"></i>AI Analysis
+            {% if analysis %}
+            <span class="ml-2 text-xs font-normal px-2 py-0.5 rounded-full
+                {% if analysis.status == 'completed' %}bg-green-100 text-green-700
+                {% elif analysis.status == 'processing' or analysis.status == 'pending' %}bg-yellow-100 text-yellow-700
+                {% elif analysis.status == 'failed' %}bg-red-100 text-red-700
+                {% else %}bg-gray-100 text-gray-600{% endif %}">
+                {{ analysis.get_status_display }}
+            </span>
+            {% endif %}
+        </h2>
+        <div class="flex items-center gap-2">
+            {% if not analysis or analysis.status == 'failed' %}
+            <button type="button"
+                    hx-post="{% url 'calls:start_ai_analysis' call.pk %}"
+                    hx-target="#ai-analysis-wrapper"
+                    hx-swap="innerHTML"
+
+                    class="flex items-center gap-1 text-xs px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-md font-medium">
+                <i class="fas fa-robot"></i>
+                {% if analysis and analysis.status == 'failed' %}Retry Analysis{% else %}Analyze with AI{% endif %}
+            </button>
+            {% elif analysis.status == 'completed' %}
+            <button type="button"
+                    hx-post="{% url 'calls:start_ai_analysis' call.pk %}"
+                    hx-target="#ai-analysis-wrapper"
+                    hx-swap="innerHTML"
+
+                    class="flex items-center gap-1 text-xs px-3 py-1.5 border border-indigo-300 text-indigo-600 hover:bg-indigo-50 rounded-md font-medium">
+                <i class="fas fa-redo"></i> Re-analyze
+            </button>
+            {% endif %}
+        </div>
+    </div>
+
+    {% if error %}
+    <p class="text-sm text-red-600">{{ error }}</p>
+
+    {% elif not analysis %}
+    <p class="text-sm text-gray-500">
+        Click <strong>Analyze with AI</strong> to have Claude review this transcript and suggest follow-up actions.
+    </p>
+
+    {% elif analysis.status == 'pending' or analysis.status == 'processing' %}
+    <div class="flex items-center justify-between"
+         hx-get="{% url 'calls:ai_analysis_status' call.pk %}"
+         hx-trigger="every 3s"
+         hx-target="#ai-analysis-wrapper"
+         hx-swap="innerHTML">
+        <div class="flex items-center gap-3 text-sm text-gray-600">
+            <svg class="animate-spin h-4 w-4 text-indigo-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path>
+            </svg>
+            Analyzing call with Claude AI...
+        </div>
+        <button type="button"
+                hx-post="{% url 'calls:cancel_ai_analysis' call.pk %}"
+                hx-target="#ai-analysis-wrapper"
+                hx-swap="innerHTML"
+                class="text-xs px-2.5 py-1 border border-gray-300 text-gray-500 hover:bg-gray-100 rounded-md">
+            Cancel
+        </button>
+    </div>
+
+    {% elif analysis.status == 'failed' %}
+    <div class="text-sm text-red-600 bg-red-50 rounded-md p-3">
+        <p class="font-medium mb-1"><i class="fas fa-exclamation-triangle mr-1"></i>Analysis failed</p>
+        <p class="text-xs font-mono">{{ analysis.error_message }}</p>
+    </div>
+
+    {% elif analysis.status == 'completed' %}
+
+    {% if analysis.analysis_text %}
+    <div class="mb-4 p-3 bg-indigo-50 rounded-md text-sm text-gray-700 leading-relaxed">
+        {{ analysis.analysis_text }}
+    </div>
+    {% endif %}
+
+    {% if analysis.created_activity_ids %}
+    <div>
+        <p class="text-xs font-medium text-gray-500 uppercase tracking-wide mb-2">Actions Taken</p>
+        <ul class="space-y-2">
+            {% for item in analysis.created_activity_ids %}
+            {% if item.action %}
+            {# Dict — direct action result (send_pitch, etc.) #}
+            {% if item.action == 'send_pitch' %}
+            <li class="flex items-center gap-2 text-sm">
+                {% if item.status == 'sent' %}
+                <i class="fas fa-check-circle text-green-500"></i>
+                <span class="text-gray-700">Sales pitch sent via WhatsApp</span>
+                {% else %}
+                <i class="fas fa-exclamation-circle text-red-400"></i>
+                <span class="text-red-600">Pitch send failed: {{ item.error }}</span>
+                {% endif %}
+            </li>
+            {% endif %}
+            {% else %}
+            {# Integer PK — Activity created #}
+            <li class="flex items-center gap-2 text-sm">
+                <i class="fas fa-check-circle text-green-500"></i>
+                <a href="/activities/{{ item }}/"
+                   class="text-indigo-600 hover:underline">Activity #{{ item }} created</a>
+            </li>
+            {% endif %}
+            {% endfor %}
+        </ul>
+    </div>
+    {% else %}
+    <p class="text-sm text-gray-500 italic">No actions were created (no linked opportunity or no matching activity types).</p>
+    {% endif %}
+
+    {% if analysis.suggested_activities %}
+    <details class="mt-4">
+        <summary class="text-xs text-gray-400 cursor-pointer hover:text-gray-600">Show Claude's raw suggestions</summary>
+        <ul class="mt-2 space-y-2">
+            {% for item in analysis.suggested_activities %}
+            <li class="text-xs text-gray-600 bg-gray-50 rounded p-2">
+                <span class="font-medium">{{ item.action_type }}</span>
+                {% if item.title %}: {{ item.title }}{% endif %}
+                {% if item.reason %}: {{ item.reason }}{% endif %}
+            </li>
+            {% endfor %}
+        </ul>
+    </details>
+    {% endif %}
+
+    {% endif %}
+</div>

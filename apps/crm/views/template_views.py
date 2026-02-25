@@ -360,14 +360,14 @@ def api_lead_quick_activity_create(request):
 
 # Regular views (for non-API usage)
 @login_required
-def lead_list(request):
+def opportunity_list(request):
     """Lead list view"""
     leads = request.user.get_accessible_leads_queryset()
     return render(request, 'crm/lead_list.html', {'leads': leads})
 
 
 @login_required
-def lead_create(request):
+def opportunity_create(request):
     """Lead creation view"""
     from ..forms import LeadForm
 
@@ -460,7 +460,7 @@ def lead_create(request):
 
 
 @login_required
-def lead_edit(request, pk):
+def opportunity_edit(request, pk):
     """Lead edit view"""
     from ..forms import LeadForm
 
@@ -652,7 +652,7 @@ def lead_edit(request, pk):
 
 
 @login_required
-def lead_delete(request, pk):
+def opportunity_delete(request, pk):
     """Lead delete view"""
     lead = get_object_or_404(Lead, pk=pk)
     if not lead.can_be_edited_by(request.user):
@@ -1123,12 +1123,12 @@ def _build_contacts_data():
 
 
 # ============================================
-# Incoming Leads Views
+# Lead Views (lead_type='lead')
 # ============================================
 
 @login_required
-def incoming_lead_list(request):
-    """List view for incoming leads"""
+def lead_list(request):
+    """List view for leads"""
     # Get filter parameters
     status_filter = request.GET.get('status', 'all')
     team_filter = request.GET.get('team', 'all')
@@ -1171,8 +1171,8 @@ def incoming_lead_list(request):
 
 
 @login_required
-def incoming_lead_create(request):
-    """Create new incoming lead — uses unified lead_form.html"""
+def lead_create(request):
+    """Create new lead — uses unified lead_form.html"""
     from ..forms import LeadForm
     if request.method == 'POST':
         form = LeadForm(request.POST, user=request.user)
@@ -1198,8 +1198,8 @@ def incoming_lead_create(request):
 
 
 @login_required
-def incoming_lead_detail(request, pk):
-    """Detail view for incoming lead"""
+def lead_detail(request, pk):
+    """Detail view for lead"""
     lead = get_object_or_404(Lead, lead_type=Lead.TYPE_LEAD, pk=pk)
 
     # Check permissions
@@ -1215,8 +1215,8 @@ def incoming_lead_detail(request, pk):
 
 
 @login_required
-def incoming_lead_edit(request, pk):
-    """Edit incoming lead — uses unified lead_form.html"""
+def lead_edit(request, pk):
+    """Edit lead — uses unified lead_form.html"""
     from ..forms import LeadForm
     lead = get_object_or_404(Lead, lead_type=Lead.TYPE_LEAD, pk=pk)
 
@@ -1264,8 +1264,8 @@ def incoming_lead_edit(request, pk):
 
 
 @login_required
-def incoming_lead_delete(request, pk):
-    """Delete incoming lead"""
+def lead_delete(request, pk):
+    """Delete lead"""
     lead = get_object_or_404(Lead, lead_type=Lead.TYPE_LEAD, pk=pk)
 
     # Check permissions
@@ -1294,8 +1294,8 @@ def incoming_lead_delete(request, pk):
 
 
 @login_required
-def incoming_lead_convert(request, pk):
-    """Convert incoming lead to opportunity"""
+def lead_convert(request, pk):
+    """Convert lead to opportunity"""
     lead = get_object_or_404(Lead, lead_type=Lead.TYPE_LEAD, pk=pk)
 
     # Check permissions
@@ -1349,7 +1349,7 @@ def incoming_lead_convert(request, pk):
             assigned_to=lead.assigned_to or request.user,
             sales_team=lead.sales_team,
             created_by=request.user,
-            notes=f"Converted from incoming lead.\n\nOriginal Message:\n{lead.message}\n\n{lead.notes if lead.notes else ''}"
+            notes=f"Converted from lead.\n\nOriginal Message:\n{lead.message}\n\n{lead.notes if lead.notes else ''}"
         )
 
         # Update lead status and link converted opportunity
@@ -1373,7 +1373,7 @@ def incoming_lead_convert(request, pk):
 # =============================================================================
 
 @login_required
-def lead_import(request):
+def opportunity_import(request):
     """Lead import page - shows upload form, preview, or results based on session state"""
     # Handle cancel action - clear session and reset to upload state
     if request.GET.get('cancel') == '1':
@@ -1402,7 +1402,7 @@ def lead_import(request):
 
 @login_required
 @require_http_methods(["POST"])
-def lead_import_upload(request):
+def opportunity_import_upload(request):
     """Handle Excel file upload and parse for preview"""
     from ..services.excel_import import parse_excel_file
 
@@ -1435,7 +1435,7 @@ def lead_import_upload(request):
 
 @login_required
 @require_http_methods(["POST"])
-def lead_import_confirm(request):
+def opportunity_import_confirm(request):
     """Process confirmed import from preview data"""
     from ..services.excel_import import execute_import
 
@@ -1457,7 +1457,7 @@ def lead_import_confirm(request):
 
 @login_required
 @require_http_methods(["POST"])
-def leads_bulk_action(request):
+def opportunities_bulk_action(request):
     """Bulk action on opportunities"""
     action = request.POST.get('action')
     selected_ids = request.POST.getlist('selected_ids')
@@ -1482,8 +1482,8 @@ def leads_bulk_action(request):
 
 @login_required
 @require_http_methods(["POST"])
-def incoming_leads_bulk_action(request):
-    """Bulk action on incoming leads"""
+def leads_bulk_action(request):
+    """Bulk action on leads"""
     action = request.POST.get('action')
     selected_ids = request.POST.getlist('selected_ids')
 
@@ -1506,7 +1506,7 @@ def incoming_leads_bulk_action(request):
 
 
 @login_required
-def lead_import_template(request):
+def opportunity_import_template(request):
     """Generate and download Excel import template"""
     from ..services.excel_template import generate_import_template
 

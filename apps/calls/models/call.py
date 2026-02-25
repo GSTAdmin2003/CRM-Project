@@ -172,6 +172,46 @@ class CallTranscript(models.Model):
 
 
 
+class CallAnalysis(models.Model):
+    """Claude AI analysis of a completed call transcript — suggests activities and direct actions."""
+
+    STATUS_PENDING = 'pending'
+    STATUS_PROCESSING = 'processing'
+    STATUS_COMPLETED = 'completed'
+    STATUS_FAILED = 'failed'
+
+    STATUS_CHOICES = [
+        (STATUS_PENDING, 'Pending'),
+        (STATUS_PROCESSING, 'Processing'),
+        (STATUS_COMPLETED, 'Completed'),
+        (STATUS_FAILED, 'Failed'),
+    ]
+
+    call = models.OneToOneField(Call, on_delete=models.CASCADE, related_name='analysis')
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default=STATUS_PENDING)
+    analysis_text = models.TextField(blank=True, help_text="Claude's 2-3 sentence call summary.")
+    suggested_activities = models.JSONField(
+        default=list, blank=True,
+        help_text='Raw action array from Claude (create_activity / send_pitch commands).',
+    )
+    created_activity_ids = models.JSONField(
+        default=list, blank=True,
+        help_text='PKs of Activity objects created, or action-result dicts for direct actions.',
+    )
+    error_message = models.TextField(blank=True)
+    celery_task_id = models.CharField(max_length=255, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        app_label = 'calls'
+        verbose_name = 'Call Analysis'
+        verbose_name_plural = 'Call Analyses'
+
+    def __str__(self):
+        return f"Analysis for {self.call} ({self.get_status_display()})"
+
+
 class CallLog(models.Model):
     """Event log for calls - tracks all state changes and events"""
 

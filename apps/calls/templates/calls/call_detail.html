@@ -279,6 +279,13 @@
             </div>
             {% endif %}
 
+            <!-- AI Analysis Section -->
+            {% if call.transcript and call.transcript.status == 'completed' %}
+            <div id="ai-analysis-wrapper">
+                {% include "calls/_analysis_section.html" with call=call analysis=call.analysis|default:None %}
+            </div>
+            {% endif %}
+
             <!-- Language selection modal (shown whenever there's a recording) -->
             {% if call.recording %}
             <div id="lang-modal" class="hidden fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50">

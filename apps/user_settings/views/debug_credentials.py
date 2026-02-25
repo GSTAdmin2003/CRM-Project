@@ -1,6 +1,6 @@
 """
 Debug-only view: test all configured third-party credentials.
-Only accessible when debug_mode is active in the session.
+Only accessible when ?debug=1 is present in the request URL.
 
 Each integration runs a series of ordered test cases split into two groups:
   - outgoing: we call them
@@ -923,9 +923,9 @@ def _test_asterisk() -> dict:
 
 @login_required
 def test_integrations_view(request):
-    if not request.session.get("debug_mode"):
+    if request.GET.get("debug") != "1":
         from django.http import HttpResponseForbidden
-        return HttpResponseForbidden("Debug mode not active. Append ?debug=1 to any URL first.")
+        return HttpResponseForbidden("Debug mode not active. Append ?debug=1 to the URL.")
 
     elevenlabs_key = SystemConfiguration.get_setting("elevenlabs_api_key") or ""
     anthropic_key = SystemConfiguration.get_setting("anthropic_api_key") or ""

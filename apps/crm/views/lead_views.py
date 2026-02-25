@@ -1,5 +1,5 @@
 """
-DRF ViewSets for the Lead model (covers both opportunities and incoming leads).
+DRF ViewSets for the Lead model (covers both opportunities and leads).
 
 All business logic is delegated to LeadService.
 """
@@ -27,7 +27,7 @@ class LeadViewSet(viewsets.ModelViewSet):
     CRUD for leads with permission-scoped listing.
 
     Supports ?type=opportunity (default) or ?type=lead query parameter
-    to switch between opportunities and incoming leads.
+    to switch between opportunities and leads.
 
     list:    GET    /crm/api/leads/
     create:  POST   /crm/api/leads/
@@ -54,7 +54,7 @@ class LeadViewSet(viewsets.ModelViewSet):
     def get_queryset(self):
         lead_type = self.request.query_params.get("type", "opportunity")
         if lead_type == "lead":
-            return LeadService.list_incoming_leads_for_user(user=self.request.user)
+            return LeadService.list_leads_for_user(user=self.request.user)
         return LeadService.list_leads_for_user(user=self.request.user)
 
     def retrieve(self, request, *args, **kwargs):
@@ -75,7 +75,7 @@ class LeadViewSet(viewsets.ModelViewSet):
         lead_type = request.query_params.get("type", "opportunity")
 
         if lead_type == "lead":
-            return self._create_incoming_lead(request)
+            return self._create_lead(request)
         return self._create_opportunity(request)
 
     def _create_opportunity(self, request):
@@ -120,7 +120,7 @@ class LeadViewSet(viewsets.ModelViewSet):
 
         return Response(LeadDetailSerializer(lead).data, status=status.HTTP_201_CREATED)
 
-    def _create_incoming_lead(self, request):
+    def _create_lead(self, request):
         serializer = LeadIncomingCreateSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
 
@@ -136,7 +136,7 @@ class LeadViewSet(viewsets.ModelViewSet):
                 )
 
         try:
-            lead = LeadService.create_incoming_lead(
+            lead = LeadService.create_lead(
                 created_by=request.user,
                 company_id=serializer.validated_data.get("company_id"),
                 contact_id=serializer.validated_data.get("contact_id"),
@@ -198,7 +198,7 @@ class LeadViewSet(viewsets.ModelViewSet):
 
     @action(detail=True, methods=["post"])
     def convert(self, request, pk=None):
-        """Convert an incoming lead (lead_type='lead') into an opportunity."""
+        """Convert a lead (lead_type='lead') into an opportunity."""
         try:
             lead = LeadService.get_lead_or_raise(pk=pk)
         except NotFoundError as e:

@@ -83,7 +83,7 @@ class LeadForm(forms.ModelForm):
         self.fields['title'].required = not is_lead_type
         self.fields['stage'].required = not is_lead_type
 
-        # Set default status for new incoming leads
+        # Set default status for new leads
         if is_lead_type and not self.instance.pk:
             self.fields['status'].initial = 'new'
 

@@ -339,12 +339,298 @@ def transcribe_call(self, call_id):
             f"(caller={len(caller_words)} words, agent={len(agent_words)} words)"
         )
 
+        # Auto-analyze with Claude if enabled
+        if SystemConfiguration.get_setting('ai_analysis_auto_enabled', False):
+            analyze_call_with_claude.delay(call_id)
+
     except Exception as e:
         transcript.status = CallTranscript.STATUS_FAILED
         transcript.error_message = str(e)
         transcript.save()
         logger.error(f"ElevenLabs transcription failed for call {call_id}: {e}")
         raise self.retry(exc=e, countdown=60 * (2 ** self.request.retries))
+
+
+@shared_task(bind=True, max_retries=2)
+def analyze_call_with_claude(self, call_id):
+    """
+    Analyze a completed call transcript using Claude AI.
+
+    Builds a rich context prompt (product description, keywords, activity types, transcript)
+    and asks Claude to suggest follow-up activities and/or direct actions such as sending the
+    sales pitch. Each action in the JSON response is executed immediately:
+      - "create_activity" → ActivityService.create_activity(...)
+      - "send_pitch"      → WhatsAppService.send_sales_pitch(...)
+    Results are stored in CallAnalysis for display in the UI.
+    """
+    import json
+    import datetime
+
+    from .models import Call, CallAnalysis, CallTranscript
+    from apps.user_settings.models.general import SystemConfiguration
+    from apps.activities.models import Activity, ActivityType
+    from apps.activities.services.activity_service import ActivityService
+
+    try:
+        call = Call.objects.select_related(
+            'user', 'contact__company', 'opportunity__sales_team'
+        ).get(id=call_id)
+    except Call.DoesNotExist:
+        logger.error(f"analyze_call_with_claude: call {call_id} not found")
+        return
+
+    # Must have a completed transcript
+    try:
+        transcript = call.transcript
+    except CallTranscript.DoesNotExist:
+        logger.info(f"analyze_call_with_claude: no transcript for call {call_id}, skipping")
+        return
+
+    if transcript.status != CallTranscript.STATUS_COMPLETED:
+        logger.info(
+            f"analyze_call_with_claude: transcript for call {call_id} not completed "
+            f"(status={transcript.status}), skipping"
+        )
+        return
+
+    if not transcript.caller_text and not transcript.agent_text:
+        logger.info(f"analyze_call_with_claude: empty transcript for call {call_id}, skipping")
+        return
+
+    # Get/create analysis record
+    analysis, _ = CallAnalysis.objects.get_or_create(call=call)
+    analysis.status = CallAnalysis.STATUS_PROCESSING
+    analysis.error_message = ''
+    analysis.celery_task_id = self.request.id or ''
+    analysis.save(update_fields=['status', 'error_message', 'celery_task_id', 'updated_at'])
+
+    api_key = SystemConfiguration.get_setting('anthropic_api_key')
+    if not api_key:
+        analysis.status = CallAnalysis.STATUS_FAILED
+        analysis.error_message = (
+            'Anthropic API key is not configured. '
+            'Go to Settings → Transcription → AI Analysis to add it.'
+        )
+        analysis.save()
+        logger.error(f"Anthropic API key not configured — cannot analyze call {call_id}")
+        return
+
+    # Gather context
+    activity_types = list(ActivityType.objects.filter(is_active=True).values_list('name', flat=True))
+    activity_type_list = '\n'.join(f'- {name}' for name in activity_types) or '- (no activity types defined)'
+
+    product_description = ''
+    if call.opportunity_id and call.opportunity.sales_team_id:
+        product_description = call.opportunity.sales_team.product_description or ''
+
+    lang = transcript.language_code or 'en'
+    if lang not in ('en', 'ka'):
+        lang = lang[:2]
+    keywords = _build_keywords(call, lang)
+    keywords_text = ', '.join(keywords) if keywords else '(none)'
+
+    contact_name = ''
+    company_name = ''
+    if call.contact_id:
+        contact_name = call.contact.name or ''
+        if call.contact.company_id:
+            company_name = call.contact.company.legal_name or ''
+    # Resolve agent user: prefer call.user, fall back to opportunity's assigned_to
+    agent_user = call.user
+    if not agent_user and call.opportunity_id:
+        agent_user = call.opportunity.assigned_to
+    agent_name = ''
+    if agent_user:
+        agent_name = agent_user.get_full_name() or agent_user.username
+
+    call_date = (call.started_at or call.created_at).strftime('%Y-%m-%d %H:%M') if (call.started_at or call.created_at) else ''
+    duration_str = call.duration_formatted if call.duration else 'unknown'
+    direction_str = call.get_direction_display()
+    today = datetime.date.today().isoformat()
+
+    system_prompt = f"""You are a CRM sales assistant. Analyze the sales call and suggest only the essential next actions.
+
+Product / Service being sold:
+{product_description or '(not specified)'}
+
+Key topics and terms:
+{keywords_text}
+
+Today's date: {today}
+
+Available activity types (use EXACT names for create_activity actions):
+{activity_type_list}
+
+Available direct actions:
+- "send_pitch" — immediately sends the sales pitch/presentation PDF to the customer via WhatsApp
+
+Rules:
+- Suggest AT MOST 2 items total (activities + direct actions combined).
+- NEVER create an activity for something that already happened (e.g. the call itself, an "initial contact" that was this call).
+- NEVER create duplicate or near-duplicate follow-up activities — one follow-up is enough.
+- Only suggest a "create_activity" if there is a clear, concrete next step that must be tracked.
+- Only suggest "send_pitch" if the customer explicitly asked to receive materials/presentation.
+- If nothing meaningful is needed, return an empty suggested_activities list.
+
+Respond ONLY with valid JSON (no markdown code block, no explanation outside JSON):
+{{
+  "analysis": "2-3 sentence summary of call outcomes and what the agent should do next",
+  "suggested_activities": [
+    {{
+      "action_type": "create_activity",
+      "activity_type_name": "<exact name from the list above>",
+      "title": "<concise actionable title>",
+      "description": "<context and what needs to be done>",
+      "scheduled_date": "<ISO 8601 datetime e.g. 2026-03-01T10:00:00, or null>",
+      "notes": "<optional additional notes, or null>"
+    }},
+    {{
+      "action_type": "send_pitch",
+      "reason": "<brief reason why pitch should be sent now>"
+    }}
+  ]
+}}"""
+
+    user_prompt = f"""Call Details:
+- Date: {call_date}
+- Duration: {duration_str}
+- Direction: {direction_str}
+- Contact: {contact_name or '(unknown)'}{f' from {company_name}' if company_name else ''}
+- Sales Agent: {agent_name or '(unknown)'}
+
+--- SALES AGENT ---
+{transcript.agent_text or '(no agent transcript)'}
+
+--- CUSTOMER ---
+{transcript.caller_text or '(no customer transcript)'}"""
+
+    try:
+        import anthropic
+        client = anthropic.Anthropic(api_key=api_key)
+        message = client.messages.create(
+            model='claude-haiku-4-5-20251001',
+            max_tokens=1024,
+            system=system_prompt,
+            messages=[{'role': 'user', 'content': user_prompt}],
+        )
+        raw_response = message.content[0].text.strip()
+        logger.info(f"Claude analysis received for call {call_id}: {len(raw_response)} chars")
+    except Exception as e:
+        analysis.status = CallAnalysis.STATUS_FAILED
+        analysis.error_message = f"Anthropic API error: {e}"
+        analysis.save()
+        logger.error(f"Anthropic API error for call {call_id}: {e}")
+        raise self.retry(exc=e, countdown=120)
+
+    # Parse JSON
+    try:
+        # Strip markdown code fences if Claude wrapped it anyway
+        text = raw_response
+        if text.startswith('```'):
+            text = text.split('\n', 1)[1] if '\n' in text else text[3:]
+            text = text.rsplit('```', 1)[0].strip()
+        data = json.loads(text)
+    except (json.JSONDecodeError, ValueError) as e:
+        analysis.status = CallAnalysis.STATUS_FAILED
+        analysis.error_message = f"JSON parse error: {e}. Raw: {raw_response[:500]}"
+        analysis.save()
+        logger.error(f"JSON parse error for call {call_id}: {e}")
+        return
+
+    analysis.analysis_text = data.get('analysis', '')
+    analysis.suggested_activities = data.get('suggested_activities', [])
+    created_ids = []
+
+    # Execute each suggested action
+    for item in analysis.suggested_activities:
+        action_type = item.get('action_type', 'create_activity')
+
+        if action_type == 'create_activity':
+            if not call.opportunity_id:
+                logger.info(f"Skipping create_activity for call {call_id}: no linked opportunity")
+                continue
+            type_name = item.get('activity_type_name', '').strip()
+            try:
+                act_type = ActivityType.objects.get(name__iexact=type_name, is_active=True)
+            except ActivityType.DoesNotExist:
+                logger.warning(
+                    f"analyze_call_with_claude: activity type '{type_name}' not found, skipping"
+                )
+                continue
+
+            scheduled_date_str = item.get('scheduled_date')
+            scheduled_date = None
+            if scheduled_date_str:
+                try:
+                    from django.utils.dateparse import parse_datetime
+                    scheduled_date = parse_datetime(scheduled_date_str)
+                    if scheduled_date is None:
+                        from datetime import datetime
+                        scheduled_date = datetime.fromisoformat(scheduled_date_str)
+                except (ValueError, TypeError):
+                    pass
+
+            if scheduled_date is None:
+                import datetime as _dt
+                from django.utils import timezone as tz
+                default_days = int(
+                    SystemConfiguration.get_setting('ai_activity_default_days', 1) or 1
+                )
+                default_date = _dt.date.today() + _dt.timedelta(days=default_days)
+                scheduled_date = tz.make_aware(
+                    _dt.datetime.combine(default_date, _dt.time(9, 0))
+                )
+
+            description = item.get('description', '')
+            notes = item.get('notes') or ''
+            if notes:
+                description = f"{description}\n\n{notes}".strip()
+
+            try:
+                from django.utils import timezone
+                activity = ActivityService.create_activity(
+                    lead_id=call.opportunity_id,
+                    activity_type_id=act_type.pk,
+                    title=item.get('title', 'Follow-up'),
+                    scheduled_date=scheduled_date,
+                    created_by=agent_user,
+                    assigned_to=agent_user,
+                    description=description,
+                )
+                created_ids.append(activity.pk)
+                logger.info(
+                    f"Created activity {activity.pk} ('{act_type.name}') for call {call_id}"
+                )
+            except Exception as e:
+                logger.warning(f"Failed to create activity for call {call_id}: {e}")
+
+        elif action_type == 'send_pitch':
+            if not call.opportunity_id:
+                logger.info(f"Skipping send_pitch for call {call_id}: no linked opportunity")
+                continue
+            try:
+                from apps.messaging.services.whatsapp_service import WhatsAppService
+                from core.exceptions import ValidationError as ServiceValidationError
+                WhatsAppService.send_sales_pitch(
+                    lead_id=call.opportunity_id,
+                    sent_by=agent_user,
+                )
+                created_ids.append({'action': 'send_pitch', 'status': 'sent'})
+                logger.info(f"Sent sales pitch for call {call_id} (opportunity {call.opportunity_id})")
+            except Exception as e:
+                created_ids.append({'action': 'send_pitch', 'status': 'failed', 'error': str(e)})
+                logger.warning(f"send_pitch failed for call {call_id}: {e}")
+
+        else:
+            logger.warning(f"Unknown action_type '{action_type}' in Claude response for call {call_id}")
+
+    analysis.created_activity_ids = created_ids
+    analysis.status = CallAnalysis.STATUS_COMPLETED
+    analysis.save()
+    logger.info(
+        f"Claude analysis completed for call {call_id}: "
+        f"{len(created_ids)} actions executed"
+    )
 
 
 @shared_task

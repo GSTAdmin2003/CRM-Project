@@ -104,14 +104,14 @@ class LeadFileFactory(factory.django.DjangoModelFactory):
     uploaded_by = factory.SubFactory(UserFactory)
 
 
-class IncomingLeadFactory(factory.django.DjangoModelFactory):
-    """Factory for incoming leads (Lead with lead_type='lead')."""
+class LeadTypeLeadFactory(factory.django.DjangoModelFactory):
+    """Factory for leads (Lead with lead_type='lead')."""
 
     class Meta:
         model = Lead
 
     lead_type = "lead"
-    title = factory.Sequence(lambda n: f"Incoming Lead {n}")
+    title = factory.Sequence(lambda n: f"Lead {n}")
     message = factory.Faker("paragraph")
     status = "new"
     created_by = factory.SubFactory(UserFactory)

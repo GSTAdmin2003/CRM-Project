@@ -38,6 +38,10 @@ urlpatterns = [
     # Transcription
     path("<int:pk>/transcript/start/", template_views.start_transcription, name="start_transcription"),
     path("<int:pk>/transcript/cancel/", template_views.cancel_transcription, name="cancel_transcription"),
+    # AI Analysis
+    path("<int:pk>/analysis/start/", template_views.start_ai_analysis, name="start_ai_analysis"),
+    path("<int:pk>/analysis/status/", template_views.ai_analysis_status, name="ai_analysis_status"),
+    path("<int:pk>/analysis/cancel/", template_views.cancel_ai_analysis, name="cancel_ai_analysis"),
     # Legacy API endpoint (kept for backward compatibility)
     path("api/active/", template_views.active_calls, name="active_calls"),
     # SIP settings (accessed via user settings, but route kept here)

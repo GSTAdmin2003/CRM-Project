@@ -703,6 +703,78 @@ def cancel_transcription(request, pk):
     return JsonResponse({'success': True})
 
 
+@login_required
+@require_POST
+def start_ai_analysis(request, pk):
+    """Trigger (or re-trigger) Claude AI analysis for a completed call transcript."""
+    from ..models import CallAnalysis
+    from ..tasks import analyze_call_with_claude
+
+    call = get_object_or_404(Call, pk=pk)
+
+    # Must have a completed transcript
+    transcript = getattr(call, 'transcript', None)
+    if not transcript or transcript.status != 'completed':
+        return render(request, 'calls/_analysis_section.html', {
+            'call': call,
+            'analysis': getattr(call, 'analysis', None),
+            'error': 'Transcript must be completed before AI analysis can run.',
+        })
+
+    analysis, _ = CallAnalysis.objects.get_or_create(call=call)
+    analysis.status = CallAnalysis.STATUS_PENDING
+    analysis.error_message = ''
+    analysis.analysis_text = ''
+    analysis.suggested_activities = []
+    analysis.created_activity_ids = []
+    analysis.save()
+
+    result = analyze_call_with_claude.delay(call.pk)
+    analysis.celery_task_id = result.id
+    analysis.save(update_fields=['celery_task_id'])
+
+    return render(request, 'calls/_analysis_section.html', {'call': call, 'analysis': analysis})
+
+
+@login_required
+def ai_analysis_status(request, pk):
+    """Return the current analysis status partial — used for HTMX polling."""
+    from ..models import CallAnalysis
+
+    call = get_object_or_404(Call, pk=pk)
+    try:
+        analysis = call.analysis
+    except CallAnalysis.DoesNotExist:
+        analysis = None
+
+    return render(request, 'calls/_analysis_section.html', {'call': call, 'analysis': analysis})
+
+
+@login_required
+@require_POST
+def cancel_ai_analysis(request, pk):
+    """Cancel a pending or processing AI analysis."""
+    from ..models import CallAnalysis
+
+    call = get_object_or_404(Call, pk=pk)
+    try:
+        analysis = call.analysis
+    except CallAnalysis.DoesNotExist:
+        analysis = None
+
+    if analysis and analysis.status in (CallAnalysis.STATUS_PENDING, CallAnalysis.STATUS_PROCESSING):
+        if analysis.celery_task_id:
+            try:
+                from celery import current_app
+                current_app.control.revoke(analysis.celery_task_id, terminate=True, signal='SIGTERM')
+            except Exception:
+                pass
+        analysis.delete()
+        analysis = None
+
+    return render(request, 'calls/_analysis_section.html', {'call': call, 'analysis': analysis})
+
+
 # ── VoIP split views ──────────────────────────────────────────────────────────
 
 class SIPConfigForm(forms.ModelForm):

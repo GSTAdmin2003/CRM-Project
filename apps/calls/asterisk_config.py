@@ -404,13 +404,10 @@ def generate_extensions_config(sip_settings):
     if has_welcome:
         _add(f'Playback({CUSTOM_SOUNDS_DIR}/welcome)')
 
-    # Check if agent is available before dialing — if not registered, skip to voicemail
-    _add('GotoIf($["${DEVICE_STATE(PJSIP/100)}" = "UNAVAILABLE"]?s,unavail)')
-
-    # Standard call handling — Dial the agent, gracefully handle no answer/unavailable
+    # Dial the agent — m plays MOH to caller while ringing so they always hear sound
     _add('Set(CHANNEL(hangup_handler_push)=hangup-handler,s,1)')
     _add('MixMonitor(${UNIQUEID}.wav,br(${UNIQUEID}-rx.wav)t(${UNIQUEID}-tx.wav))')
-    _add('Dial(PJSIP/100,30)')
+    _add('Dial(PJSIP/100,30,m)')
 
     # After Dial — agent didn't answer or was busy
     _add('NoOp(Dial ended with status ${DIALSTATUS})')
@@ -431,10 +428,9 @@ def generate_empty_extensions_config():
 [from-trunk-ring]
 exten => s,1,Answer()
  same => n,NoOp(Inbound call from ${CALLERID(num)})
- same => n,GotoIf($["${DEVICE_STATE(PJSIP/100)}" = "UNAVAILABLE"]?s,unavail)
  same => n,Set(CHANNEL(hangup_handler_push)=hangup-handler,s,1)
  same => n,MixMonitor(${UNIQUEID}.wav,br(${UNIQUEID}-rx.wav)t(${UNIQUEID}-tx.wav))
- same => n,Dial(PJSIP/100,30)
+ same => n,Dial(PJSIP/100,30,m)
  same => n,NoOp(Dial ended with status ${DIALSTATUS})
  same => n(unavail),NoOp(Agent unavailable)
  same => n,Playback(vm-nobodyavail)

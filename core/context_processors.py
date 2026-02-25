@@ -1,12 +1,6 @@
 def debug_mode(request):
     """
-    Persist debug mode via session.
-    Activate with ?debug=1, deactivate with ?debug=0.
+    Debug mode is active only when ?debug=1 is present in the current URL.
+    No session storage — each page must carry the param explicitly.
     """
-    if 'debug' in request.GET:
-        if request.GET['debug'] == '1':
-            request.session['debug_mode'] = True
-        else:
-            request.session.pop('debug_mode', None)
-
-    return {'debug_mode': request.session.get('debug_mode', False)}
+    return {'debug_mode': request.GET.get('debug') == '1'}

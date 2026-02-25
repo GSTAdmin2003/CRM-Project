@@ -87,14 +87,25 @@ def _test_elevenlabs(api_key: str) -> dict:
             f"tier={tier}, chars={used}/{limit}  [{ms}ms]",
         ))
     except Exception as exc:
-        msg = str(exc)
-        status = "error"
-        # SDK raises elevenlabs.core.api_error.ApiError on 401
-        if "401" in msg or "unauthorized" in msg.lower() or "invalid" in msg.lower():
-            outgoing.append(_case("Account API (user.get)", "error",
-                                  f"Authentication failed — check API key: {msg[:120]}"))
+        # ApiError has .status_code and .body; extract a clean message
+        status_code = getattr(exc, "status_code", None)
+        body = getattr(exc, "body", None)
+        if status_code is not None:
+            detail = ""
+            if isinstance(body, dict):
+                inner = body.get("detail", body)
+                if isinstance(inner, dict):
+                    detail = inner.get("message", str(inner))
+                else:
+                    detail = str(inner)
+            msg = f"HTTP {status_code} — {detail}" if detail else f"HTTP {status_code}"
         else:
-            outgoing.append(_case("Account API (user.get)", "error", msg[:150]))
+            msg = str(exc)[:150]
+        if status_code == 401 or "invalid" in msg.lower() or "unauthorized" in msg.lower():
+            outgoing.append(_case("Account API (user.get)", "error",
+                                  f"Authentication failed — check API key: {msg}"))
+        else:
+            outgoing.append(_case("Account API (user.get)", "error", msg))
         outgoing.append(_skip("STT model check", "auth failed"))
         return {"label": "ElevenLabs (STT — Scribe)", "overall": "error",
                 "outgoing": outgoing, "incoming": None}

@@ -302,57 +302,6 @@
                 </div>
             </div>
 
-            <!-- Floating in-call bar — visible on every page while a call is active -->
-            <div id="incall-bar" class="hidden fixed bottom-0 left-0 right-0 z-40 bg-gray-900 text-white shadow-2xl border-t-2 border-green-500">
-                <div class="max-w-7xl mx-auto px-4 py-3 flex items-center justify-between gap-4">
-                    <!-- Left: call status + caller + timer -->
-                    <div class="flex items-center gap-4 shrink-0">
-                        <div class="flex items-center gap-2">
-                            <span class="w-2.5 h-2.5 rounded-full bg-green-400 animate-pulse"></span>
-                            <span class="text-sm font-medium text-gray-300">Active Call</span>
-                        </div>
-                        <span id="incall-caller-display" class="text-sm font-mono font-semibold text-green-300"></span>
-                        <span id="incall-timer-display" class="text-sm font-mono text-gray-400">00:00</span>
-                    </div>
-                    <!-- Center: lead navigator (inbound only) -->
-                    <div id="incall-lead-nav" class="hidden flex-1 flex items-center justify-center gap-2 min-w-0">
-                        <button onclick="navigateIncallLead(-1)"
-                                class="w-6 h-6 flex items-center justify-center rounded bg-gray-700 hover:bg-gray-600 text-xs transition-colors shrink-0">
-                            <i class="fas fa-chevron-left"></i>
-                        </button>
-                        <a id="incall-lead-link" href="#"
-                           onclick="if(_inboundLeadUrl){crmNavigate(_inboundLeadUrl);return false;}"
-                           class="text-xs text-blue-300 hover:text-blue-200 underline truncate font-medium min-w-0"
-                           title="Go to lead">
-                            <span id="incall-lead-title"></span>
-                        </a>
-                        <span id="incall-lead-count" class="text-xs text-gray-500 shrink-0"></span>
-                        <button onclick="navigateIncallLead(1)"
-                                class="w-6 h-6 flex items-center justify-center rounded bg-gray-700 hover:bg-gray-600 text-xs transition-colors shrink-0">
-                            <i class="fas fa-chevron-right"></i>
-                        </button>
-                    </div>
-                    <!-- Right: controls -->
-                    <div class="flex items-center gap-2 shrink-0">
-                        <button onclick="toggleMute()" id="incall-mute-btn"
-                                class="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-gray-700 hover:bg-gray-600 text-xs font-medium transition-colors">
-                            <i id="incall-mute-icon" class="fas fa-microphone"></i>
-                            <span id="incall-mute-label">Mute</span>
-                        </button>
-                        <button onclick="toggleHold()" id="incall-hold-btn"
-                                class="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-gray-700 hover:bg-gray-600 text-xs font-medium transition-colors">
-                            <i id="incall-hold-icon" class="fas fa-pause"></i>
-                            <span id="incall-hold-label">Hold</span>
-                        </button>
-                        <button onclick="hangupCall()"
-                                class="flex items-center gap-1.5 px-4 py-1.5 rounded-full bg-red-600 hover:bg-red-700 text-xs font-semibold transition-colors">
-                            <i class="fas fa-phone-slash"></i>
-                            End Call
-                        </button>
-                    </div>
-                </div>
-            </div>
-
             <!-- Hidden audio elements -->
             <audio id="remote-audio" autoplay></audio>
             <!-- Ringtone: played when an inbound call arrives. Uses Web Audio API
@@ -680,7 +629,6 @@
                 receivers.forEach(function (r) { if (r.track) stream.addTrack(r.track); });
                 remoteAudio.srcObject = stream;
             }
-            showInCallControls();
         });
 
         session.on('ended', function () {
@@ -868,9 +816,7 @@
         document.getElementById('status-text').textContent = 'Connected';
         document.getElementById('call-btn').classList.add('hidden');
         document.getElementById('hangup-btn').classList.remove('hidden');
-        document.getElementById('incall-caller-display').textContent = incomingCallerNumber || 'Unknown';
         startTimer();
-        window.dispatchEvent(new CustomEvent('crm:callStarted'));
 
         // Capture session reference
         var session = currentSession;
@@ -898,12 +844,6 @@
                     _inboundLeadIdx = 0;
                     _inboundLeadUrl = data.lead_url || null;
                 }
-                var callerEl = document.getElementById('incall-caller-display');
-                if (callerEl && data.contact_name) callerEl.textContent = data.contact_name;
-                if (_inboundLeads.length > 0) {
-                    _updateIncallLeadNav();
-                    document.getElementById('incall-lead-nav').classList.remove('hidden');
-                }
                 // Race condition: call ended before this fetch completed.
                 // Trigger recording now that we have the IDs.
                 if (_callEndedBeforeRegistered) {
@@ -923,28 +863,15 @@
             }
         });
 
-        // Navigate to the lead page IN PARALLEL (fire-and-forget).
-        // The SIP session is already answered above — navigation cannot kill the call.
+        // Navigate to the lead page, then fire crm:callStarted so the newly loaded
+        // lead_form.html script is already registered when the event fires.
         if (_inboundLeadUrl) {
-            crmNavigate(_inboundLeadUrl);
+            crmNavigate(_inboundLeadUrl).then(function() {
+                window.dispatchEvent(new CustomEvent('crm:callStarted'));
+            });
+        } else {
+            window.dispatchEvent(new CustomEvent('crm:callStarted'));
         }
-    }
-
-    function _updateIncallLeadNav() {
-        var lead = _inboundLeads[_inboundLeadIdx];
-        if (!lead) return;
-        document.getElementById('incall-lead-title').textContent = lead.title;
-        document.getElementById('incall-lead-link').href = lead.url;
-        document.getElementById('incall-lead-count').textContent =
-            _inboundLeads.length > 1 ? (_inboundLeadIdx + 1) + '/' + _inboundLeads.length : '';
-        _inboundLeadUrl = lead.url;
-    }
-
-    function navigateIncallLead(dir) {
-        if (_inboundLeads.length === 0) return;
-        _inboundLeadIdx = (_inboundLeadIdx + dir + _inboundLeads.length) % _inboundLeads.length;
-        _updateIncallLeadNav();
-        crmNavigate(_inboundLeads[_inboundLeadIdx].url);
     }
 
     function rejectIncomingCall() {
@@ -1017,7 +944,6 @@
         document.getElementById('status-text').textContent = 'Calling...';
         document.getElementById('call-btn').classList.add('hidden');
         document.getElementById('hangup-btn').classList.remove('hidden');
-        document.getElementById('incall-caller-display').textContent = phoneNumber;
 
         var formData = new FormData();
         formData.append('to_number', phoneNumber);
@@ -1113,7 +1039,6 @@
             var s = callSeconds % 60;
             var fmt = String(m).padStart(2, '0') + ':' + String(s).padStart(2, '0');
             document.getElementById('call-timer').textContent = fmt;
-            document.getElementById('incall-timer-display').textContent = fmt;
         }, 1000);
     }
 
@@ -1126,29 +1051,18 @@
         var muteBtn = document.getElementById('mute-btn');
         var muteIcon = document.getElementById('mute-icon');
         var muteLabel = document.getElementById('mute-label');
-        var barMuteBtn = document.getElementById('incall-mute-btn');
-        var barMuteIcon = document.getElementById('incall-mute-icon');
-        var barMuteLabel = document.getElementById('incall-mute-label');
         if (isMuted) {
             currentSession.mute({audio: true});
             muteBtn.classList.remove('bg-gray-200', 'hover:bg-gray-300', 'text-gray-700');
             muteBtn.classList.add('bg-red-100', 'hover:bg-red-200', 'text-red-700');
             muteIcon.className = 'fas fa-microphone-slash';
             muteLabel.textContent = 'Unmute';
-            barMuteBtn.classList.remove('bg-gray-700', 'hover:bg-gray-600');
-            barMuteBtn.classList.add('bg-red-700', 'hover:bg-red-600');
-            barMuteIcon.className = 'fas fa-microphone-slash';
-            barMuteLabel.textContent = 'Unmute';
         } else {
             currentSession.unmute({audio: true});
             muteBtn.classList.remove('bg-red-100', 'hover:bg-red-200', 'text-red-700');
             muteBtn.classList.add('bg-gray-200', 'hover:bg-gray-300', 'text-gray-700');
             muteIcon.className = 'fas fa-microphone';
             muteLabel.textContent = 'Mute';
-            barMuteBtn.classList.remove('bg-red-700', 'hover:bg-red-600');
-            barMuteBtn.classList.add('bg-gray-700', 'hover:bg-gray-600');
-            barMuteIcon.className = 'fas fa-microphone';
-            barMuteLabel.textContent = 'Mute';
         }
     }
 
@@ -1158,40 +1072,29 @@
         var holdBtn = document.getElementById('hold-btn');
         var holdIcon = document.getElementById('hold-icon');
         var holdLabel = document.getElementById('hold-label');
-        var barHoldBtn = document.getElementById('incall-hold-btn');
-        var barHoldIcon = document.getElementById('incall-hold-icon');
-        var barHoldLabel = document.getElementById('incall-hold-label');
         if (isOnHold) {
             currentSession.hold();
             holdBtn.classList.remove('bg-gray-200', 'hover:bg-gray-300', 'text-gray-700');
             holdBtn.classList.add('bg-yellow-100', 'hover:bg-yellow-200', 'text-yellow-700');
             holdIcon.className = 'fas fa-play';
             holdLabel.textContent = 'Resume';
-            barHoldBtn.classList.remove('bg-gray-700', 'hover:bg-gray-600');
-            barHoldBtn.classList.add('bg-yellow-600', 'hover:bg-yellow-500');
-            barHoldIcon.className = 'fas fa-play';
-            barHoldLabel.textContent = 'Resume';
         } else {
             currentSession.unhold();
             holdBtn.classList.remove('bg-yellow-100', 'hover:bg-yellow-200', 'text-yellow-700');
             holdBtn.classList.add('bg-gray-200', 'hover:bg-gray-300', 'text-gray-700');
             holdIcon.className = 'fas fa-pause';
             holdLabel.textContent = 'Hold';
-            barHoldBtn.classList.remove('bg-yellow-600', 'hover:bg-yellow-500');
-            barHoldBtn.classList.add('bg-gray-700', 'hover:bg-gray-600');
-            barHoldIcon.className = 'fas fa-pause';
-            barHoldLabel.textContent = 'Hold';
         }
     }
 
     function showInCallControls() {
-        document.getElementById('in-call-controls').classList.remove('hidden');
-        document.getElementById('incall-bar').classList.remove('hidden');
+        var el = document.getElementById('in-call-controls');
+        if (el) el.classList.remove('hidden');
     }
 
     function hideInCallControls() {
-        document.getElementById('in-call-controls').classList.add('hidden');
-        document.getElementById('incall-bar').classList.add('hidden');
+        var el = document.getElementById('in-call-controls');
+        if (el) el.classList.add('hidden');
     }
 
     function resetMuteHold() {
@@ -1211,23 +1114,6 @@
         holdBtn.classList.add('bg-gray-200', 'hover:bg-gray-300', 'text-gray-700');
         holdIcon.className = 'fas fa-pause';
         holdLabel.textContent = 'Hold';
-        // Reset in-call bar buttons
-        var barMuteBtn = document.getElementById('incall-mute-btn');
-        var barMuteIcon = document.getElementById('incall-mute-icon');
-        var barMuteLabel = document.getElementById('incall-mute-label');
-        barMuteBtn.classList.remove('bg-red-700', 'hover:bg-red-600');
-        barMuteBtn.classList.add('bg-gray-700', 'hover:bg-gray-600');
-        barMuteIcon.className = 'fas fa-microphone';
-        barMuteLabel.textContent = 'Mute';
-        var barHoldBtn = document.getElementById('incall-hold-btn');
-        var barHoldIcon = document.getElementById('incall-hold-icon');
-        var barHoldLabel = document.getElementById('incall-hold-label');
-        barHoldBtn.classList.remove('bg-yellow-600', 'hover:bg-yellow-500');
-        barHoldBtn.classList.add('bg-gray-700', 'hover:bg-gray-600');
-        barHoldIcon.className = 'fas fa-pause';
-        barHoldLabel.textContent = 'Hold';
-        document.getElementById('incall-timer-display').textContent = '00:00';
-        document.getElementById('incall-caller-display').textContent = '';
     }
 
     function resetDialpad() {
@@ -1239,7 +1125,6 @@
         _inboundCallId = null;
         _callEndedBeforeRegistered = false;
         sessionStorage.removeItem('_inboundCallState');
-        document.getElementById('incall-lead-nav').classList.add('hidden');
         window.dispatchEvent(new CustomEvent('crm:callEnded'));
         if (callTimer) { clearInterval(callTimer); callTimer = null; }
         callSeconds = 0;

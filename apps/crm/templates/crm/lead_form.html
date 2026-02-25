@@ -638,6 +638,16 @@
                             document.getElementById('lead-status-text').textContent = 'Calling...';
                             document.getElementById('lead-call-timer').textContent = '00:00';
                         });
+
+                        // Auto-init: when navigating here during an active call (inbound SPA),
+                        // show the widget immediately without waiting for crm:callStarted.
+                        (function() {
+                            if (typeof currentSession !== 'undefined' && currentSession) {
+                                document.getElementById('lead-call-btn').classList.add('hidden');
+                                document.getElementById('lead-call-controls').classList.remove('hidden');
+                                startLeadSync();
+                            }
+                        })();
                         </script>
                         {% endif %}
                     </div>
@@ -956,7 +966,7 @@ function selectLeadStatus(value) {
 }
 {% endif %}
 
-document.addEventListener('DOMContentLoaded', function() {
+(function() {
     const stageField = document.getElementById('{{ form.stage.id_for_label }}');
     const companyIdField = document.getElementById('company-id');
 
@@ -1142,7 +1152,7 @@ document.addEventListener('DOMContentLoaded', function() {
     // Capture original form values for change detection
     captureOriginalFormValues();
     attachChangeListeners();
-});
+})();
 
 // Update contact section based on company selection
 function updateContactSection(companyId = null) {
@@ -1497,7 +1507,7 @@ async function waSendMessage() {
     } catch(e) { console.error('WA send failed', e); }
 }
 
-document.addEventListener('DOMContentLoaded', function() {
+(function() {
     scrollWaMessages();
     // WebSocket for real-time incoming messages
     var wsScheme = location.protocol === 'https:' ? 'wss' : 'ws';
@@ -1507,7 +1517,7 @@ document.addEventListener('DOMContentLoaded', function() {
         if (data.type === 'update') refreshWaMessages();
     };
     ws.onclose = function() { setInterval(refreshWaMessages, 5000); };
-});
+})();
 {% endif %}
 
 async function saveQuickActivity() {

@@ -77,7 +77,7 @@ class ARIEventHandler:
 
         URL format:  ws://<host>:<port>/ari/events?app=<app>&api_key=<user>:<pass>
         """
-        import websockets
+        from websockets.asyncio.client import connect as ws_connect
 
         ari_url = getattr(settings, "ASTERISK_ARI_URL", "http://asterisk:8088")
         ari_user = getattr(settings, "ASTERISK_ARI_USER", "")
@@ -88,7 +88,7 @@ class ARIEventHandler:
 
         logger.info(f"Connecting to ARI WebSocket at {ari_url}/ari/events …")
 
-        async with websockets.connect(uri, ping_interval=30, ping_timeout=10) as ws:
+        async with ws_connect(uri, ping_interval=30, ping_timeout=10) as ws:
             logger.info("Connected to ARI — listening for events")
             async for raw_message in ws:
                 if not self.running:

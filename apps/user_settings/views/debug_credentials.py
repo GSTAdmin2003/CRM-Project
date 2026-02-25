@@ -703,7 +703,7 @@ def _test_asterisk() -> dict:
 # ---------------------------------------------------------------------------
 
 @login_required
-def test_credentials_view(request):
+def test_integrations_view(request):
     if not request.session.get("debug_mode"):
         from django.http import HttpResponseForbidden
         return HttpResponseForbidden("Debug mode not active. Append ?debug=1 to any URL first.")
@@ -722,5 +722,5 @@ def test_credentials_view(request):
 
 
 debug_urls = [
-    path("test-credentials/", test_credentials_view, name="test_credentials"),
+    path("test-integrations/", test_integrations_view, name="test_integrations"),
 ]

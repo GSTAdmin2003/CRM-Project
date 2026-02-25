@@ -66,13 +66,16 @@ def _test_elevenlabs(api_key: str) -> dict:
     # T2 — account info via SDK (handles auth correctly for all key formats)
     try:
         from elevenlabs import ElevenLabs
-        el_client = ElevenLabs(api_key=api_key)
+        el_client = ElevenLabs(api_key=api_key, timeout=10)
     except ImportError:
         outgoing.append(_case("SDK installed", "error", "'elevenlabs' package not installed"))
         return {"label": "ElevenLabs (STT — Scribe)", "overall": "error",
                 "outgoing": outgoing, "incoming": None}
     outgoing.append(_case("SDK installed", "ok", "elevenlabs SDK present"))
 
+    # T2 — authenticate: try user.get(); a missing_permissions error means
+    # the key IS valid but is scoped to STT only — treat as OK for our purposes.
+    key_authenticated = False
     try:
         t0 = time.monotonic()
         user_info = el_client.user.get()
@@ -82,49 +85,68 @@ def _test_elevenlabs(api_key: str) -> dict:
         used = getattr(sub, "character_count", "?") if sub else "?"
         limit = getattr(sub, "character_limit", "?") if sub else "?"
         outgoing.append(_case(
-            "Account API (user.get)",
+            "API key authentication",
             "ok",
             f"tier={tier}, chars={used}/{limit}  [{ms}ms]",
         ))
+        key_authenticated = True
     except Exception as exc:
-        # ApiError has .status_code and .body; extract a clean message
         status_code = getattr(exc, "status_code", None)
         body = getattr(exc, "body", None)
-        if status_code is not None:
-            detail = ""
+        api_status = ""
+        if isinstance(body, dict):
+            inner = body.get("detail", body)
+            if isinstance(inner, dict):
+                api_status = inner.get("status", "")
+        # missing_permissions = key is valid but STT-only (no user_read scope)
+        if api_status == "missing_permissions":
+            outgoing.append(_case(
+                "API key authentication", "ok",
+                "Key valid — STT-only scope (no user_read). This is fine for transcription.",
+            ))
+            key_authenticated = True
+        else:
+            # Genuine auth failure
             if isinstance(body, dict):
                 inner = body.get("detail", body)
-                if isinstance(inner, dict):
-                    detail = inner.get("message", str(inner))
-                else:
-                    detail = str(inner)
-            msg = f"HTTP {status_code} — {detail}" if detail else f"HTTP {status_code}"
-        else:
-            msg = str(exc)[:150]
-        if status_code == 401 or "invalid" in msg.lower() or "unauthorized" in msg.lower():
-            outgoing.append(_case("Account API (user.get)", "error",
-                                  f"Authentication failed — check API key: {msg}"))
-        else:
-            outgoing.append(_case("Account API (user.get)", "error", msg))
-        outgoing.append(_skip("STT model check", "auth failed"))
-        return {"label": "ElevenLabs (STT — Scribe)", "overall": "error",
-                "outgoing": outgoing, "incoming": None}
+                msg = inner.get("message", str(inner)) if isinstance(inner, dict) else str(inner)
+            else:
+                msg = str(exc)[:150]
+            outgoing.append(_case("API key authentication", "error",
+                                  f"Invalid key — {msg}"))
+            outgoing.append(_skip("STT model check", "auth failed"))
+            return {"label": "ElevenLabs (STT — Scribe)", "overall": "error",
+                    "outgoing": outgoing, "incoming": None}
 
-    # T3 — scribe_v2 model listed
-    try:
-        t0 = time.monotonic()
-        models = el_client.models.get_all()
-        ms = int((time.monotonic() - t0) * 1000)
-        ids = [getattr(m, "model_id", "") for m in models]
-        if "scribe_v2" in ids:
-            outgoing.append(_case("STT model available (scribe_v2)", "ok", f"scribe_v2 listed  [{ms}ms]"))
-        else:
-            outgoing.append(_case(
-                "STT model available (scribe_v2)", "warning",
-                f"scribe_v2 not found. Available: {', '.join(ids) or 'none'}",
-            ))
-    except Exception as exc:
-        outgoing.append(_case("STT model check", "warning", str(exc)[:100]))
+    # T3 — confirm scribe_v2 is reachable (POST with empty body → 422, not 401/403)
+    if key_authenticated:
+        try:
+            import httpx as _httpx
+            t0 = time.monotonic()
+            r = _httpx.post(
+                "https://api.elevenlabs.io/v1/speech-to-text",
+                headers={"xi-api-key": api_key},
+                timeout=8,
+            )
+            ms = int((time.monotonic() - t0) * 1000)
+            # 422 = unprocessable (missing audio) → endpoint reached & key accepted
+            # 200 = shouldn't happen with empty body
+            if r.status_code in (200, 422):
+                outgoing.append(_case(
+                    "STT endpoint reachable", "ok",
+                    f"POST /v1/speech-to-text → HTTP {r.status_code} (key accepted)  [{ms}ms]",
+                ))
+            elif r.status_code in (401, 403):
+                detail = r.json().get("detail", {})
+                if isinstance(detail, dict):
+                    detail = detail.get("message", str(detail))
+                outgoing.append(_case("STT endpoint reachable", "error",
+                                      f"HTTP {r.status_code} — {detail}"))
+            else:
+                outgoing.append(_case("STT endpoint reachable", "warning",
+                                      f"Unexpected HTTP {r.status_code}"))
+        except Exception as exc:
+            outgoing.append(_case("STT endpoint reachable", "warning", str(exc)[:100]))
 
     return {
         "label": "ElevenLabs (STT — Scribe)",

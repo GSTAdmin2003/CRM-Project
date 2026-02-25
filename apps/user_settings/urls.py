@@ -7,6 +7,7 @@ from .views.voip import voip_urls
 from .views.users import users_urls
 from .views.whatsapp import whatsapp_urls
 from .views.elevenlabs import elevenlabs_urls
+from .views.debug_credentials import debug_urls
 
 app_name = 'settings'
 
@@ -17,6 +18,7 @@ voip_patterns = (voip_urls, 'voip')
 users_patterns = (users_urls, 'users')
 whatsapp_patterns = (whatsapp_urls, 'whatsapp')
 elevenlabs_patterns = (elevenlabs_urls, 'elevenlabs')
+debug_patterns = (debug_urls, 'debug')
 
 urlpatterns = [
     path('', SettingsHomeView.as_view(), name='home'),
@@ -27,4 +29,5 @@ urlpatterns = [
     path('general/users/', include(users_patterns)),
     path('whatsapp/', include(whatsapp_patterns)),
     path('elevenlabs/', include(elevenlabs_patterns)),
+    path('debug/', include(debug_patterns)),
 ]

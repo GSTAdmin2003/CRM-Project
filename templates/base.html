@@ -54,9 +54,18 @@
                                                     </span>
                                                 </div>
                                             </button>
-                                            <div class="absolute right-0 z-10 mt-2 w-48 origin-top-right rounded-md bg-white py-1 shadow-lg ring-1 ring-black ring-opacity-5 focus:outline-none hidden" role="menu" aria-orientation="vertical" aria-labelledby="user-menu-button" tabindex="-1" id="user-menu">
+                                            <div class="absolute right-0 z-10 mt-2 w-56 origin-top-right rounded-md bg-white py-1 shadow-lg ring-1 ring-black ring-opacity-5 focus:outline-none hidden" role="menu" aria-orientation="vertical" aria-labelledby="user-menu-button" tabindex="-1" id="user-menu">
                                                 <a href="{% url 'settings:profile:index' %}" class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100" role="menuitem">Your Profile</a>
                                                 <a href="{% url 'logout' %}" class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100" role="menuitem">Sign out</a>
+                                                {% if debug_mode %}
+                                                <div class="border-t border-yellow-200 mt-1 pt-1">
+                                                    <p class="px-4 py-1 text-xs font-semibold text-yellow-600 uppercase tracking-wide">Debug</p>
+                                                    <a href="{% url 'settings:debug:test_credentials' %}" class="flex items-center gap-2 px-4 py-2 text-sm text-yellow-700 hover:bg-yellow-50" role="menuitem">
+                                                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+                                                        Test Credentials
+                                                    </a>
+                                                </div>
+                                                {% endif %}
                                             </div>
                                         </div>
                                     </div>
@@ -1356,6 +1365,15 @@
     }
     </script>
     {% endif %}
+
+    <!-- HTMX -->
+    <script src="https://unpkg.com/htmx.org@1.9.12/dist/htmx.min.js"></script>
+    <script>
+        // Send Django CSRF token automatically on every HTMX request
+        document.body.addEventListener('htmx:configRequest', function(evt) {
+            evt.detail.headers['X-CSRFToken'] = '{{ csrf_token }}';
+        });
+    </script>
 
     {% block extra_js %}{% endblock %}
 

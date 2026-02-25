@@ -1,0 +1,47 @@
+<table class="w-full text-sm">
+    {% for t in tests %}
+    <tr class="border-b border-gray-50 last:border-0
+        {% if t.status == 'error' %}bg-red-50/50
+        {% elif t.status == 'warning' %}bg-yellow-50/40{% endif %}">
+
+        <!-- Status dot -->
+        <td class="pl-5 pr-3 py-2.5 w-5">
+            {% if t.status == 'ok' %}
+            <span class="block w-2.5 h-2.5 rounded-full bg-green-500"></span>
+            {% elif t.status == 'warning' %}
+            <span class="block w-2.5 h-2.5 rounded-full bg-yellow-400"></span>
+            {% elif t.status == 'error' %}
+            <span class="block w-2.5 h-2.5 rounded-full bg-red-500"></span>
+            {% elif t.status == 'not_configured' %}
+            <span class="block w-2.5 h-2.5 rounded-full bg-gray-300"></span>
+            {% else %}
+            <span class="block w-2.5 h-2.5 rounded-full bg-gray-200 border border-dashed border-gray-400"></span>
+            {% endif %}
+        </td>
+
+        <!-- Test name -->
+        <td class="pr-4 py-2.5 font-medium text-gray-700 whitespace-nowrap w-72">
+            {{ t.name }}
+        </td>
+
+        <!-- Detail -->
+        <td class="pr-5 py-2.5 text-gray-500 font-mono text-xs break-all leading-relaxed">
+            {{ t.detail }}
+        </td>
+
+        <!-- Badge -->
+        <td class="pr-5 py-2.5 text-right whitespace-nowrap">
+            <span class="inline-block px-2 py-0.5 rounded text-xs font-semibold
+                {% if t.status == 'ok' %}text-green-700 bg-green-100
+                {% elif t.status == 'warning' %}text-yellow-700 bg-yellow-100
+                {% elif t.status == 'error' %}text-red-700 bg-red-100
+                {% elif t.status == 'not_configured' %}text-gray-500 bg-gray-100
+                {% else %}text-gray-400 bg-gray-50 border border-dashed border-gray-300{% endif %}">
+                {{ t.status|upper }}
+            </span>
+        </td>
+    </tr>
+    {% empty %}
+    <tr><td colspan="4" class="px-5 py-3 text-xs text-gray-400 italic">No tests defined</td></tr>
+    {% endfor %}
+</table>

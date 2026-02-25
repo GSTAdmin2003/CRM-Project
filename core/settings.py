@@ -86,6 +86,7 @@ TEMPLATES = [
                 'django.contrib.auth.context_processors.auth',
                 'django.contrib.messages.context_processors.messages',
                 'apps.calls.context_processors.dialpad_context',
+                'core.context_processors.debug_mode',
             ],
         },
     },

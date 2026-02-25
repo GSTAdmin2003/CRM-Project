@@ -780,6 +780,97 @@ def _test_asterisk_incoming(ari_url: str, auth, ari_user: str, ari_pass: str) ->
     else:
         tests.append(_skip(f"'{ARI_APP_NAME}' details", "ari-handler not connected"))
 
+    # T4 — working hours: would an inbound call be answered right now?
+    try:
+        from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
+        import datetime
+        from apps.calls.models import SIPSettings
+
+        tz_name = getattr(django_settings, "ASTERISK_TIMEZONE", None) or django_settings.TIME_ZONE or "UTC"
+        try:
+            tz = ZoneInfo(tz_name)
+        except ZoneInfoNotFoundError:
+            tz = ZoneInfo("UTC")
+
+        now = datetime.datetime.now(tz)
+        day_abbr = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"][now.weekday()]
+        current_t = now.time().replace(second=0, microsecond=0)
+        time_str = now.strftime("%H:%M")
+        tz_label = f"{time_str} {tz_name}"
+
+        sip = SIPSettings.objects.filter(is_active=True).first()
+        if not sip or not sip.working_hours_start or not sip.working_hours_end or not sip.working_days:
+            tests.append(_case(
+                "Working hours (inbound routing)",
+                "ok",
+                f"No schedule configured — calls accepted any time. Now: {tz_label}",
+            ))
+        else:
+            days = [d.strip() for d in sip.working_days.split(",") if d.strip()]
+            start = sip.working_hours_start
+            end = sip.working_hours_end
+            window = f"{start.strftime('%H:%M')}–{end.strftime('%H:%M')} ({', '.join(d.capitalize() for d in days)})"
+            if day_abbr not in days:
+                tests.append(_case(
+                    "Working hours (inbound routing)", "warning",
+                    f"Today ({day_abbr.capitalize()}) is not a working day — inbound calls play non-working message and hang up. "
+                    f"Working schedule: {window}. Now: {tz_label}",
+                ))
+            elif not (start <= current_t <= end):
+                tests.append(_case(
+                    "Working hours (inbound routing)", "warning",
+                    f"Current time {tz_label} is outside working hours — inbound calls play non-working message and hang up. "
+                    f"Working schedule: {window}",
+                ))
+            else:
+                tests.append(_case(
+                    "Working hours (inbound routing)", "ok",
+                    f"Within working hours. Now: {tz_label}, schedule: {window}",
+                ))
+    except Exception as exc:
+        tests.append(_case("Working hours (inbound routing)", "warning", str(exc)[:150]))
+
+    # T5 — SIP trunk registered (inbound calls arrive via trunk)
+    try:
+        t0 = time.monotonic()
+        resp = httpx.get(f"{ari_url}/ari/endpoints/PJSIP/sip-trunk-endpoint", auth=auth, timeout=6)
+        ms = int((time.monotonic() - t0) * 1000)
+        if resp.status_code == 200:
+            state = resp.json().get("state", "?")
+            if state == "online":
+                tests.append(_case("SIP trunk registered", "ok",
+                                   f"sip-trunk-endpoint is online — carrier can deliver calls  [{ms}ms]"))
+            else:
+                tests.append(_case("SIP trunk registered", "error",
+                                   f"sip-trunk-endpoint state={state} — inbound calls cannot arrive  [{ms}ms]"))
+        elif resp.status_code == 404:
+            tests.append(_case("SIP trunk registered", "warning",
+                               f"sip-trunk-endpoint not found in Asterisk — trunk may not be configured  [{ms}ms]"))
+        else:
+            tests.append(_case("SIP trunk registered", "warning",
+                               f"HTTP {resp.status_code}: {resp.text[:80]}"))
+    except Exception as exc:
+        tests.append(_case("SIP trunk registered", "warning", str(exc)[:150]))
+
+    # T6 — agent endpoint available to receive the forwarded call (dialplan dials PJSIP/100)
+    try:
+        t0 = time.monotonic()
+        resp = httpx.get(f"{ari_url}/ari/endpoints/PJSIP/100", auth=auth, timeout=6)
+        ms = int((time.monotonic() - t0) * 1000)
+        if resp.status_code == 200:
+            state = resp.json().get("state", "?")
+            if state == "online":
+                tests.append(_case("Agent PJSIP/100 available", "ok",
+                                   f"Endpoint 100 is online — will ring when call arrives  [{ms}ms]"))
+            else:
+                tests.append(_case("Agent PJSIP/100 available", "error",
+                                   f"Endpoint 100 state={state} — dialplan will play 'nobody available' and hang up  [{ms}ms]"))
+        else:
+            tests.append(_case("Agent PJSIP/100 available", "warning",
+                               f"HTTP {resp.status_code}: {resp.text[:80]}"))
+    except Exception as exc:
+        tests.append(_case("Agent PJSIP/100 available", "warning", str(exc)[:150]))
+
     return tests
 
 

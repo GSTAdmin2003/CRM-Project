@@ -30,6 +30,7 @@ services:
       - ASTERISK_ARI_USER=${ARI_USER:-crm}
       - ASTERISK_ARI_PASSWORD=${ARI_PASSWORD}
       - ASTERISK_RECORDINGS_PATH=/var/spool/asterisk/monitor
+      - ASTERISK_TIMEZONE=${TZ:-Asia/Tbilisi}
       - CELERY_BROKER_URL=redis://redis:6379/0
       - CELERY_RESULT_BACKEND=redis://redis:6379/0
     depends_on:

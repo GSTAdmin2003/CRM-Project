@@ -183,6 +183,7 @@ ASTERISK_ARI_URL = os.getenv('ASTERISK_ARI_URL', 'http://asterisk:8088')
 ASTERISK_ARI_USER = os.getenv('ASTERISK_ARI_USER', '')
 ASTERISK_ARI_PASSWORD = os.getenv('ASTERISK_ARI_PASSWORD', '')
 ASTERISK_RECORDINGS_PATH = os.getenv('ASTERISK_RECORDINGS_PATH', '/var/spool/asterisk/recording')
+ASTERISK_TIMEZONE = os.getenv('ASTERISK_TIMEZONE', 'UTC')  # Must match TZ in asterisk container
 
 # =============================================================================
 # Celery Configuration

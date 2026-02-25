@@ -159,10 +159,20 @@ LOGGING = {
     'handlers': {
         'console': {
             'class': 'logging.StreamHandler',
+            'stream': 'ext://sys.stdout',
         },
     },
     'root': {
         'handlers': ['console'],
+        'level': 'WARNING',
+    },
+    'loggers': {
+        # CRM app loggers — INFO so ari-handler connection logs appear in docker logs
+        'apps': {
+            'handlers': ['console'],
+            'level': 'INFO',
+            'propagate': False,
+        },
     },
 }
 

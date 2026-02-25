@@ -592,7 +592,7 @@ def _test_asterisk_outgoing(ari_url: str, auth) -> list:
         elif resp.status_code == 401:
             tests.append(_case("ARI reachable", "error",
                                 "401 Unauthorized — wrong ARI username/password"))
-            for n in ["Channel list", "SIP settings in DB"]:
+            for n in ["Active channels", "SIP settings in DB", "SIP endpoints registered"]:
                 tests.append(_skip(n, "auth failed"))
             return tests
         else:
@@ -614,13 +614,13 @@ def _test_asterisk_outgoing(ari_url: str, auth) -> list:
         ms = int((time.monotonic() - t0) * 1000)
         if resp.status_code == 200:
             count = len(resp.json())
-            tests.append(_case("Channel list (/ari/channels)", "ok",
+            tests.append(_case("Active channels (/ari/channels)", "ok",
                                 f"{count} active channel(s)  [{ms}ms]"))
         else:
-            tests.append(_case("Channel list", "warning",
+            tests.append(_case("Active channels", "warning",
                                 f"HTTP {resp.status_code}: {resp.text[:80]}"))
     except Exception as exc:
-        tests.append(_case("Channel list", "warning", str(exc)[:150]))
+        tests.append(_case("Active channels", "warning", str(exc)[:150]))
 
     # T3 — SIP settings in DB
     try:
@@ -636,18 +636,93 @@ def _test_asterisk_outgoing(ari_url: str, auth) -> list:
     except Exception as exc:
         tests.append(_case("SIP settings in DB", "warning", str(exc)[:150]))
 
+    # T4 — SIP endpoints actually registered with Asterisk right now
+    try:
+        t0 = time.monotonic()
+        resp = httpx.get(f"{ari_url}/ari/endpoints", auth=auth, timeout=6)
+        ms = int((time.monotonic() - t0) * 1000)
+        if resp.status_code == 200:
+            endpoints = resp.json()
+            registered = [e for e in endpoints if e.get("state") == "online"]
+            offline = [e for e in endpoints if e.get("state") != "online"]
+            reg_names = [e.get("resource", "?") for e in registered]
+            off_names = [e.get("resource", "?") for e in offline]
+            if not endpoints:
+                tests.append(_case("SIP endpoints registered", "warning",
+                                   f"No SIP endpoints configured in Asterisk  [{ms}ms]"))
+            elif not registered:
+                tests.append(_case(
+                    "SIP endpoints registered", "error",
+                    f"0/{len(endpoints)} online — offline: {', '.join(off_names)}  [{ms}ms]",
+                ))
+            else:
+                detail = f"{len(registered)}/{len(endpoints)} online: {', '.join(reg_names)}"
+                if off_names:
+                    detail += f"  |  offline: {', '.join(off_names)}"
+                tests.append(_case("SIP endpoints registered", "ok", f"{detail}  [{ms}ms]"))
+        else:
+            tests.append(_case("SIP endpoints registered", "warning",
+                               f"HTTP {resp.status_code}: {resp.text[:80]}"))
+    except Exception as exc:
+        tests.append(_case("SIP endpoints registered", "warning", str(exc)[:150]))
+
     return tests
 
 
-def _test_asterisk_incoming(ari_url: str, auth) -> list:
+def _ari_ws_probe(ari_url: str, ari_user: str, ari_pass: str, app_name: str) -> tuple:
     """
-    Test whether Asterisk can deliver events to our CRM app.
-    Checks ARI application registration and WebSocket endpoint availability.
+    Perform a real WebSocket handshake against the ARI /events endpoint.
+    Returns (status, detail) where status is 'ok'|'error'|'warning'.
+
+    Uses a raw TCP socket + manual HTTP Upgrade request so we avoid
+    asyncio event-loop conflicts with the running ASGI server.
+    """
+    import base64
+    import os
+    import socket
+
+    host_port = ari_url.replace("http://", "").replace("https://", "")
+    host, _, port_str = host_port.partition(":")
+    port = int(port_str) if port_str else 8088
+    path = f"/ari/events?app={app_name}&api_key={ari_user}:{ari_pass}"
+    ws_key = base64.b64encode(os.urandom(16)).decode()
+
+    handshake = (
+        f"GET {path} HTTP/1.1\r\n"
+        f"Host: {host}:{port}\r\n"
+        f"Upgrade: websocket\r\n"
+        f"Connection: Upgrade\r\n"
+        f"Sec-WebSocket-Key: {ws_key}\r\n"
+        f"Sec-WebSocket-Version: 13\r\n"
+        f"\r\n"
+    )
+    try:
+        t0 = time.monotonic()
+        sock = socket.create_connection((host, port), timeout=5)
+        sock.sendall(handshake.encode())
+        sock.settimeout(5)
+        response = sock.recv(1024).decode("utf-8", errors="replace")
+        ms = int((time.monotonic() - t0) * 1000)
+        sock.close()
+        if "101 Switching Protocols" in response:
+            return "ok", f"WebSocket upgrade accepted by Asterisk  [{ms}ms]"
+        first_line = response.split("\r\n")[0] if response else "(empty response)"
+        return "error", f"Expected 101, got: {first_line}  [{ms}ms]"
+    except OSError as exc:
+        return "error", f"Cannot connect to {host}:{port} — {exc}"
+    except Exception as exc:
+        return "warning", str(exc)[:150]
+
+
+def _test_asterisk_incoming(ari_url: str, auth, ari_user: str, ari_pass: str) -> list:
+    """
+    Test whether Asterisk can deliver real-time events to the CRM.
+    Checks ari-handler connection status and performs a live WebSocket handshake.
     """
     tests = []
     import httpx
 
-    # T1 — list all ARI applications registered in Asterisk
+    # T1 — is crm-app registered? (only true when ari-handler is actively connected)
     try:
         t0 = time.monotonic()
         resp = httpx.get(f"{ari_url}/ari/applications", auth=auth, timeout=6)
@@ -657,84 +732,53 @@ def _test_asterisk_incoming(ari_url: str, auth) -> list:
             app_names = [a.get("name", "") for a in apps]
             if ARI_APP_NAME in app_names:
                 tests.append(_case(
-                    f"ARI app '{ARI_APP_NAME}' registered",
+                    f"ari-handler connected ('{ARI_APP_NAME}' registered)",
                     "ok",
-                    f"Found in {len(apps)} registered app(s)  [{ms}ms]",
+                    f"App registered — event handler is running  [{ms}ms]",
                 ))
             else:
-                # Normal on a fresh/idle system — the app registers on the first WebSocket
-                # connection from ari_events.py. It does NOT indicate a real problem.
                 tests.append(_case(
-                    f"ARI app '{ARI_APP_NAME}' registered",
-                    "ok",
-                    f"Not registered yet (normal — registers on first WebSocket connection). "
-                    f"Other apps present: {app_names or 'none'}  [{ms}ms]",
+                    f"ari-handler connected ('{ARI_APP_NAME}' registered)",
+                    "error",
+                    f"'{ARI_APP_NAME}' not in ARI app list — ari-handler service is not running "
+                    f"or its WebSocket is disconnected. Registered: {app_names or 'none'}  [{ms}ms]",
                 ))
-                tests.append(_skip(f"App '{ARI_APP_NAME}' details", "not registered yet — no calls made"))
-                return tests
         else:
-            tests.append(_case("ARI app list", "error",
+            tests.append(_case("ari-handler status", "error",
                                 f"HTTP {resp.status_code}: {resp.text[:100]}"))
-            return tests
     except Exception as exc:
-        tests.append(_case("ARI app list", "error", str(exc)[:150]))
-        return tests
+        tests.append(_case("ari-handler status", "error", str(exc)[:150]))
 
-    # T2 — get crm-app details (channels, bridges, endpoints subscribed)
-    try:
-        t0 = time.monotonic()
-        resp = httpx.get(f"{ari_url}/ari/applications/{ARI_APP_NAME}", auth=auth, timeout=6)
-        ms = int((time.monotonic() - t0) * 1000)
-        if resp.status_code == 200:
-            d = resp.json()
-            channels = len(d.get("channel_ids", []))
-            bridges = len(d.get("bridge_ids", []))
-            endpoints = len(d.get("endpoint_ids", []))
-            tests.append(_case(
-                f"App '{ARI_APP_NAME}' details",
-                "ok",
-                f"channels={channels}, bridges={bridges}, endpoints={endpoints}  [{ms}ms]",
-            ))
+    # T2 — live WebSocket handshake using a separate probe app (does not disturb the real handler)
+    t0 = time.monotonic()
+    ws_status, ws_detail = _ari_ws_probe(ari_url, ari_user, ari_pass, "crm-debug-probe")
+    tests.append(_case("ARI WebSocket handshake", ws_status, ws_detail))
 
-            # T3 — channel subscriber count (at least 1 active WS consumer means event handler is up)
-            device_state = d.get("device_names", [])
-            n_device = len(device_state)
-            # Asterisk doesn't directly expose WS subscriber count, but we can check
-            # if the app has ever seen traffic by looking at channel_ids (live calls).
-            # Instead, probe the WS endpoint directly.
-        else:
-            tests.append(_case(f"App '{ARI_APP_NAME}' details", "warning",
-                                f"HTTP {resp.status_code}: {resp.text[:80]}"))
-    except Exception as exc:
-        tests.append(_case(f"App '{ARI_APP_NAME}' details", "warning", str(exc)[:150]))
-
-    # T3 — confirm the WebSocket endpoint accepts HTTP upgrade requests
-    # We send a plain HTTP GET with Upgrade: websocket headers.
-    # Asterisk will either return 101 (upgrade) or 400 (no app param) — both mean it's listening.
-    # Connection refused means the WS port is down.
-    try:
-        import socket
-        host_port = ari_url.replace("http://", "").replace("https://", "")
-        host, _, port_str = host_port.partition(":")
-        port = int(port_str) if port_str else 8088
-
-        t0 = time.monotonic()
-        sock = socket.create_connection((host, port), timeout=4)
-        ms = int((time.monotonic() - t0) * 1000)
-        sock.close()
-        tests.append(_case(
-            "ARI WebSocket port reachable",
-            "ok",
-            f"TCP connect to {host}:{port} succeeded  [{ms}ms]",
-        ))
-    except OSError as exc:
-        tests.append(_case(
-            "ARI WebSocket port reachable",
-            "error",
-            f"Cannot reach {ari_url} — {exc}",
-        ))
-    except Exception as exc:
-        tests.append(_case("ARI WebSocket port reachable", "warning", str(exc)[:150]))
+    # T3 — crm-app details (only if registered)
+    crm_registered = any(
+        t["name"].startswith("ari-handler") and t["status"] == "ok" for t in tests
+    )
+    if crm_registered:
+        try:
+            t0 = time.monotonic()
+            resp = httpx.get(f"{ari_url}/ari/applications/{ARI_APP_NAME}", auth=auth, timeout=6)
+            ms = int((time.monotonic() - t0) * 1000)
+            if resp.status_code == 200:
+                d = resp.json()
+                channels = len(d.get("channel_ids", []))
+                bridges = len(d.get("bridge_ids", []))
+                tests.append(_case(
+                    f"'{ARI_APP_NAME}' details",
+                    "ok",
+                    f"active channels={channels}, bridges={bridges}  [{ms}ms]",
+                ))
+            else:
+                tests.append(_case(f"'{ARI_APP_NAME}' details", "warning",
+                                   f"HTTP {resp.status_code}: {resp.text[:80]}"))
+        except Exception as exc:
+            tests.append(_case(f"'{ARI_APP_NAME}' details", "warning", str(exc)[:150]))
+    else:
+        tests.append(_skip(f"'{ARI_APP_NAME}' details", "ari-handler not connected"))
 
     return tests
 
@@ -771,7 +815,7 @@ def _test_asterisk() -> dict:
     if any(t["status"] == "error" for t in tests_out):
         tests_in.append(_skip("(all incoming tests)", "ARI not reachable"))
     else:
-        tests_in += _test_asterisk_incoming(ari_url, auth)
+        tests_in += _test_asterisk_incoming(ari_url, auth, ari_user, ari_pass)
 
     all_tests = tests_out + tests_in
     return {

@@ -96,6 +96,28 @@ services:
     depends_on:
       - redis
 
+  ari-handler:
+    build: .
+    command: python manage.py run_ari_handler
+    restart: unless-stopped
+    volumes:
+      - .:/app
+      - asterisk_recordings:/var/spool/asterisk/monitor
+    environment:
+      - PYTHONUNBUFFERED=1
+      - DEBUG=${DEBUG:-0}
+      - SECRET_KEY=${SECRET_KEY}
+      - DATABASE_URL=postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}
+      - ASTERISK_ARI_URL=http://asterisk:8088
+      - ASTERISK_ARI_USER=${ARI_USER:-crm}
+      - ASTERISK_ARI_PASSWORD=${ARI_PASSWORD}
+      - ASTERISK_RECORDINGS_PATH=/var/spool/asterisk/monitor
+      - CELERY_BROKER_URL=redis://redis:6379/0
+      - CELERY_RESULT_BACKEND=redis://redis:6379/0
+    depends_on:
+      - db
+      - asterisk
+
 volumes:
   postgres_data:
   asterisk_recordings:

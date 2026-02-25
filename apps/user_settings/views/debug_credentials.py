@@ -8,13 +8,15 @@ Each integration runs a series of ordered test cases split into two groups:
 
 Results use status: ok | warning | error | not_configured | skipped
 """
+import hashlib
+import hmac
 import json
+import re
 import time
 
 from django.conf import settings as django_settings
 from django.contrib.auth.decorators import login_required
 from django.shortcuts import render
-from django.test import RequestFactory
 from django.urls import path, reverse
 
 from apps.user_settings.models.general import SystemConfiguration
@@ -314,20 +316,57 @@ def _test_whatsapp_outgoing(config, headers: dict, GRAPH: str) -> list:
     return tests
 
 
+def _get_public_base_url() -> tuple:
+    """
+    Returns (url, source) where url is the public-facing base URL of this server,
+    or (None, '') if none can be determined.
+
+    Strategy:
+      1. Query the local ngrok API (tries host.docker.internal and common Docker
+         bridge gateway IPs) — returns the live HTTPS tunnel URL.
+      2. Fall back to the first non-localhost, non-IP entry in ALLOWED_HOSTS.
+    """
+    import httpx
+
+    # 1 — ngrok local API (port 4040 on the Docker host)
+    for host in ("host.docker.internal", "172.17.0.1", "172.18.0.1", "172.19.0.1"):
+        try:
+            r = httpx.get(f"http://{host}:4040/api/tunnels", timeout=1.5)
+            if r.status_code == 200:
+                for tunnel in r.json().get("tunnels", []):
+                    url = tunnel.get("public_url", "")
+                    if url.startswith("https://"):
+                        return url.rstrip("/"), f"ngrok API ({host}:4040)"
+        except Exception:
+            pass
+
+    # 2 — ALLOWED_HOSTS fallback
+    for host in django_settings.ALLOWED_HOSTS:
+        if host in ("localhost", "127.0.0.1", "0.0.0.0", "*"):
+            continue
+        if host.startswith("."):
+            continue
+        if re.match(r"^\d{1,3}(\.\d{1,3}){3}$", host):
+            continue
+        return f"https://{host}", "ALLOWED_HOSTS"
+
+    return None, ""
+
+
 def _test_whatsapp_incoming(config, headers: dict, GRAPH: str) -> list:
     """
-    Test our side's ability to receive webhooks from Meta.
-    Uses Django's RequestFactory to call the webhook view directly
-    so we don't need an externally reachable URL.
+    Test our ability to receive webhooks from Meta via live HTTP requests
+    to the public URL (ngrok or whatever is in ALLOWED_HOSTS).
     """
+    import httpx
     tests = []
-    factory = RequestFactory()
 
     # T1 — webhook verify token set
     token = config.webhook_verify_token
     if not token:
         tests.append(_case("Verify token configured", "not_configured", "webhook_verify_token is empty"))
-        for n in ["Webhook verification challenge", "Webhook rejects invalid token",
+        for n in ["App secret configured", "Public webhook URL",
+                  "Webhook verification challenge", "Webhook rejects invalid token",
                   "Webhook accepts valid POST", "Meta webhook subscriptions"]:
             tests.append(_skip(n, "no verify token"))
         return tests
@@ -342,85 +381,97 @@ def _test_whatsapp_incoming(config, headers: dict, GRAPH: str) -> list:
             "app_secret empty — signature verification disabled (ok in DEBUG mode only)",
         ))
 
-    # T3 — simulate webhook verification challenge (correct token → echo challenge)
-    try:
-        from apps.messaging.views.template_views import webhook as webhook_view
+    # T3 — discover the public URL
+    public_url, url_source = _get_public_base_url()
+    webhook_url = f"{public_url}/messaging/webhook/" if public_url else None
+
+    if not public_url:
+        tests.append(_case(
+            "Public webhook URL", "error",
+            "No public URL found — start ngrok and add its host to ALLOWED_HOSTS",
+        ))
+        for n in ["Webhook verification challenge", "Webhook rejects invalid token", "Webhook accepts valid POST"]:
+            tests.append(_skip(n, "no public URL"))
+    else:
+        tests.append(_case("Public webhook URL", "ok", f"{webhook_url}  (via {url_source})"))
+
+        # T4 — live webhook verification challenge (correct token → echo challenge)
         challenge = "crm_debug_test_12345"
-        req = factory.get(
-            reverse("messaging:webhook"),
-            {"hub.mode": "subscribe", "hub.verify_token": token, "hub.challenge": challenge},
-        )
-        t0 = time.monotonic()
-        resp = webhook_view(req)
-        ms = int((time.monotonic() - t0) * 1000)
-        if resp.status_code == 200 and resp.content.decode() == challenge:
-            tests.append(_case(
-                "Webhook verification challenge",
-                "ok",
-                f"Echoed challenge correctly ('{challenge}')  [{ms}ms]",
-            ))
-        else:
-            tests.append(_case(
-                "Webhook verification challenge",
-                "error",
-                f"Expected 200+'{challenge}', got HTTP {resp.status_code} body={resp.content[:60]!r}",
-            ))
-    except Exception as exc:
-        tests.append(_case("Webhook verification challenge", "error", str(exc)[:150]))
+        try:
+            t0 = time.monotonic()
+            r = httpx.get(
+                webhook_url,
+                params={"hub.mode": "subscribe", "hub.verify_token": token, "hub.challenge": challenge},
+                timeout=10,
+                follow_redirects=True,
+            )
+            ms = int((time.monotonic() - t0) * 1000)
+            if r.status_code == 200 and r.text == challenge:
+                tests.append(_case(
+                    "Webhook verification challenge", "ok",
+                    f"Echoed '{challenge}' through {public_url}  [{ms}ms]",
+                ))
+            else:
+                tests.append(_case(
+                    "Webhook verification challenge", "error",
+                    f"Expected 200+'{challenge}', got HTTP {r.status_code} body={r.text[:80]!r}  [{ms}ms]",
+                ))
+        except Exception as exc:
+            tests.append(_case("Webhook verification challenge", "error", str(exc)[:150]))
 
-    # T4 — webhook rejects wrong verify token (security check)
-    try:
-        from apps.messaging.views.template_views import webhook as webhook_view
-        req = factory.get(
-            reverse("messaging:webhook"),
-            {"hub.mode": "subscribe", "hub.verify_token": "wrong-token-xyz", "hub.challenge": "abc"},
-        )
-        resp = webhook_view(req)
-        if resp.status_code == 403:
-            tests.append(_case(
-                "Webhook rejects invalid token",
-                "ok",
-                "Correctly returned 403 for wrong verify_token",
-            ))
-        else:
-            tests.append(_case(
-                "Webhook rejects invalid token",
-                "error",
-                f"Expected 403, got HTTP {resp.status_code} — security issue!",
-            ))
-    except Exception as exc:
-        tests.append(_case("Webhook rejects invalid token", "error", str(exc)[:150]))
+        # T5 — live reject: wrong verify token → 403
+        try:
+            t0 = time.monotonic()
+            r = httpx.get(
+                webhook_url,
+                params={"hub.mode": "subscribe", "hub.verify_token": "wrong-token-xyz", "hub.challenge": "abc"},
+                timeout=10,
+                follow_redirects=True,
+            )
+            ms = int((time.monotonic() - t0) * 1000)
+            if r.status_code == 403:
+                tests.append(_case(
+                    "Webhook rejects invalid token", "ok",
+                    f"Correctly returned 403 for wrong verify_token  [{ms}ms]",
+                ))
+            else:
+                tests.append(_case(
+                    "Webhook rejects invalid token", "error",
+                    f"Expected 403, got HTTP {r.status_code} — security issue!  [{ms}ms]",
+                ))
+        except Exception as exc:
+            tests.append(_case("Webhook rejects invalid token", "error", str(exc)[:150]))
 
-    # T5 — POST with a minimal valid-looking payload (DEBUG skips signature check)
-    try:
-        from apps.messaging.views.template_views import webhook as webhook_view
-        payload = json.dumps({
-            "object": "whatsapp_business_account",
-            "entry": [],
-        }).encode()
-        req = factory.post(
-            reverse("messaging:webhook"),
-            data=payload,
-            content_type="application/json",
-        )
-        req.META["HTTP_X_HUB_SIGNATURE_256"] = ""
-        t0 = time.monotonic()
-        resp = webhook_view(req)
-        ms = int((time.monotonic() - t0) * 1000)
-        if resp.status_code == 200:
-            tests.append(_case(
-                "Webhook accepts valid POST",
-                "ok",
-                f"Returned 200 for minimal payload  [{ms}ms]",
-            ))
-        else:
-            tests.append(_case(
-                "Webhook accepts valid POST",
-                "warning",
-                f"Got HTTP {resp.status_code} (expected 200)",
-            ))
-    except Exception as exc:
-        tests.append(_case("Webhook accepts valid POST", "error", str(exc)[:150]))
+        # T6 — live POST with a minimal payload + correct HMAC signature
+        try:
+            payload_bytes = json.dumps({"object": "whatsapp_business_account", "entry": []}).encode()
+            if config.app_secret:
+                sig = "sha256=" + hmac.new(
+                    config.app_secret.encode(), payload_bytes, hashlib.sha256
+                ).hexdigest()
+            else:
+                sig = ""
+            t0 = time.monotonic()
+            r = httpx.post(
+                webhook_url,
+                content=payload_bytes,
+                headers={"Content-Type": "application/json", "X-Hub-Signature-256": sig},
+                timeout=10,
+                follow_redirects=True,
+            )
+            ms = int((time.monotonic() - t0) * 1000)
+            if r.status_code == 200:
+                tests.append(_case(
+                    "Webhook accepts valid POST", "ok",
+                    f"200 for minimal signed payload through {public_url}  [{ms}ms]",
+                ))
+            else:
+                tests.append(_case(
+                    "Webhook accepts valid POST", "warning",
+                    f"Got HTTP {r.status_code} (expected 200)  [{ms}ms]",
+                ))
+        except Exception as exc:
+            tests.append(_case("Webhook accepts valid POST", "error", str(exc)[:150]))
 
     # T6 — Meta-side: check app webhook subscriptions (requires app_id)
     if config.app_id:

@@ -105,9 +105,19 @@ class WhatsAppService:
                             )
                 # Status updates (delivered/read)
                 for status in value.get("statuses", []):
+                    import logging as _logging
+                    _log = _logging.getLogger('apps.messaging')
+                    msg_status = status.get("status", "")
+                    if msg_status == "failed":
+                        errors = status.get("errors", [])
+                        _log.warning(
+                            f"WhatsApp delivery failed for wamid={status.get('id')!r} "
+                            f"recipient={status.get('recipient_id')!r} "
+                            f"errors={errors}"
+                        )
                     updated = WhatsAppMessage.objects.filter(
                         wa_message_id=status["id"]
-                    ).update(status=status["status"])
+                    ).update(status=msg_status)
                     if updated:
                         # Notify so read/delivered ticks update in real time
                         msg_obj = WhatsAppMessage.objects.filter(

@@ -648,62 +648,48 @@ Respond ONLY with valid JSON (no markdown code block, no explanation outside JSO
                 logger.info(f"Skipping send_pitch for call {call_id}: no linked opportunity")
                 continue
             auto_send = SystemConfiguration.get_setting('auto_send_pitch_enabled', False)
-            pitch_sent = False
-            pitch_error = None
             if auto_send:
                 try:
                     from apps.messaging.services.whatsapp_service import WhatsAppService
-                    WhatsAppService.send_sales_pitch(
+                    wa_msg = WhatsAppService.send_sales_pitch(
                         lead_id=call.opportunity_id,
                         sent_by=agent_user,
                     )
-                    pitch_sent = True
-                    created_ids.append({'action': 'send_pitch', 'status': 'sent'})
+                    # Message accepted by Meta — schedule a delivery status check.
+                    # The check task will create a planned activity if delivery fails.
+                    check_pitch_delivery.apply_async(
+                        kwargs={
+                            'wa_message_id': wa_msg.id,
+                            'lead_id': call.opportunity_id,
+                            'user_id': agent_user.id if agent_user else None,
+                            'call_id': call_id,
+                        },
+                        countdown=30,
+                    )
+                    created_ids.append({'action': 'send_pitch', 'status': 'sent', 'wa_message_id': wa_msg.id})
                     logger.info(
-                        f"Sent sales pitch for call {call_id} (opportunity {call.opportunity_id})"
+                        f"Sent sales pitch for call {call_id} (opportunity {call.opportunity_id}), "
+                        f"delivery check scheduled for message {wa_msg.id}"
                     )
                 except Exception as e:
-                    pitch_error = str(e)
-                    logger.warning(f"send_pitch failed for call {call_id}: {e}")
-
-            if not pitch_sent:
-                # Auto-send disabled OR send failed — create a planned "WhatsApp Pitch" activity
-                try:
-                    from apps.activities.models import ActivityType
-                    wa_type = ActivityType.objects.filter(name__icontains='whatsapp').first()
-                    if wa_type:
-                        import datetime as _dt
-                        from django.utils import timezone as tz
-                        default_days = int(
-                            SystemConfiguration.get_setting('ai_activity_default_days', 1) or 1
-                        )
-                        default_date = _dt.date.today() + _dt.timedelta(days=default_days)
-                        scheduled = tz.make_aware(
-                            _dt.datetime.combine(default_date, _dt.time(9, 0))
-                        )
-                        description = 'Send sales pitch via WhatsApp'
-                        if pitch_error:
-                            description += f' (auto-send failed: {pitch_error})'
-                        activity = ActivityService.create_activity(
-                            lead_id=call.opportunity_id,
-                            activity_type_id=wa_type.pk,
-                            title='Send WhatsApp Sales Pitch',
-                            scheduled_date=scheduled,
-                            created_by=agent_user,
-                            assigned_to=agent_user,
-                            description=description,
-                        )
-                        created_ids.append(activity.pk)
-                        logger.info(
-                            f"Created planned WhatsApp Pitch activity {activity.pk} for call {call_id}"
-                        )
-                    else:
-                        created_ids.append({'action': 'send_pitch', 'status': 'skipped_no_type'})
-                        logger.warning(
-                            f"No WhatsApp ActivityType found — skipping planned pitch for call {call_id}"
-                        )
-                except Exception as e:
-                    logger.warning(f"Failed to create planned pitch activity for call {call_id}: {e}")
+                    # API-level failure (bad config, missing contact, etc.) — create fallback immediately
+                    logger.warning(f"send_pitch API call failed for call {call_id}: {e}")
+                    _create_pitch_planned_activity(
+                        lead_id=call.opportunity_id,
+                        agent_user=agent_user,
+                        description=f'Send sales pitch via WhatsApp (auto-send failed: {e})',
+                        created_ids=created_ids,
+                        call_id=call_id,
+                    )
+            else:
+                # Auto-send disabled — create planned activity directly
+                _create_pitch_planned_activity(
+                    lead_id=call.opportunity_id,
+                    agent_user=agent_user,
+                    description='Send sales pitch via WhatsApp',
+                    created_ids=created_ids,
+                    call_id=call_id,
+                )
 
         else:
             logger.warning(f"Unknown action_type '{action_type}' in Claude response for call {call_id}")
@@ -715,6 +701,97 @@ Respond ONLY with valid JSON (no markdown code block, no explanation outside JSO
         f"Claude analysis completed for call {call_id}: "
         f"{len(created_ids)} actions executed"
     )
+
+
+def _create_pitch_planned_activity(*, lead_id, agent_user, description, created_ids, call_id):
+    """Create a planned WhatsApp Pitch activity and append its pk to created_ids in-place."""
+    try:
+        import datetime as _dt
+        from django.utils import timezone as tz
+        from apps.activities.models import ActivityType
+        from apps.activities.services.activity_service import ActivityService
+
+        wa_type = ActivityType.objects.filter(name__icontains='whatsapp').first()
+        if not wa_type:
+            created_ids.append({'action': 'send_pitch', 'status': 'skipped_no_type'})
+            logger.warning(f"No WhatsApp ActivityType found — skipping planned pitch for call {call_id}")
+            return
+        today = _dt.date.today()
+        scheduled = tz.make_aware(_dt.datetime.combine(today, _dt.time(9, 0)))
+        activity = ActivityService.create_activity(
+            lead_id=lead_id,
+            activity_type_id=wa_type.pk,
+            title='Send WhatsApp Sales Pitch',
+            scheduled_date=scheduled,
+            created_by=agent_user,
+            assigned_to=agent_user,
+            description=description,
+        )
+        created_ids.append(activity.pk)
+        logger.info(f"Created planned WhatsApp Pitch activity {activity.pk} for call {call_id}")
+    except Exception as e:
+        logger.warning(f"Failed to create planned pitch activity for call {call_id}: {e}")
+
+
+@shared_task(bind=True, max_retries=2)
+def check_pitch_delivery(self, *, wa_message_id, lead_id, user_id, call_id):
+    """
+    Check whether a WhatsApp sales pitch message was actually delivered.
+    Runs ~30 s after sending. Retries up to 2× (30 s apart) if status is still 'sent'.
+    Creates a planned activity on the lead if delivery fails or remains unknown.
+    Also appends the activity pk to CallAnalysis.created_activity_ids so re-analysis
+    cleanup works correctly.
+    """
+    from apps.messaging.models import WhatsAppMessage
+
+    try:
+        msg = WhatsAppMessage.objects.get(id=wa_message_id)
+    except WhatsAppMessage.DoesNotExist:
+        logger.warning(f"check_pitch_delivery: message {wa_message_id} not found")
+        return
+
+    if msg.status in ('delivered', 'read'):
+        logger.info(f"Pitch message {wa_message_id} delivered successfully — no action needed")
+        return
+
+    if msg.status == 'sent':
+        # Webhook hasn't arrived yet — retry
+        if self.request.retries < self.max_retries:
+            logger.info(f"Pitch message {wa_message_id} still 'sent', retrying delivery check")
+            raise self.retry(countdown=30)
+        # Max retries exhausted — treat as unknown
+        note = 'delivery status unknown after 90 s — verify manually'
+        logger.warning(f"Pitch message {wa_message_id} status unknown after retries")
+    else:
+        # status == 'failed'
+        note = 'automatic send failed to deliver'
+        logger.warning(f"Pitch message {wa_message_id} delivery failed")
+
+    # Resolve agent user
+    from core.models import User
+    agent_user = User.objects.filter(id=user_id).first() if user_id else None
+
+    # Create the planned fallback activity
+    created_ids = []
+    _create_pitch_planned_activity(
+        lead_id=lead_id,
+        agent_user=agent_user,
+        description=f'Send sales pitch via WhatsApp ({note})',
+        created_ids=created_ids,
+        call_id=call_id,
+    )
+
+    # Append the new activity pk to CallAnalysis so re-analysis cleanup can find it
+    if created_ids:
+        try:
+            from .models import CallAnalysis, Call
+            analysis = CallAnalysis.objects.get(call_id=call_id)
+            ids = list(analysis.created_activity_ids or [])
+            ids.extend(created_ids)
+            analysis.created_activity_ids = ids
+            analysis.save(update_fields=['created_activity_ids', 'updated_at'])
+        except Exception as e:
+            logger.warning(f"check_pitch_delivery: could not update CallAnalysis for call {call_id}: {e}")
 
 
 @shared_task

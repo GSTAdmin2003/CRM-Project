@@ -803,46 +803,61 @@
                     {% if activities %}
                     <div class="space-y-3">
                         {% for activity in activities %}
-                        <div class="border border-gray-200 rounded-lg p-4 hover:bg-gray-50 transition-colors">
+                        <div class="border rounded-lg p-4 hover:bg-gray-50 transition-colors
+                            {% if activity.status == 'completed' %}border-green-200 bg-green-50{% elif activity.is_overdue %}border-red-200{% else %}border-gray-200{% endif %}">
                             <div class="flex justify-between items-start">
-                                <div class="flex-1">
-                                    <div class="flex items-center gap-2 mb-1">
-                                        <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium
-                                            {% if activity.activity_type.name == 'Call' %}bg-blue-100 text-blue-800
-                                            {% elif activity.activity_type.name == 'Meeting' %}bg-purple-100 text-purple-800
-                                            {% elif activity.activity_type.name == 'Email' %}bg-green-100 text-green-800
-                                            {% elif activity.activity_type.name == 'Task' %}bg-yellow-100 text-yellow-800
-                                            {% else %}bg-gray-100 text-gray-800{% endif %}">
-                                            <i class="fas
-                                                {% if activity.activity_type.name == 'Call' %}fa-phone
-                                                {% elif activity.activity_type.name == 'Meeting' %}fa-users
-                                                {% elif activity.activity_type.name == 'Email' %}fa-envelope
-                                                {% elif activity.activity_type.name == 'Task' %}fa-tasks
-                                                {% else %}fa-calendar{% endif %} mr-1"></i>
+                                <div class="flex-1 min-w-0">
+
+                                    <!-- Type + Date + Status badges -->
+                                    <div class="flex items-center gap-2 flex-wrap mb-1">
+                                        <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-800">
+                                            <i class="{{ activity.activity_type.icon|default:'fas fa-calendar' }} mr-1"></i>
                                             {{ activity.activity_type.name }}
                                         </span>
-                                        <span class="text-xs text-gray-500">
-                                            {{ activity.scheduled_date|date:"M d, Y" }}
-                                            {% if activity.scheduled_time %}at {{ activity.scheduled_time|time:"H:i" }}{% endif %}
-                                        </span>
-                                        {% if activity.is_done %}
+                                        <span class="text-xs text-gray-500">{{ activity.scheduled_date|date:"M d, Y" }}</span>
+
+                                        {% if activity.status == 'completed' %}
                                         <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
-                                            <i class="fas fa-check mr-1"></i>Done
+                                            <i class="fas fa-check-circle mr-1"></i>Completed
+                                        </span>
+                                        {% elif activity.status == 'cancelled' %}
+                                        <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-500">
+                                            <i class="fas fa-times-circle mr-1"></i>Cancelled
+                                        </span>
+                                        {% elif activity.is_overdue %}
+                                        <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-700">
+                                            <i class="fas fa-exclamation-circle mr-1"></i>Overdue
+                                        </span>
+                                        {% else %}
+                                        <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-blue-50 text-blue-700">
+                                            <i class="fas fa-clock mr-1"></i>Planned
                                         </span>
                                         {% endif %}
                                     </div>
-                                    <h5 class="font-medium text-gray-900">{{ activity.summary }}</h5>
-                                    {% if activity.note %}
-                                    <p class="text-sm text-gray-600 mt-1">{{ activity.note|truncatewords:30 }}</p>
+
+                                    <!-- Title -->
+                                    <h5 class="font-medium text-gray-900 truncate">{{ activity.title }}</h5>
+
+                                    <!-- Description -->
+                                    {% if activity.description %}
+                                    <p class="text-sm text-gray-600 mt-1">{{ activity.description|truncatewords:20 }}</p>
                                     {% endif %}
+
+                                    <!-- Outcome (if completed) -->
+                                    {% if activity.status == 'completed' and activity.outcome %}
+                                    <p class="text-sm text-green-700 mt-1"><i class="fas fa-comment-alt mr-1 text-xs"></i>{{ activity.outcome|truncatewords:20 }}</p>
+                                    {% endif %}
+
+                                    <!-- Assigned to -->
                                     {% if activity.assigned_to %}
                                     <p class="text-xs text-gray-500 mt-2">
                                         <i class="fas fa-user mr-1"></i>{{ activity.assigned_to.get_full_name|default:activity.assigned_to.username }}
                                     </p>
                                     {% endif %}
+
                                 </div>
                                 <a href="{% url 'activities:activity_edit' activity.pk %}?from={% url 'crm:opportunity_edit' lead.pk %}&from_title={{ lead.title|urlencode }}"
-                                   class="text-gray-400 hover:text-indigo-600 ml-4">
+                                   class="text-gray-400 hover:text-indigo-600 ml-4 flex-shrink-0">
                                     <i class="fas fa-edit"></i>
                                 </a>
                             </div>

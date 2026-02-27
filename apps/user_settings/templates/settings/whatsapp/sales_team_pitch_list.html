@@ -10,6 +10,37 @@ Sales Team Pitch PDFs
 {% block settings_content %}
 <div class="space-y-6">
 
+    <!-- Auto-Send Toggle -->
+    <div class="bg-white border border-gray-200 rounded-lg overflow-hidden">
+        <div class="px-5 py-3 bg-gray-50 border-b border-gray-200">
+            <h3 class="text-sm font-semibold text-gray-800">Automatic Sending</h3>
+        </div>
+        <form method="post" action="{% url 'settings:crm:sales_team_pitch_list' %}">
+            {% csrf_token %}
+            <div class="px-5 py-4 flex items-center justify-between gap-4">
+                <div>
+                    <p class="text-sm font-medium text-gray-900">Send automatically</p>
+                    <p class="text-xs text-gray-500 mt-0.5">
+                        When AI analysis suggests a sales pitch, send it immediately via WhatsApp.
+                        If disabled (or sending fails), a planned activity is created instead.
+                    </p>
+                </div>
+                <label class="relative inline-flex items-center cursor-pointer flex-shrink-0">
+                    <input type="checkbox" name="auto_send_pitch_enabled" value="on"
+                           {% if auto_send_pitch_enabled %}checked{% endif %}
+                           onchange="this.form.submit()"
+                           class="sr-only peer">
+                    <div class="w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer
+                                peer-checked:after:translate-x-full peer-checked:after:border-white
+                                after:content-[''] after:absolute after:top-[2px] after:left-[2px]
+                                after:bg-white after:border-gray-300 after:border after:rounded-full
+                                after:h-5 after:w-5 after:transition-all
+                                peer-checked:bg-green-500"></div>
+                </label>
+            </div>
+        </form>
+    </div>
+
     <!-- Default Pitch -->
     <div class="bg-white border border-indigo-200 rounded-lg overflow-hidden">
         <div class="px-5 py-3 bg-indigo-50 border-b border-indigo-200 flex items-center justify-between">

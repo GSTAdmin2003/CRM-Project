@@ -160,6 +160,8 @@ class SalesTeamPitchListView(SettingsBaseMixin, AdminRequiredMixin, ListView):
     settings_page = "sales_pitch"
     context_object_name = "teams"
 
+    AUTO_SEND_PITCH_KEY = 'auto_send_pitch_enabled'
+
     def get_queryset(self):
         from apps.crm.models import SalesTeam
         return SalesTeam.objects.filter(is_active=True).order_by('name')
@@ -167,8 +169,27 @@ class SalesTeamPitchListView(SettingsBaseMixin, AdminRequiredMixin, ListView):
     def get_context_data(self, **kwargs):
         ctx = super().get_context_data(**kwargs)
         from apps.messaging.models import WhatsAppConfig
+        from apps.user_settings.models import SystemConfiguration
         ctx['default_config'] = WhatsAppConfig.get_or_create_config()
+        ctx['auto_send_pitch_enabled'] = bool(
+            SystemConfiguration.get_setting(self.AUTO_SEND_PITCH_KEY, False)
+        )
         return ctx
+
+    def post(self, request, *args, **kwargs):
+        from apps.user_settings.models import SystemConfiguration
+        enabled = request.POST.get('auto_send_pitch_enabled') == 'on'
+        SystemConfiguration.set_setting(
+            self.AUTO_SEND_PITCH_KEY,
+            'true' if enabled else 'false',
+            description='Automatically send WhatsApp sales pitch when AI suggests it',
+            data_type='boolean',
+        )
+        if enabled:
+            messages.success(request, 'Auto-send sales pitch enabled.')
+        else:
+            messages.success(request, 'Auto-send sales pitch disabled.')
+        return redirect('settings:crm:sales_team_pitch_list')
 
 
 class SalesTeamPitchEditView(SettingsBaseMixin, AdminRequiredMixin, TemplateView):

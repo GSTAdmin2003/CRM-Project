@@ -198,7 +198,7 @@
                             {% if call.user %}{{ call.user.username }}{% else %}—{% endif %}
                         </td>
                         <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                            {{ call.created_at|date:"M d, Y H:i" }}
+                            <span data-local-time="{{ call.created_at|date:'c' }}">{{ call.created_at|date:"M d, Y H:i" }}</span>
                         </td>
                         <td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
                             <a href="{% url 'calls:call_detail' call.pk %}" class="text-indigo-600 hover:text-indigo-900">View</a>
@@ -407,5 +407,34 @@
         updateBar();
     };
 })();
+
+document.querySelectorAll('[data-local-time]').forEach(function(el) {
+    var utc = el.getAttribute('data-local-time');
+    if (utc) {
+        var d = new Date(utc);
+        if (!isNaN(d)) {
+            el.textContent = d.toLocaleString(undefined, {
+                year: 'numeric', month: 'short', day: 'numeric',
+                hour: '2-digit', minute: '2-digit'
+            });
+        }
+    }
+});
+// Also run after any HTMX swaps
+document.addEventListener('htmx:afterSwap', function() {
+    document.querySelectorAll('[data-local-time]').forEach(function(el) {
+        var utc = el.getAttribute('data-local-time');
+        if (utc && !el.dataset.converted) {
+            var d = new Date(utc);
+            if (!isNaN(d)) {
+                el.textContent = d.toLocaleString(undefined, {
+                    year: 'numeric', month: 'short', day: 'numeric',
+                    hour: '2-digit', minute: '2-digit'
+                });
+                el.dataset.converted = '1';
+            }
+        }
+    });
+});
 </script>
 {% endblock %}

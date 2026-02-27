@@ -227,6 +227,31 @@ class ARIClient:
         params = {'channel': channel_id}
         self._request('POST', f'/bridges/{bridge_id}/addChannel', params=params)
 
+    def list_bridges(self):
+        """
+        List all active bridges.
+
+        Returns:
+            List of bridge dicts, each with 'id', 'channels', 'bridge_type', etc.
+        """
+        return self._request('GET', '/bridges')
+
+    def get_channel_variable(self, channel_id, variable_name):
+        """
+        Get a channel variable.
+
+        Args:
+            channel_id: The Asterisk channel ID
+            variable_name: Name of the channel variable (e.g. 'BRIDGEPEER')
+
+        Returns:
+            Dict with 'value' key containing the variable's value.
+        """
+        return self._request(
+            'GET', f'/channels/{channel_id}/variable',
+            params={'variable': variable_name},
+        )
+
     def get_recordings_path(self):
         """Get path to Asterisk recordings directory"""
         return getattr(settings, 'ASTERISK_RECORDINGS_PATH', '/var/spool/asterisk/recording')

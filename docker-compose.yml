@@ -66,6 +66,7 @@ services:
   celery:
     build: .
     command: celery -A core worker -l info
+    restart: unless-stopped
     volumes:
       - .:/app
       - asterisk_recordings:/var/spool/asterisk/monitor
@@ -87,6 +88,7 @@ services:
   celery-beat:
     build: .
     command: celery -A core beat -l info
+    restart: unless-stopped
     volumes:
       - .:/app
     environment:

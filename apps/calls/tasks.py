@@ -11,6 +11,7 @@ logger = logging.getLogger(__name__)
 
 try:
     from celery import shared_task
+    from celery.exceptions import Retry as CeleryRetry
 except ImportError:
     # Celery not installed - create a dummy decorator
     def shared_task(*args, **kwargs):
@@ -19,9 +20,10 @@ except ImportError:
         if len(args) == 1 and callable(args[0]):
             return args[0]
         return decorator
+    CeleryRetry = type('CeleryRetry', (Exception,), {})
 
 
-@shared_task(bind=True, max_retries=3)
+@shared_task(bind=True, max_retries=5)
 def process_recording(self, call_id):
     """
     Process and import recording from Asterisk.
@@ -31,7 +33,11 @@ def process_recording(self, call_id):
     2. Converts it to MP3 for smaller file size
     3. Creates a CallRecording record with the file
     4. Cleans up temporary files
+
+    Retries up to 5 times with a 30-second delay because Asterisk writes
+    the MixMonitor file after the call ends — we may arrive before it's ready.
     """
+    import glob as _glob
     from .models import Call, CallRecording
 
     try:
@@ -42,31 +48,47 @@ def process_recording(self, call_id):
             logger.info(f"Recording already exists for call {call_id}")
             return
 
-        # Recording path in Asterisk
+        # Recording path in Asterisk (MixMonitor default: /var/spool/asterisk/monitor)
         recordings_path = getattr(
             settings,
             'ASTERISK_RECORDINGS_PATH',
             '/var/spool/asterisk/monitor'
         )
 
-        # Try to find the recording file
-        # Asterisk names recordings with the unique ID
-        recording_patterns = [
-            f"{call.asterisk_uniqueid}.wav",
-            f"{call.asterisk_channel_id}.wav",
-            f"{call.asterisk_uniqueid}.WAV",
-        ]
+        # Build candidate filenames.  The dialplan uses MixMonitor(${UNIQUEID}.wav)
+        # where ${UNIQUEID} == the ARI channel id stored in asterisk_channel_id.
+        # asterisk_uniqueid is a legacy field that may be empty — skip it when blank.
+        candidates = []
+        if call.asterisk_channel_id:
+            candidates.append(f"{call.asterisk_channel_id}.wav")
+            candidates.append(f"{call.asterisk_channel_id}.WAV")
+        if call.asterisk_uniqueid:
+            candidates.append(f"{call.asterisk_uniqueid}.wav")
+            candidates.append(f"{call.asterisk_uniqueid}.WAV")
 
         wav_path = None
-        for pattern in recording_patterns:
-            potential_path = os.path.join(recordings_path, pattern)
-            if os.path.exists(potential_path):
-                wav_path = potential_path
+        for name in candidates:
+            path = os.path.join(recordings_path, name)
+            if os.path.exists(path) and os.path.getsize(path) > 0:
+                wav_path = path
                 break
 
+        # Glob fallback: scan the directory for any file whose name contains
+        # the channel id — handles hostname-prefixed UNIQUEID variants.
+        if not wav_path and call.asterisk_channel_id:
+            pattern = os.path.join(recordings_path, f"*{call.asterisk_channel_id}*.wav")
+            matches = [p for p in _glob.glob(pattern) if os.path.getsize(p) > 0]
+            if matches:
+                wav_path = matches[0]
+
         if not wav_path:
-            logger.warning(f"No recording found for call {call_id}")
-            return
+            attempt = self.request.retries + 1
+            logger.warning(
+                f"Recording not found for call {call_id} "
+                f"(attempt {attempt}/5, channel={call.asterisk_channel_id}). "
+                f"Retrying in 30 s…"
+            )
+            raise self.retry(countdown=30)
 
         logger.info(f"Processing recording: {wav_path}")
 
@@ -148,6 +170,8 @@ def process_recording(self, call_id):
 
     except Call.DoesNotExist:
         logger.error(f"Call {call_id} not found")
+    except CeleryRetry:
+        raise  # propagate retry signal without double-counting
     except Exception as e:
         logger.error(f"Recording processing failed for call {call_id}: {e}")
         # Retry with exponential backoff
@@ -398,11 +422,26 @@ def analyze_call_with_claude(self, call_id):
         return
 
     # Get/create analysis record
-    analysis, _ = CallAnalysis.objects.get_or_create(call=call)
+    analysis, created = CallAnalysis.objects.get_or_create(call=call)
+
+    # On re-analysis: delete activities previously created by the last AI run
+    if not created and analysis.created_activity_ids:
+        prev_activity_ids = [
+            item for item in analysis.created_activity_ids
+            if isinstance(item, int)
+        ]
+        if prev_activity_ids:
+            deleted_count, _ = Activity.objects.filter(pk__in=prev_activity_ids).delete()
+            logger.info(
+                f"Re-analysis for call {call_id}: deleted {deleted_count} "
+                f"previously AI-created activities {prev_activity_ids}"
+            )
+
     analysis.status = CallAnalysis.STATUS_PROCESSING
     analysis.error_message = ''
     analysis.celery_task_id = self.request.id or ''
-    analysis.save(update_fields=['status', 'error_message', 'celery_task_id', 'updated_at'])
+    analysis.created_activity_ids = []
+    analysis.save(update_fields=['status', 'error_message', 'celery_task_id', 'created_activity_ids', 'updated_at'])
 
     api_key = SystemConfiguration.get_setting('anthropic_api_key')
     if not api_key:
@@ -608,18 +647,63 @@ Respond ONLY with valid JSON (no markdown code block, no explanation outside JSO
             if not call.opportunity_id:
                 logger.info(f"Skipping send_pitch for call {call_id}: no linked opportunity")
                 continue
-            try:
-                from apps.messaging.services.whatsapp_service import WhatsAppService
-                from core.exceptions import ValidationError as ServiceValidationError
-                WhatsAppService.send_sales_pitch(
-                    lead_id=call.opportunity_id,
-                    sent_by=agent_user,
-                )
-                created_ids.append({'action': 'send_pitch', 'status': 'sent'})
-                logger.info(f"Sent sales pitch for call {call_id} (opportunity {call.opportunity_id})")
-            except Exception as e:
-                created_ids.append({'action': 'send_pitch', 'status': 'failed', 'error': str(e)})
-                logger.warning(f"send_pitch failed for call {call_id}: {e}")
+            auto_send = SystemConfiguration.get_setting('auto_send_pitch_enabled', False)
+            pitch_sent = False
+            pitch_error = None
+            if auto_send:
+                try:
+                    from apps.messaging.services.whatsapp_service import WhatsAppService
+                    WhatsAppService.send_sales_pitch(
+                        lead_id=call.opportunity_id,
+                        sent_by=agent_user,
+                    )
+                    pitch_sent = True
+                    created_ids.append({'action': 'send_pitch', 'status': 'sent'})
+                    logger.info(
+                        f"Sent sales pitch for call {call_id} (opportunity {call.opportunity_id})"
+                    )
+                except Exception as e:
+                    pitch_error = str(e)
+                    logger.warning(f"send_pitch failed for call {call_id}: {e}")
+
+            if not pitch_sent:
+                # Auto-send disabled OR send failed — create a planned "WhatsApp Pitch" activity
+                try:
+                    from apps.activities.models import ActivityType
+                    wa_type = ActivityType.objects.filter(name__icontains='whatsapp').first()
+                    if wa_type:
+                        import datetime as _dt
+                        from django.utils import timezone as tz
+                        default_days = int(
+                            SystemConfiguration.get_setting('ai_activity_default_days', 1) or 1
+                        )
+                        default_date = _dt.date.today() + _dt.timedelta(days=default_days)
+                        scheduled = tz.make_aware(
+                            _dt.datetime.combine(default_date, _dt.time(9, 0))
+                        )
+                        description = 'Send sales pitch via WhatsApp'
+                        if pitch_error:
+                            description += f' (auto-send failed: {pitch_error})'
+                        activity = ActivityService.create_activity(
+                            lead_id=call.opportunity_id,
+                            activity_type_id=wa_type.pk,
+                            title='Send WhatsApp Sales Pitch',
+                            scheduled_date=scheduled,
+                            created_by=agent_user,
+                            assigned_to=agent_user,
+                            description=description,
+                        )
+                        created_ids.append(activity.pk)
+                        logger.info(
+                            f"Created planned WhatsApp Pitch activity {activity.pk} for call {call_id}"
+                        )
+                    else:
+                        created_ids.append({'action': 'send_pitch', 'status': 'skipped_no_type'})
+                        logger.warning(
+                            f"No WhatsApp ActivityType found — skipping planned pitch for call {call_id}"
+                        )
+                except Exception as e:
+                    logger.warning(f"Failed to create planned pitch activity for call {call_id}: {e}")
 
         else:
             logger.warning(f"Unknown action_type '{action_type}' in Claude response for call {call_id}")
@@ -692,7 +776,7 @@ def sync_asterisk_recordings():
     processed = 0
     for call in calls_without_recordings:
         try:
-            process_recording(call.id)
+            process_recording.delay(call.id)
             processed += 1
         except Exception as e:
             logger.error(f"Failed to sync recording for call {call.id}: {e}")

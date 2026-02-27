@@ -107,15 +107,15 @@
                     </div>
                     <div>
                         <dt class="text-sm font-medium text-gray-500">Started At</dt>
-                        <dd class="mt-1 text-sm text-gray-900">{{ call.started_at|date:"M d, Y H:i:s"|default:"N/A" }}</dd>
+                        <dd class="mt-1 text-sm text-gray-900">{% if call.started_at %}<span data-local-time="{{ call.started_at|date:'c' }}">{{ call.started_at|date:"M d, Y H:i:s" }}</span>{% else %}N/A{% endif %}</dd>
                     </div>
                     <div>
                         <dt class="text-sm font-medium text-gray-500">Answered At</dt>
-                        <dd class="mt-1 text-sm text-gray-900">{{ call.answered_at|date:"M d, Y H:i:s"|default:"N/A" }}</dd>
+                        <dd class="mt-1 text-sm text-gray-900">{% if call.answered_at %}<span data-local-time="{{ call.answered_at|date:'c' }}">{{ call.answered_at|date:"M d, Y H:i:s" }}</span>{% else %}N/A{% endif %}</dd>
                     </div>
                     <div>
                         <dt class="text-sm font-medium text-gray-500">Ended At</dt>
-                        <dd class="mt-1 text-sm text-gray-900">{{ call.ended_at|date:"M d, Y H:i:s"|default:"N/A" }}</dd>
+                        <dd class="mt-1 text-sm text-gray-900">{% if call.ended_at %}<span data-local-time="{{ call.ended_at|date:'c' }}">{{ call.ended_at|date:"M d, Y H:i:s" }}</span>{% else %}N/A{% endif %}</dd>
                     </div>
                     <div>
                         <dt class="text-sm font-medium text-gray-500">Channel ID</dt>
@@ -530,5 +530,25 @@ function showLinkOpportunityModal() {
     // TODO: Implement opportunity linking modal
     alert('Opportunity linking modal - to be implemented');
 }
+</script>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+function convertLocalTimes() {
+    document.querySelectorAll('[data-local-time]').forEach(function(el) {
+        var utc = el.getAttribute('data-local-time');
+        if (utc) {
+            var d = new Date(utc);
+            if (!isNaN(d)) {
+                el.textContent = d.toLocaleString(undefined, {
+                    year: 'numeric', month: 'short', day: 'numeric',
+                    hour: '2-digit', minute: '2-digit', second: '2-digit'
+                });
+            }
+        }
+    });
+}
+document.addEventListener('DOMContentLoaded', convertLocalTimes);
 </script>
 {% endblock %}

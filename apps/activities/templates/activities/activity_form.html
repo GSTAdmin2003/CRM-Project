@@ -377,19 +377,19 @@
                     {% if phone_call.started_at %}
                     <div>
                         <span class="field-label">Started</span>
-                        <p class="text-gray-800">{{ phone_call.started_at|date:"M d, Y H:i:s" }}</p>
+                        <p class="text-gray-800"><span data-local-time="{{ phone_call.started_at|date:'c' }}">{{ phone_call.started_at|date:"M d, Y H:i:s" }}</span></p>
                     </div>
                     {% endif %}
                     {% if phone_call.answered_at %}
                     <div>
                         <span class="field-label">Answered</span>
-                        <p class="text-gray-800">{{ phone_call.answered_at|date:"M d, Y H:i:s" }}</p>
+                        <p class="text-gray-800"><span data-local-time="{{ phone_call.answered_at|date:'c' }}">{{ phone_call.answered_at|date:"M d, Y H:i:s" }}</span></p>
                     </div>
                     {% endif %}
                     {% if phone_call.ended_at %}
                     <div>
                         <span class="field-label">Ended</span>
-                        <p class="text-gray-800">{{ phone_call.ended_at|date:"M d, Y H:i:s" }}</p>
+                        <p class="text-gray-800"><span data-local-time="{{ phone_call.ended_at|date:'c' }}">{{ phone_call.ended_at|date:"M d, Y H:i:s" }}</span></p>
                     </div>
                     {% endif %}
                     {% if phone_call.contact %}
@@ -657,6 +657,20 @@
         if (statusField && statusBar) {
             renderStatusBar();
         }
+
+        // Convert UTC timestamps to browser local time
+        document.querySelectorAll('[data-local-time]').forEach(function(el) {
+            var utc = el.getAttribute('data-local-time');
+            if (utc) {
+                var d = new Date(utc);
+                if (!isNaN(d)) {
+                    el.textContent = d.toLocaleString(undefined, {
+                        year: 'numeric', month: 'short', day: 'numeric',
+                        hour: '2-digit', minute: '2-digit', second: '2-digit'
+                    });
+                }
+            }
+        });
     });
 </script>
 {% endblock %}

@@ -324,15 +324,77 @@ class CallService:
                 channel_state = channel.get("state", "")
 
                 if channel_state == "Up":
-                    if call.status != "answered":
-                        call.status = "answered"
-                        call.answered_at = timezone.now()
-                        call.save()
-                        CallLog.objects.create(
-                            call=call,
-                            event="answered",
-                            data={"channel_state": channel_state},
-                        )
+                    if call.direction == "outbound":
+                        # For outbound calls the tracked channel is the agent's SIP
+                        # phone.  "Up" just means the agent answered — Asterisk is now
+                        # dialling the destination.  We only transition to "answered"
+                        # once both legs are bridged; until then it's "ringing".
+                        if call.status not in ("answered", "ringing"):
+                            call.status = "ringing"
+                            call.save()
+                            CallLog.objects.create(
+                                call=call,
+                                event="ringing",
+                                data={"channel_state": channel_state},
+                            )
+                        # Check whether the destination has also answered.
+                        # When Dial() bridges both legs, Asterisk sets BRIDGEPEER on
+                        # the agent's channel to the destination channel name.
+                        # Querying BRIDGEPEER directly is the most reliable indicator
+                        # that the bridge is established — no linkedid format ambiguity.
+                        if call.status != "answered":
+                            destination_answered = False
+                            try:
+                                peer_var = ari_client.get_channel_variable(
+                                    call.asterisk_channel_id, "BRIDGEPEER"
+                                )
+                                if peer_var.get("value"):
+                                    destination_answered = True
+                                    logger.info(
+                                        f"Outbound call {call.id} answered — "
+                                        f"BRIDGEPEER={peer_var['value']}"
+                                    )
+                            except Exception as bp_err:
+                                # BRIDGEPEER not set → destination not answered yet.
+                                # Fall back to linkedid channel scan.
+                                logger.debug(f"BRIDGEPEER not set for call {call.id}: {bp_err}")
+                                try:
+                                    all_channels = ari_client.list_channels()
+                                    for ch in all_channels:
+                                        if (
+                                            ch.get("id") != call.asterisk_channel_id
+                                            and ch.get("linkedid") == call.asterisk_channel_id
+                                            and ch.get("state") == "Up"
+                                        ):
+                                            destination_answered = True
+                                            logger.info(
+                                                f"Outbound call {call.id} answered — "
+                                                f"dest channel {ch.get('id')} Up (linkedid match)"
+                                            )
+                                            break
+                                except Exception as ch_err:
+                                    logger.debug(f"Channel list check also failed: {ch_err}")
+
+                            if destination_answered:
+                                call.status = "answered"
+                                call.answered_at = timezone.now()
+                                call.save()
+                                CallLog.objects.create(
+                                    call=call,
+                                    event="answered",
+                                    data={"source": "poll_bridgepeer_check"},
+                                )
+                    else:
+                        # Inbound call: agent answering = connected.
+                        if call.status != "answered":
+                            call.status = "answered"
+                            call.answered_at = timezone.now()
+                            call.save()
+                            CallLog.objects.create(
+                                call=call,
+                                event="answered",
+                                data={"channel_state": channel_state},
+                            )
                 elif channel_state == "Ringing":
                     if call.status != "ringing":
                         call.status = "ringing"

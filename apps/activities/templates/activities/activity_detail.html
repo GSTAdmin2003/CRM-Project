@@ -129,19 +129,19 @@
                     {% if phone_call.started_at %}
                     <div class="sm:col-span-1">
                         <dt class="text-sm font-medium text-gray-500">Started At</dt>
-                        <dd class="mt-1 text-sm text-gray-900">{{ phone_call.started_at|date:"F j, Y \a\t g:i A" }}</dd>
+                        <dd class="mt-1 text-sm text-gray-900"><span data-local-time="{{ phone_call.started_at|date:'c' }}">{{ phone_call.started_at|date:"F j, Y \a\t g:i A" }}</span></dd>
                     </div>
                     {% endif %}
                     {% if phone_call.answered_at %}
                     <div class="sm:col-span-1">
                         <dt class="text-sm font-medium text-gray-500">Answered At</dt>
-                        <dd class="mt-1 text-sm text-gray-900">{{ phone_call.answered_at|date:"g:i A" }}</dd>
+                        <dd class="mt-1 text-sm text-gray-900"><span data-local-time="{{ phone_call.answered_at|date:'c' }}">{{ phone_call.answered_at|date:"g:i A" }}</span></dd>
                     </div>
                     {% endif %}
                     {% if phone_call.ended_at %}
                     <div class="sm:col-span-1">
                         <dt class="text-sm font-medium text-gray-500">Ended At</dt>
-                        <dd class="mt-1 text-sm text-gray-900">{{ phone_call.ended_at|date:"g:i A" }}</dd>
+                        <dd class="mt-1 text-sm text-gray-900"><span data-local-time="{{ phone_call.ended_at|date:'c' }}">{{ phone_call.ended_at|date:"g:i A" }}</span></dd>
                     </div>
                     {% endif %}
                     {% if phone_call.contact %}
@@ -194,15 +194,35 @@
                     </div>
                     <div class="sm:col-span-1">
                         <dt class="font-medium text-gray-500">Created At</dt>
-                        <dd class="mt-1 text-gray-900">{{ activity.created_at|date:"F j, Y \a\t g:i A" }}</dd>
+                        <dd class="mt-1 text-gray-900"><span data-local-time="{{ activity.created_at|date:'c' }}">{{ activity.created_at|date:"F j, Y \a\t g:i A" }}</span></dd>
                     </div>
                     <div class="sm:col-span-1">
                         <dt class="font-medium text-gray-500">Last Updated</dt>
-                        <dd class="mt-1 text-gray-900">{{ activity.updated_at|date:"F j, Y \a\t g:i A" }}</dd>
+                        <dd class="mt-1 text-gray-900"><span data-local-time="{{ activity.updated_at|date:'c' }}">{{ activity.updated_at|date:"F j, Y \a\t g:i A" }}</span></dd>
                     </div>
                 </dl>
             </div>
         </div>
     </div>
 </div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+function convertLocalTimes() {
+    document.querySelectorAll('[data-local-time]').forEach(function(el) {
+        var utc = el.getAttribute('data-local-time');
+        if (utc) {
+            var d = new Date(utc);
+            if (!isNaN(d)) {
+                el.textContent = d.toLocaleString(undefined, {
+                    year: 'numeric', month: 'short', day: 'numeric',
+                    hour: '2-digit', minute: '2-digit'
+                });
+            }
+        }
+    });
+}
+document.addEventListener('DOMContentLoaded', convertLocalTimes);
+</script>
 {% endblock %}

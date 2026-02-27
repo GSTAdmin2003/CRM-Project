@@ -123,6 +123,8 @@ class ARIEventHandler:
             "ChannelStateChange": self._on_state_change,
             "ChannelHangupRequest": self._on_hangup_request,
             "ChannelDestroyed": self._on_channel_destroyed,
+            # Bridge events: used to detect when outbound destination answers
+            "ChannelEnteredBridge": self._on_channel_entered_bridge,
         }
 
         handler = _handlers.get(event_type)
@@ -243,11 +245,23 @@ class ARIEventHandler:
 
         try:
             call = Call.objects.get(asterisk_channel_id=channel_id)
-            if state == "Up" and call.status != "answered":
-                call.status = "answered"
-                call.answered_at = timezone.now()
-                call.save()
-                logger.info(f"Call answered: {channel_id}")
+            if state == "Up":
+                if call.direction == "outbound":
+                    # For outbound calls the tracked channel is the agent's SIP phone.
+                    # When it goes Up it means the agent answered — Asterisk now dials
+                    # the destination.  Transition to "ringing" here; the call only
+                    # becomes "answered" once ChannelEnteredBridge fires with both legs
+                    # (or the polling bridge-check in get_call_status detects it).
+                    if call.status == "initiated":
+                        call.status = "ringing"
+                        call.save()
+                        logger.info(f"Outbound call ringing (agent answered, dialling dest): {channel_id}")
+                elif call.status != "answered":
+                    # Inbound call: agent picking up = call is connected.
+                    call.status = "answered"
+                    call.answered_at = timezone.now()
+                    call.save()
+                    logger.info(f"Call answered: {channel_id}")
             elif state == "Ringing" and call.status == "initiated":
                 call.status = "ringing"
                 call.save()
@@ -257,7 +271,100 @@ class ARIEventHandler:
                 data={"state": state, "channel": channel_info},
             )
         except Call.DoesNotExist:
+            # This channel is not our agent's channel.  It could be the destination
+            # channel created by Dial() when the agent's phone answered.
+            if state == "Up":
+                call = None
+
+                # Primary: match via linkedid — destination channel's linkedid equals
+                # the originating agent channel's id (Asterisk call-chain linkage).
+                channel_linked = channel_info.get("linkedid", "")
+                if channel_linked:
+                    call = Call.objects.filter(
+                        asterisk_channel_id=channel_linked,
+                        direction="outbound",
+                        status__in=("initiated", "ringing"),
+                    ).first()
+
+                # Fallback: if linkedid is absent or unmatched, check BRIDGEPEER on
+                # all ringing outbound calls.  When Dial() bridges both legs Asterisk
+                # sets BRIDGEPEER to the peer channel's name, which contains channel_id.
+                if not call:
+                    from .ari_client import ari_client
+                    ringing = Call.objects.filter(
+                        direction="outbound",
+                        status__in=("initiated", "ringing"),
+                    )
+                    for candidate in ringing:
+                        try:
+                            peer_var = ari_client.get_channel_variable(
+                                candidate.asterisk_channel_id, "BRIDGEPEER"
+                            )
+                            bridgepeer = peer_var.get("value", "")
+                            # BRIDGEPEER contains the full channel name; channel_id is
+                            # the uniqueid embedded in that name (e.g. PJSIP/foo-<id>).
+                            if bridgepeer and (channel_id in bridgepeer or bridgepeer in channel_id):
+                                call = candidate
+                                logger.info(
+                                    f"Outbound call {candidate.id} matched via BRIDGEPEER={bridgepeer}"
+                                )
+                                break
+                        except Exception:
+                            pass
+
+                if call:
+                    call.status = "answered"
+                    call.answered_at = timezone.now()
+                    call.save()
+                    CallLog.objects.create(
+                        call=call,
+                        event="answered",
+                        data={"reason": "dest_channel_up", "dest_channel_id": channel_id},
+                    )
+                    logger.info(
+                        f"Outbound call {call.id} answered — dest channel {channel_id} Up"
+                    )
+                    return
             logger.debug(f"State change for untracked channel: {channel_id}")
+
+    def _on_channel_entered_bridge(self, channel, event):
+        """Detect when an outbound call's destination has answered.
+
+        Asterisk fires ChannelEnteredBridge once per channel as each leg joins
+        the bridge.  The event that carries both legs may fire for the DESTINATION
+        channel (not the agent's channel we stored).  So we check ALL channels in
+        the bridge against our tracked outbound calls rather than only the channel
+        that triggered the event.
+        """
+        from .models import Call, CallLog
+
+        bridge = event.get("bridge", {})
+        bridge_channels = bridge.get("channels", [])
+
+        # Need at least 2 legs before the call is truly answered
+        if len(bridge_channels) < 2:
+            return
+
+        # Find an outbound call whose agent channel is one of the bridge channels
+        call = Call.objects.filter(
+            asterisk_channel_id__in=bridge_channels,
+            direction="outbound",
+            status__in=("initiated", "ringing"),
+        ).first()
+
+        if call:
+            call.status = "answered"
+            call.answered_at = timezone.now()
+            call.save()
+            CallLog.objects.create(
+                call=call,
+                event="answered",
+                data={"bridge_id": bridge.get("id"), "channels": bridge_channels},
+            )
+            logger.info(
+                f"Outbound call answered (bridge established): {call.asterisk_channel_id}, "
+                f"bridge={bridge.get('id')}"
+            )
 
     def _on_hangup_request(self, channel, event):
         """Handle hangup request."""

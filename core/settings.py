@@ -57,6 +57,7 @@ THIRD_PARTY_APPS = [
     'rest_framework',
     'django_filters',
     'channels',
+    'django_vite',
 ]
 
 INSTALLED_APPS = DJANGO_APPS + LOCAL_APPS + THIRD_PARTY_APPS
@@ -250,4 +251,18 @@ CHANNEL_LAYERS = {
             'hosts': [('redis', 6379)],
         },
     },
+}
+
+# =============================================================================
+# Vite + Svelte Islands Architecture
+# =============================================================================
+DJANGO_VITE = {
+    "default": {
+        "dev_mode": DEBUG,
+        "dev_server_host": "localhost",
+        "dev_server_port": 5173,
+        "static_url_prefix": "dist",
+        # Vite 5 places manifest at .vite/manifest.json inside outDir
+        "manifest_path": BASE_DIR / "static" / "dist" / ".vite" / "manifest.json",
+    }
 }

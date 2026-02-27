@@ -17,9 +17,11 @@
             }
         }
     </script>
-    {% load static %}
+    {% load static django_vite %}
     <link rel="stylesheet" href="{% static 'css/dashboard.css' %}">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    {% vite_hmr_client %}
+    {% block extra_head %}{% endblock %}
 </head>
 <body class="h-full bg-gray-50">
     <div class="min-h-full">
@@ -479,6 +481,8 @@
                     var doc = parser.parseFromString(html, 'text/html');
                     var newMain = doc.getElementById('main-content');
                     if (newMain) {
+                        // Notify Svelte islands to clean up before DOM swap
+                        window.dispatchEvent(new CustomEvent('crm:pageSwapped'));
                         curMain.innerHTML = newMain.innerHTML;
                         if (doc.title) document.title = doc.title;
                         history.pushState({ url: url }, doc.title || '', url);
@@ -564,10 +568,12 @@
         sipUA.on('registered', function () {
             sipRegistered = true;
             setSipStatus('connected', 'Phone Ready');
+            _dispatchSipEvent('registered', { registered: true });
         });
         sipUA.on('unregistered', function () {
             sipRegistered = false;
             setSipStatus('disconnected', 'Disconnected');
+            _dispatchSipEvent('registered', { registered: false });
         });
         sipUA.on('registrationFailed', function (ev) {
             sipRegistered = false;
@@ -629,6 +635,10 @@
                 receivers.forEach(function (r) { if (r.track) stream.addTrack(r.track); });
                 remoteAudio.srcObject = stream;
             }
+            _dispatchSipEvent('callStarted', {
+                number: document.getElementById('phone-number') ? document.getElementById('phone-number').value : '',
+                opportunityId: window.currentOpportunityId || null,
+            });
         });
 
         session.on('ended', function () {
@@ -913,6 +923,13 @@
         }
     }
 
+    // =========================================================================
+    //  SIP event bridge — dispatches CustomEvents so Svelte stores can subscribe
+    // =========================================================================
+    function _dispatchSipEvent(type, detail) {
+        window.dispatchEvent(new CustomEvent('sip:' + type, { detail: detail || {} }));
+    }
+
     // Start SIP on page load
     initSIP();
 
@@ -1064,6 +1081,7 @@
             muteIcon.className = 'fas fa-microphone';
             muteLabel.textContent = 'Mute';
         }
+        _dispatchSipEvent('muteChanged', { muted: isMuted });
     }
 
     function toggleHold() {
@@ -1085,6 +1103,7 @@
             holdIcon.className = 'fas fa-pause';
             holdLabel.textContent = 'Hold';
         }
+        _dispatchSipEvent('holdChanged', { onHold: isOnHold });
     }
 
     function showInCallControls() {
@@ -1126,6 +1145,7 @@
         _callEndedBeforeRegistered = false;
         sessionStorage.removeItem('_inboundCallState');
         window.dispatchEvent(new CustomEvent('crm:callEnded'));
+        _dispatchSipEvent('callEnded');
         if (callTimer) { clearInterval(callTimer); callTimer = null; }
         callSeconds = 0;
         document.getElementById('call-status').classList.add('hidden');

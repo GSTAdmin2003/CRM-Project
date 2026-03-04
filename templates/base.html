@@ -475,8 +475,12 @@
             if (!curMain) { window.location.href = url; resolve(); return; }
 
             fetch(url, { credentials: 'same-origin' })
-                .then(function(r) { return r.text(); })
+                .then(function(r) {
+                    if (!r.ok) { window.location.href = url; resolve(); return null; }
+                    return r.text();
+                })
                 .then(function(html) {
+                    if (html === null) return;
                     var parser = new DOMParser();
                     var doc = parser.parseFromString(html, 'text/html');
                     var newMain = doc.getElementById('main-content');
@@ -535,6 +539,12 @@
     var _inboundCallId = null;
     // Flag: call ended before register_inbound_call fetch returned (race condition)
     var _callEndedBeforeRegistered = false;
+    // Browser-side recorder state
+    var _localStream = null;       // mic stream captured in answerSession
+    var _mediaRecorder = null;
+    var _recordedChunks = [];
+    var _recorderCtx = null;       // AudioContext used to mix local + remote
+    var _currentCallId = null;     // DB call.id for the active call
     // Browser notification reference (so we can close it on answer/reject)
     var _inboundNotification = null;
 
@@ -615,6 +625,7 @@
     function answerSession(session) {
         navigator.mediaDevices.getUserMedia({ audio: true, video: false })
             .then(function (stream) {
+                _localStream = stream;  // store for browser recorder
                 session.answer({
                     mediaStream: stream,
                     pcConfig: { iceServers: [] },
@@ -635,6 +646,7 @@
                 receivers.forEach(function (r) { if (r.track) stream.addTrack(r.track); });
                 remoteAudio.srcObject = stream;
             }
+            _startBrowserRecorder(session);
             _dispatchSipEvent('callStarted', {
                 number: document.getElementById('phone-number') ? document.getElementById('phone-number').value : '',
                 opportunityId: window.currentOpportunityId || null,
@@ -642,6 +654,7 @@
         });
 
         session.on('ended', function () {
+            _stopAndUploadRecording();
             currentSession = null;
             if (currentActivityId) {
                 // Normal path: activity endpoint marks call ended + queues recording
@@ -677,6 +690,99 @@
             document.getElementById('remote-audio').srcObject = null;
             resetDialpad();
         });
+    }
+
+    // =========================================================================
+    //  Browser-side recorder — client-side fallback for call recordings
+    // =========================================================================
+    function _startBrowserRecorder(session) {
+        if (!window.MediaRecorder) return;
+        try {
+            var ctx = new (window.AudioContext || window.webkitAudioContext)();
+            _recorderCtx = ctx;
+            var dest = ctx.createMediaStreamDestination();
+
+            // Mix local mic into recording
+            if (_localStream) {
+                ctx.createMediaStreamSource(_localStream).connect(dest);
+            }
+
+            // Mix remote (far-end) audio into recording
+            var receivers = session.connection.getReceivers();
+            if (receivers.length > 0) {
+                var remoteStream = new MediaStream();
+                receivers.forEach(function (r) { if (r.track) remoteStream.addTrack(r.track); });
+                ctx.createMediaStreamSource(remoteStream).connect(dest);
+            }
+
+            // Pick best supported mimeType
+            var mimeType = ['audio/webm;codecs=opus', 'audio/webm', 'audio/ogg;codecs=opus', '']
+                .find(function (t) { return !t || MediaRecorder.isTypeSupported(t); });
+
+            _recordedChunks = [];
+            _mediaRecorder = new MediaRecorder(dest.stream, mimeType ? { mimeType: mimeType } : {});
+            _mediaRecorder.ondataavailable = function (e) {
+                if (e.data && e.data.size > 0) _recordedChunks.push(e.data);
+            };
+            _mediaRecorder.start(1000);  // collect chunks every 1 s
+            console.log('[BrowserRec] Recording started for call', _currentCallId);
+        } catch (e) {
+            console.error('[BrowserRec] Failed to start recorder:', e);
+        }
+    }
+
+    function _stopAndUploadRecording() {
+        if (!_mediaRecorder || _mediaRecorder.state === 'inactive') {
+            _cleanupBrowserRecorder();
+            return;
+        }
+        var callId = _currentCallId;
+        if (!callId) {
+            console.warn('[BrowserRec] No call_id — discarding recording');
+            _cleanupBrowserRecorder();
+            return;
+        }
+        var recorder = _mediaRecorder;
+        var chunks = _recordedChunks;
+        _mediaRecorder = null;   // prevent double-stop
+        _recordedChunks = [];
+
+        recorder.onstop = function () {
+            if (chunks.length === 0) { _cleanupBrowserRecorder(); return; }
+            var mimeType = recorder.mimeType || 'audio/webm';
+            var blob = new Blob(chunks, { type: mimeType });
+            var ext = mimeType.includes('ogg') ? 'ogg' : 'webm';
+            var fd = new FormData();
+            fd.append('recording', blob, 'call_' + callId + '.' + ext);
+
+            fetch('/calls/' + callId + '/upload-browser-recording/', {
+                method: 'POST',
+                body: fd,
+                headers: { 'X-CSRFToken': getCsrfToken() },
+            })
+            .then(function (r) { return r.json(); })
+            .then(function (d) {
+                if (d.success && !d.skipped) {
+                    console.log('[BrowserRec] Uploaded for call', callId);
+                } else if (d.skipped) {
+                    console.log('[BrowserRec] Skipped — Asterisk recording exists');
+                } else {
+                    console.error('[BrowserRec] Upload failed:', d.error);
+                }
+            })
+            .catch(function (e) { console.error('[BrowserRec] Upload error:', e); })
+            .finally(function () { _cleanupBrowserRecorder(); });
+        };
+
+        try { recorder.stop(); } catch (e) { _cleanupBrowserRecorder(); }
+    }
+
+    function _cleanupBrowserRecorder() {
+        _mediaRecorder = null;
+        _recordedChunks = [];
+        _currentCallId = null;
+        _localStream = null;
+        try { if (_recorderCtx) { _recorderCtx.close(); _recorderCtx = null; } } catch (e) {}
     }
 
     // =========================================================================
@@ -846,6 +952,7 @@
         .then(function(r) { return r.json(); })
         .then(function(data) {
             if (data.success) {
+                _currentCallId = data.call_id || null;
                 currentActivityId = data.activity_id || null;
                 _inboundCallId = data.call_id || null;
                 // Prefer already-selected lead; fall back to server response
@@ -979,6 +1086,7 @@
         .then(function (r) { return r.json(); })
         .then(function (data) {
             if (data.success) {
+                _currentCallId = data.call_id || null;
                 currentActivityId = data.activity_id || null;
                 showNotebook();
                 pollCallStatus();

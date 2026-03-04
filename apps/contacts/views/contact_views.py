@@ -42,11 +42,21 @@ class ContactViewSet(viewsets.ModelViewSet):
         return ContactDetailSerializer
 
     def get_queryset(self):
+        from django.db.models import Q
         qs = Contact.objects.select_related("company").all()
         company_id = self.request.query_params.get("company_id")
         if company_id:
             qs = qs.filter(company_id=company_id)
-        return qs
+        search = self.request.query_params.get("search", "").strip()
+        if search:
+            qs = qs.filter(
+                Q(name__icontains=search)
+                | Q(company__legal_name__icontains=search)
+                | Q(company__brand_name__icontains=search)
+                | Q(email__icontains=search)
+                | Q(phone__icontains=search)
+            )
+        return qs[:20]
 
     def retrieve(self, request, *args, **kwargs):
         try:

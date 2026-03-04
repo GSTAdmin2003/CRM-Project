@@ -196,7 +196,10 @@ CELERY_TASK_SERIALIZER = 'json'
 CELERY_RESULT_SERIALIZER = 'json'
 CELERY_TIMEZONE = TIME_ZONE
 CELERY_TASK_TRACK_STARTED = True
-CELERY_TASK_TIME_LIMIT = 30 * 60  # 30 minutes
+CELERY_TASK_TIME_LIMIT = 30 * 60        # Hard kill at 30 minutes
+CELERY_TASK_SOFT_TIME_LIMIT = 25 * 60   # SIGTERM at 25 min so task can clean up
+CELERY_WORKER_MAX_TASKS_PER_CHILD = 100  # Recycle workers every 100 tasks (prevents memory leaks)
+CELERY_BROKER_CONNECTION_RETRY_ON_STARTUP = True  # Suppress deprecation warning
 
 # Celery Beat schedule for periodic tasks
 CELERY_BEAT_SCHEDULE = {
@@ -207,7 +210,7 @@ CELERY_BEAT_SCHEDULE = {
     },
     'sync-asterisk-recordings': {
         'task': 'apps.calls.tasks.sync_asterisk_recordings',
-        'schedule': 3600.0,  # Hourly
+        'schedule': 300.0,  # Every 5 minutes (safety net for missed ARI events)
     },
     'update-call-statistics': {
         'task': 'apps.calls.tasks.update_call_statistics',

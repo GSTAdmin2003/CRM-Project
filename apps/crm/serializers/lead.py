@@ -92,6 +92,15 @@ class LeadDetailSerializer(serializers.ModelSerializer):
     converted_from_id = serializers.IntegerField(
         source="converted_from.id", read_only=True, default=None
     )
+    company_name_display = serializers.CharField(
+        source="company.display_name", read_only=True, default=""
+    )
+    wa_conversation_id = serializers.SerializerMethodField()
+
+    def get_wa_conversation_id(self, obj):
+        """Resolve WhatsApp conversation via the direct lead FK."""
+        conv = obj.whatsapp_conversations.first()
+        return conv.id if conv else None
 
     class Meta:
         model = Lead
@@ -105,6 +114,7 @@ class LeadDetailSerializer(serializers.ModelSerializer):
             "email",
             "phone",
             "company_name",
+            "company_name_display",
             "position",
             "message",
             "stage",
@@ -125,6 +135,7 @@ class LeadDetailSerializer(serializers.ModelSerializer):
             "created_by_name",
             "contact_full_name",
             "weighted_value",
+            "wa_conversation_id",
             "activities",
             "files",
             "created_at",

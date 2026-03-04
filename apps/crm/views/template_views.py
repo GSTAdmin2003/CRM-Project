@@ -361,9 +361,27 @@ def api_lead_quick_activity_create(request):
 # Regular views (for non-API usage)
 @login_required
 def opportunity_list(request):
-    """Lead list view"""
-    leads = request.user.get_accessible_leads_queryset()
-    return render(request, 'crm/lead_list.html', {'leads': leads})
+    """Opportunity list view — renders Svelte shell."""
+    from django.core.serializers.json import DjangoJSONEncoder
+
+    user_team = request.user.sales_team
+    stages = LeadStage.get_stages_for_team(user_team)
+    teams = SalesTeam.objects.filter(is_active=True) if request.user.is_sales_executive() else []
+
+    init_data = {
+        'isManager': request.user.is_sales_manager(),
+        'isExecutive': request.user.is_sales_executive(),
+        'stages': [{'id': s.id, 'name': s.name, 'color': s.color} for s in stages],
+        'teams': [{'id': t.id, 'name': t.name} for t in teams],
+        'apiUrls': {
+            'leads': '/crm/api/leads/',
+            'leadEdit': '/crm/opportunities/{id}/edit/',
+            'leadDelete': '/crm/opportunities/{id}/delete/',
+        },
+    }
+    return render(request, 'crm/lead_list.html', {
+        'init_data_json': json.dumps(init_data, cls=DjangoJSONEncoder),
+    })
 
 
 @login_required
@@ -461,52 +479,24 @@ def opportunity_create(request):
 
 @login_required
 def opportunity_edit(request, pk):
-    """Lead edit view"""
-    from ..forms import LeadForm
+    """Lead/opportunity edit — serves Svelte shell with serialized initial data."""
+    from django.core.serializers.json import DjangoJSONEncoder
+    from rest_framework.renderers import JSONRenderer
+
+    from apps.activities.models import ActivityType
+    from apps.messaging.models import WhatsAppConversation
+
+    from ..serializers import LeadDetailSerializer
 
     lead = get_object_or_404(Lead, pk=pk)
     if not lead.can_be_edited_by(request.user):
         raise Http404()
 
-    # Get filter context from query params for navigation
     view_context = request.GET.get('view', 'personal')
     selected_team_id = request.GET.get('team', 'all')
     selected_stage_id = request.GET.get('stage', '')
 
-    if request.method == 'POST':
-        form = LeadForm(request.POST, instance=lead, user=request.user)
-        if form.is_valid():
-            old_stage = lead.stage
-            lead = form.save()
-
-            # Log stage change if it occurred
-            if old_stage != lead.stage:
-                LeadActivity.objects.create(
-                    lead=lead,
-                    user=request.user,
-                    activity_type='stage_change',
-                    subject=f'Stage changed from {old_stage.name} to {lead.stage.name}',
-                    description=f'Opportunity stage updated from {old_stage.name} to {lead.stage.name}'
-                )
-
-            # Log general update
-            LeadActivity.objects.create(
-                lead=lead,
-                user=request.user,
-                activity_type='updated',
-                subject=f'Opportunity "{lead.title}" updated',
-                description='Opportunity information was updated'
-            )
-
-            # Preserve navigation context on redirect
-            redirect_url = f"{request.path}?view={view_context}&team={selected_team_id}"
-            if selected_stage_id:
-                redirect_url += f"&stage={selected_stage_id}"
-            return redirect(redirect_url)
-    else:
-        form = LeadForm(instance=lead, user=request.user)
-
-    # Build filtered leads queryset for navigation
+    # Build prev/next navigation
     target_team = None
     if view_context == 'team':
         if request.user.is_sales_executive():
@@ -518,136 +508,72 @@ def opportunity_edit(request, pk):
         else:
             target_team = request.user.sales_team
 
-    # Get leads based on view context
     if view_context == 'team':
         if selected_team_id == 'all' and request.user.is_sales_executive():
             nav_leads = Lead.objects.all()
         elif target_team:
-            team_members = target_team.get_team_members()
-            nav_leads = Lead.objects.filter(assigned_to__in=team_members)
+            nav_leads = Lead.objects.filter(assigned_to__in=target_team.get_team_members())
         else:
             nav_leads = Lead.objects.filter(assigned_to=request.user)
     else:
         nav_leads = Lead.objects.filter(assigned_to=request.user)
 
-    # Filter by stage if specified
     if selected_stage_id:
         try:
             nav_leads = nav_leads.filter(stage_id=int(selected_stage_id))
         except (ValueError, TypeError):
             pass
 
-    # Order leads consistently and get prev/next
-    nav_leads = nav_leads.order_by('-updated_at').values_list('id', flat=True)
-    nav_lead_ids = list(nav_leads)
+    nav_lead_ids = list(nav_leads.order_by('-updated_at').values_list('id', flat=True))
 
-    prev_lead_id = None
-    next_lead_id = None
-
+    prev_lead_id = next_lead_id = None
     if lead.pk in nav_lead_ids:
-        current_index = nav_lead_ids.index(lead.pk)
-        if current_index > 0:
-            prev_lead_id = nav_lead_ids[current_index - 1]
-        if current_index < len(nav_lead_ids) - 1:
-            next_lead_id = nav_lead_ids[current_index + 1]
+        idx = nav_lead_ids.index(lead.pk)
+        if idx > 0:
+            prev_lead_id = nav_lead_ids[idx - 1]
+        if idx < len(nav_lead_ids) - 1:
+            next_lead_id = nav_lead_ids[idx + 1]
 
-    # Build navigation URLs with filter context
     nav_params = f"?view={view_context}&team={selected_team_id}"
     if selected_stage_id:
         nav_params += f"&stage={selected_stage_id}"
 
-    # Get stages for the status bar based on user's team
-    user_team = request.user.sales_team
-    stages = LeadStage.get_stages_for_team(user_team)
-
-    # Get all contacts for the contact selector, grouped by company
-    contacts_by_company = {}
-
-    # Group contacts by company and prioritize favorite contacts
-    companies_with_contacts = Company.objects.filter(contacts__isnull=False).distinct()
-
-    for company in companies_with_contacts:
-        company_contacts = company.contacts.all()
-        contact_list = []
-
-        # Add favorite contact first if it exists
-        if company.favorite_contact and company.favorite_contact in company_contacts:
-            contact_list.append({
-                'id': company.favorite_contact.id,
-                'name': company.favorite_contact.name,
-                'email': company.favorite_contact.email,
-                'phone': company.favorite_contact.phone,
-                'mobile': company.favorite_contact.mobile,
-                'position': company.favorite_contact.position,
-                'is_favorite': True,
-            })
-            # Add other contacts (excluding favorite)
-            for contact in company_contacts.exclude(id=company.favorite_contact.id):
-                contact_list.append({
-                    'id': contact.id,
-                    'name': contact.name,
-                    'email': contact.email,
-                    'phone': contact.phone,
-                    'mobile': contact.mobile,
-                    'position': contact.position,
-                    'is_favorite': False,
-                })
-        else:
-            # No favorite contact, add all contacts
-            for contact in company_contacts:
-                contact_list.append({
-                    'id': contact.id,
-                    'name': contact.name,
-                    'email': contact.email,
-                    'phone': contact.phone,
-                    'mobile': contact.mobile,
-                    'position': contact.position,
-                    'is_favorite': False,
-                })
-
-        contacts_by_company[company.id] = contact_list
-
-    # Individual companies: show their own data directly (no contact selection step)
-    individual_companies = {}
-    for company in Company.objects.filter(contact_type='individual'):
-        individual_companies[company.id] = {
-            'name': company.display_name,
-            'email': company.company_email or '',
-            'phone': company.company_phone or '',
-            'mobile': company.company_mobile or '',
-        }
-
-    # Get activities for this lead
-    activities = Activity.objects.filter(lead=lead).select_related(
-        'activity_type', 'assigned_to'
-    ).order_by('-scheduled_date', '-created_at')
-
-    # Get activity types for the quick add form
-    from apps.activities.models import ActivityType
+    stages = LeadStage.get_stages_for_team(request.user.sales_team)
     activity_types = ActivityType.objects.filter(is_active=True)
+    lead_dict = json.loads(JSONRenderer().render(LeadDetailSerializer(lead).data))
 
-    # WhatsApp conversation linked to this lead
-    try:
-        from apps.messaging.models import WhatsAppConversation
-        wa_conversation = lead.whatsapp_conversations.select_related().prefetch_related('messages').first()
-    except Exception:
-        wa_conversation = None
+    init_data = {
+        'leadId': lead.pk,
+        'lead': lead_dict,
+        'stages': [
+            {'id': s.id, 'name': s.name, 'color': s.color,
+             'probability': s.probability, 'is_closed_stage': s.is_closed_stage}
+            for s in stages
+        ],
+        'activityTypes': [
+            {'id': t.id, 'name': t.name, 'icon': t.icon, 'color': t.color}
+            for t in activity_types
+        ],
+        'waConversationId': lead_dict.get('wa_conversation_id'),
+        'prevLeadId': prev_lead_id,
+        'nextLeadId': next_lead_id,
+        'navParams': nav_params,
+        'currentIndex': nav_lead_ids.index(lead.pk) + 1 if lead.pk in nav_lead_ids else 0,
+        'totalCount': len(nav_lead_ids),
+        'apiUrls': {
+            'lead': f'/crm/api/leads/{lead.pk}/',
+            'leadStage': f'/crm/api/leads/{lead.pk}/stage/',
+            'activities': '/activities/api/activities/',
+            'activityTypes': '/activities/api/activity-types/',
+            'conversations': '/messaging/api/conversations/',
+            'templates': '/messaging/api/templates/',
+            'companySearch': '/crm/api/company/search/',
+        },
+    }
 
     return render(request, 'crm/lead_form.html', {
-        'form': form,
         'lead': lead,
-        'stages': stages,
-        'contacts_by_company_json': json.dumps(contacts_by_company),
-        'individual_companies_json': json.dumps(individual_companies),
-        'selected_contact_id': form.selected_contact_id if hasattr(form, 'selected_contact_id') else '',
-        'activities': activities,
-        'activity_types': activity_types,
-        'prev_lead_id': prev_lead_id,
-        'next_lead_id': next_lead_id,
-        'nav_params': nav_params,
-        'current_lead_index': nav_lead_ids.index(lead.pk) + 1 if lead.pk in nav_lead_ids else 0,
-        'total_leads_count': len(nav_lead_ids),
-        'wa_conversation': wa_conversation,
+        'init_data_json': json.dumps(init_data, cls=DjangoJSONEncoder),
     })
 
 
@@ -873,9 +799,11 @@ def api_company_contacts(request, company_id):
 
         company_data = {
             'id': company.id,
-            'name': company.legal_name,
+            'name': company.display_name,
             'email': company.company_email,
-            'phone': company.company_phone,
+            'phone': company.company_phone or company.company_mobile,
+            'contact_type': company.contact_type,
+            'legal_id': company.legal_id,
         }
 
         return JsonResponse({
@@ -1128,46 +1056,24 @@ def _build_contacts_data():
 
 @login_required
 def lead_list(request):
-    """List view for leads"""
-    # Get filter parameters
-    status_filter = request.GET.get('status', 'all')
-    team_filter = request.GET.get('team', 'all')
+    """Incoming lead list — renders Svelte shell."""
+    from django.core.serializers.json import DjangoJSONEncoder
 
-    # Base queryset based on user permissions
-    if request.user.is_sales_executive():
-        leads = Lead.objects.filter(lead_type=Lead.TYPE_LEAD)
-    elif request.user.is_sales_manager() and request.user.sales_team:
-        leads = Lead.objects.filter(lead_type=Lead.TYPE_LEAD, sales_team=request.user.sales_team)
-    else:
-        leads = Lead.objects.filter(lead_type=Lead.TYPE_LEAD, assigned_to=request.user)
-
-    # Apply status filter
-    if status_filter != 'all':
-        leads = leads.filter(status=status_filter)
-
-    # Apply team filter (for executives only)
-    if request.user.is_sales_executive() and team_filter != 'all':
-        try:
-            team = SalesTeam.objects.get(id=team_filter)
-            leads = leads.filter(sales_team=team)
-        except (SalesTeam.DoesNotExist, ValueError):
-            pass
-
-    # Order by creation date (newest first)
-    leads = leads.select_related('company', 'contact', 'sales_team', 'assigned_to', 'created_by').order_by('-created_at')
-
-    # Get teams for filter dropdown (executives only)
     teams = SalesTeam.objects.filter(is_active=True) if request.user.is_sales_executive() else []
 
-    context = {
-        'leads': leads,
-        'status_filter': status_filter,
-        'team_filter': team_filter,
-        'teams': teams,
-        'status_choices': Lead.STATUS_CHOICES,
+    init_data = {
+        'isManager': request.user.is_sales_manager(),
+        'isExecutive': request.user.is_sales_executive(),
+        'teams': [{'id': t.id, 'name': t.name} for t in teams],
+        'statusChoices': Lead.STATUS_CHOICES,
+        'apiUrls': {
+            'leads': '/crm/api/leads/',
+            'leadEdit': '/crm/opportunities/{id}/edit/',
+        },
     }
-
-    return render(request, 'crm/incoming_lead_list.html', context)
+    return render(request, 'crm/incoming_lead_list.html', {
+        'init_data_json': json.dumps(init_data, cls=DjangoJSONEncoder),
+    })
 
 
 @login_required

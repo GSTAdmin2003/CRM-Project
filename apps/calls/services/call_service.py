@@ -256,7 +256,17 @@ class CallService:
         except Exception:
             pass
 
-        process_recording.delay(call.id)
+        # Fallback recording trigger: fires 20 s after hangup in case the ARI
+        # WebSocket missed ChannelDestroyed.  Only for answered calls — MixMonitor
+        # uses the `b` option so no file exists for unanswered calls.
+        # The ARI handler's 10-second countdown almost always wins first; the
+        # IntegrityError guard and early-exit check handle the concurrent case.
+        if call.answered_at:
+            try:
+                from ..tasks import process_recording
+                process_recording.apply_async(args=[call.id], countdown=20)
+            except Exception as _exc:
+                logger.warning(f"Failed to queue fallback recording task for call {call.id}: {_exc}")
 
         return call
 

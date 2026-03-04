@@ -41,7 +41,9 @@ def process_recording(self, call_id):
     from .models import Call, CallRecording
 
     try:
-        call = Call.objects.get(id=call_id)
+        call = Call.objects.select_related(
+            'contact__company', 'opportunity__contact__company'
+        ).get(id=call_id)
 
         # Check if recording already exists
         if hasattr(call, 'recording') and call.recording:
@@ -83,9 +85,23 @@ def process_recording(self, call_id):
 
         if not wav_path:
             attempt = self.request.retries + 1
+            # Diagnostic: list directory contents so we can see whether Asterisk
+            # wrote the file at all and what names it used.
+            try:
+                dir_files = os.listdir(recordings_path) if os.path.isdir(recordings_path) else []
+                recent = sorted(
+                    [f for f in dir_files if f.endswith(('.wav', '.WAV'))],
+                    key=lambda f: os.path.getmtime(os.path.join(recordings_path, f)),
+                    reverse=True,
+                )[:10]
+            except Exception:
+                recent = ['<could not list directory>']
             logger.warning(
                 f"Recording not found for call {call_id} "
-                f"(attempt {attempt}/5, channel={call.asterisk_channel_id}). "
+                f"(attempt {attempt}/5, channel={call.asterisk_channel_id}, "
+                f"looked in={recordings_path}, "
+                f"candidates={candidates}, "
+                f"recent_wavs={recent}). "
                 f"Retrying in 30 s…"
             )
             raise self.retry(countdown=30)
@@ -113,17 +129,26 @@ def process_recording(self, call_id):
         # Get file info
         file_size = os.path.getsize(mp3_path)
 
-        # Create recording record and save file
+        # Create recording record and save file.
+        # Wrap in IntegrityError catch as a last-resort guard against the rare
+        # case where two tasks (e.g. ARI + sync_call_status) pass the early-exit
+        # check simultaneously before either has committed the row.
+        from django.db import IntegrityError
         with open(mp3_path, 'rb') as f:
-            recording = CallRecording.objects.create(
-                call=call,
-                duration=call.duration,
-                file_size=file_size
-            )
-
-            filename = f"{call.asterisk_uniqueid or call.id}.mp3"
-            recording.file.save(filename, File(f))
-            recording.save()
+            try:
+                recording = CallRecording.objects.create(
+                    call=call,
+                    duration=call.duration,
+                    file_size=file_size,
+                )
+                filename = f"{call.asterisk_uniqueid or call.id}.mp3"
+                recording.file.save(filename, File(f))
+                recording.save()
+            except IntegrityError:
+                logger.info(
+                    f"Recording for call {call_id} already saved by a concurrent task — skipping"
+                )
+                return
 
         logger.info(f"Created recording record for call {call_id}")
 
@@ -133,11 +158,14 @@ def process_recording(self, call_id):
 
         auto_transcribe = SystemConfiguration.get_setting('transcription_auto_enabled', False)
 
-        # Resolve language: contact preferred → company preferred → system default
+        # Resolve language: call contact → opportunity contact → system default
         lang_code = ''
-        if call.contact_id:
-            short = call.contact.effective_language  # 'en' or 'ka'
-            lang_code = LANGUAGE_TO_STT_CODE.get(short, '')
+        _lang_contact = (
+            call.contact if call.contact_id
+            else (call.opportunity.contact if call.opportunity_id and call.opportunity.contact_id else None)
+        )
+        if _lang_contact:
+            lang_code = LANGUAGE_TO_STT_CODE.get(_lang_contact.effective_language, '')
         if not lang_code:
             default_lang = SystemConfiguration.get_setting('default_preferred_language', 'en')
             lang_code = LANGUAGE_TO_STT_CODE.get(default_lang, '') or 'en'
@@ -186,7 +214,7 @@ _ELEVENLABS_STT_URL = 'https://api.elevenlabs.io/v1/speech-to-text'
 
 def _build_keywords(call, lang):
     """
-    Collect custom_vocabulary keywords for the given language from two sources:
+    Collect keyterms for the given language from two sources:
     1. Global default keywords (SystemConfiguration 'stt_keywords_en' / 'stt_keywords_ka')
     2. Team-specific keywords (SalesTeam.stt_keywords_en / stt_keywords_ka)
 
@@ -237,7 +265,9 @@ def transcribe_call(self, call_id):
     from apps.user_settings.models.general import SystemConfiguration
 
     try:
-        call = Call.objects.select_related('contact', 'opportunity__sales_team').get(id=call_id)
+        call = Call.objects.select_related(
+            'contact__company', 'opportunity__contact__company', 'opportunity__sales_team'
+        ).get(id=call_id)
     except Call.DoesNotExist:
         logger.error(f"Call {call_id} not found for transcription")
         return
@@ -248,11 +278,14 @@ def transcribe_call(self, call_id):
         logger.error(f"No CallTranscript for call {call_id}")
         return
 
-    # Resolve language: contact preferred → stored transcript code → system default → 'en'
+    # Resolve language: call contact → opportunity contact → stored transcript code → system default → 'en'
     lang = ''
-    if call.contact_id:
-        raw = call.contact.effective_language  # 'en' or 'ka'
-        lang = LANGUAGE_TO_STT_CODE.get(raw, '')
+    _lang_contact = (
+        call.contact if call.contact_id
+        else (call.opportunity.contact if call.opportunity_id and call.opportunity.contact_id else None)
+    )
+    if _lang_contact:
+        lang = LANGUAGE_TO_STT_CODE.get(_lang_contact.effective_language, '')
     if not lang and transcript.language_code:
         lang = _LANG_NORMALIZE.get(transcript.language_code, transcript.language_code[:2])
     if not lang:
@@ -307,15 +340,18 @@ def transcribe_call(self, call_id):
     headers = {'xi-api-key': api_key}
     keywords = _build_keywords(call, lang)
 
-    form_data = {
-        'model_id': 'scribe_v2',
-        'language_code': lang,
-        'diarize': 'true',
-        'num_speakers': '2',
-    }
+    # Build as list of tuples so we can repeat 'keyterms' for each keyword
+    form_data = [
+        ('model_id', 'scribe_v2'),
+        ('language_code', lang),
+        ('diarize', 'true'),
+        ('num_speakers', '2'),
+    ]
     if keywords:
-        form_data['custom_vocabulary'] = json.dumps([{'word': kw} for kw in keywords])
-        logger.info(f"Transcribing call {call_id} with {len(keywords)} custom keywords")
+        for kw in keywords[:100]:  # ElevenLabs max is 100 keyterms
+            form_data.append(('keyterms', kw))
+        logger.info(f"Transcribing call {call_id} with {len(keywords)} keyterms")
+    logger.info(f"Sending transcription request for call {call_id}: language_code={lang!r}")
 
     try:
         with open(audio_path, 'rb') as f:
@@ -328,6 +364,12 @@ def transcribe_call(self, call_id):
             )
         resp.raise_for_status()
         data = resp.json()
+
+        detected_lang = data.get('language_code', '')
+        logger.info(
+            f"ElevenLabs response for call {call_id}: "
+            f"requested language_code={lang!r}, detected language_code={detected_lang!r}"
+        )
 
         # Split words by speaker_id: speaker_0 → caller, speaker_1 → agent
         caller_words = []
@@ -360,7 +402,8 @@ def transcribe_call(self, call_id):
         transcript.save()
         logger.info(
             f"ElevenLabs transcription completed for call {call_id} "
-            f"(caller={len(caller_words)} words, agent={len(agent_words)} words)"
+            f"(caller={len(caller_words)} words, agent={len(agent_words)} words, "
+            f"requested={lang!r}, elevenlabs_detected={detected_lang!r})"
         )
 
         # Auto-analyze with Claude if enabled
@@ -825,10 +868,15 @@ def sync_asterisk_recordings():
     """
     Sync any recordings from Asterisk that weren't processed in real-time.
 
-    This catches any recordings that may have been missed due to
-    service downtime or processing errors.
+    This catches two failure modes:
+    1. Calls that ended normally (status='ended') but whose ChannelDestroyed
+       task somehow never ran or exhausted its retries.
+    2. Calls stuck in status='answered' because the ARI WebSocket missed the
+       ChannelDestroyed event — these never get queued otherwise.  We consider
+       a call stale if it has been 'answered' for more than 15 minutes with no
+       ended_at timestamp.
     """
-    from .models import Call, CallRecording
+    from .models import Call
     from django.utils import timezone
     from datetime import timedelta
 
@@ -842,23 +890,45 @@ def sync_asterisk_recordings():
         logger.warning(f"Recordings path does not exist: {recordings_path}")
         return
 
-    # Get calls from last 24 hours that don't have recordings
+    processed = 0
     cutoff = timezone.now() - timedelta(hours=24)
-    calls_without_recordings = Call.objects.filter(
+    stale_cutoff = timezone.now() - timedelta(minutes=15)
+
+    # 1. Normal ended calls that missed recording processing
+    for call in Call.objects.filter(
         created_at__gte=cutoff,
         status='ended',
-        recording__isnull=True
-    )
-
-    processed = 0
-    for call in calls_without_recordings:
+        answered_at__isnull=False,
+        recording__isnull=True,
+    ):
         try:
             process_recording.delay(call.id)
             processed += 1
         except Exception as e:
             logger.error(f"Failed to sync recording for call {call.id}: {e}")
 
-    logger.info(f"Synced {processed} recordings")
+    # 2. Calls stuck in 'answered' — ARI missed ChannelDestroyed
+    for call in Call.objects.filter(
+        answered_at__lte=stale_cutoff,
+        ended_at__isnull=True,
+        status='answered',
+        recording__isnull=True,
+    ):
+        logger.warning(
+            f"Stale answered call {call.id} (answered_at={call.answered_at}): "
+            f"marking ended and queueing recording"
+        )
+        call.status = 'ended'
+        call.ended_at = timezone.now()
+        call.duration = int((call.ended_at - call.answered_at).total_seconds())
+        call.save(update_fields=['status', 'ended_at', 'duration', 'updated_at'])
+        try:
+            process_recording.delay(call.id)
+            processed += 1
+        except Exception as e:
+            logger.error(f"Failed to queue recording for stale call {call.id}: {e}")
+
+    logger.info(f"sync_asterisk_recordings: queued {processed} recording tasks")
     return processed
 
 

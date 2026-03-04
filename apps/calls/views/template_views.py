@@ -8,7 +8,6 @@ has been moved to CallService where appropriate.
 from django import forms
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
-from django.core.paginator import Paginator
 from django.http import HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
@@ -16,38 +15,25 @@ from django.views.decorators.http import require_GET, require_POST
 
 from ..models import Call, CallRecording, SIPSettings
 from ..services import CallService
-from ..tasks import process_recording
 
 
 @login_required
 def call_list(request):
-    """Display list of all calls"""
-    direction = request.GET.get("direction")
-    status = request.GET.get("status")
-    user_filter = request.GET.get("user")
-    search = request.GET.get("search", "").strip()
+    """Call history list — renders Svelte shell."""
+    import json
+    from django.core.serializers.json import DjangoJSONEncoder
 
-    calls = CallService.list_calls_for_user(
-        user=request.user,
-        direction=direction,
-        status=status,
-        user_filter=user_filter,
-        search=search,
-    )
-
-    # Pagination
-    paginator = Paginator(calls, 25)
-    page = request.GET.get("page", 1)
-    calls = paginator.get_page(page)
-
-    context = {
-        "calls": calls,
-        "direction_filter": direction,
-        "status_filter": status,
-        "user_filter": user_filter,
-        "search": search,
+    init_data = {
+        "isManager": request.user.is_sales_manager(),
+        "isExecutive": request.user.is_sales_executive(),
+        "apiUrls": {
+            "calls": "/calls/api/calls/",
+            "callDetail": "/calls/{id}/",
+        },
     }
-    return render(request, "calls/call_list.html", context)
+    return render(request, "calls/call_list.html", {
+        "init_data_json": json.dumps(init_data, cls=DjangoJSONEncoder),
+    })
 
 
 @login_required
@@ -463,9 +449,71 @@ def call_ended(request, pk):
         call.duration = int((call.ended_at - call.answered_at).total_seconds())
     call.save()
 
-    process_recording.delay(call.id)
+    # Recording is triggered by the ARI ChannelDestroyed event — not here.
 
     return JsonResponse({"success": True, "call_id": call.id})
+
+
+@login_required
+@require_POST
+def upload_browser_recording(request, pk):
+    """Accept a browser-recorded WebM audio file as fallback when Asterisk recording is unavailable."""
+    try:
+        call = Call.objects.get(pk=pk, user=request.user)
+    except Call.DoesNotExist:
+        return JsonResponse({"success": False, "error": "Call not found"}, status=404)
+
+    # Skip if Asterisk already saved a recording for this call
+    if hasattr(call, "recording") and call.recording.file:
+        return JsonResponse({"success": True, "skipped": True})
+
+    audio_file = request.FILES.get("recording")
+    if not audio_file:
+        return JsonResponse({"success": False, "error": "No recording file"}, status=400)
+
+    recording = CallRecording.objects.create(
+        call=call,
+        file=audio_file,
+        duration=call.duration,
+        file_size=audio_file.size,
+    )
+
+    # Auto-trigger transcription (mirrors process_recording logic)
+    try:
+        from ..models import CallTranscript, LANGUAGE_TO_STT_CODE
+        from ..tasks import transcribe_call
+        from apps.user_settings.models.general import SystemConfiguration
+
+        auto_transcribe = SystemConfiguration.get_setting("transcription_auto_enabled", False)
+
+        lang_code = ""
+        _contact = (
+            call.contact
+            if call.contact_id
+            else (
+                call.opportunity.contact
+                if call.opportunity_id and call.opportunity.contact_id
+                else None
+            )
+        )
+        if _contact:
+            lang_code = LANGUAGE_TO_STT_CODE.get(_contact.effective_language, "")
+        if not lang_code:
+            default_lang = SystemConfiguration.get_setting("default_preferred_language", "en")
+            lang_code = LANGUAGE_TO_STT_CODE.get(default_lang, "") or "en"
+
+        transcript, _ = CallTranscript.objects.get_or_create(call=call)
+        transcript.language_code = lang_code
+        transcript.save(update_fields=["language_code", "updated_at"])
+
+        if auto_transcribe:
+            task = transcribe_call.delay(call.id)
+            transcript.celery_task_id = task.id
+            transcript.save(update_fields=["celery_task_id", "updated_at"])
+    except Exception:
+        pass  # transcription is best-effort
+
+    return JsonResponse({"success": True, "skipped": False})
 
 
 @login_required

@@ -17,7 +17,8 @@ _OUTCOME_MAP = {
     "failed": "Call failed — could not connect",
     "busy": "Call attempt — line was busy",
     "no_answer": "Call attempt — no answer",
-    "ended": "Call ended without connection",
+    "ended_answered": "Call completed",
+    "ended_no_answer": "Call ended without connection",
 }
 
 
@@ -31,19 +32,24 @@ def call_saved(sender, instance, created, **kwargs):
 
 @receiver(post_save, sender=Call)
 def handle_call_ended_activity(sender, instance, **kwargs):
-    """Auto-complete linked activity when call ends without being answered."""
+    """Auto-complete linked activity when call reaches a terminal status."""
     if not instance.activity_id:
         return
     if instance.status not in _TERMINAL_STATUSES:
         return
-    if instance.answered_at:
-        return  # Answered — user completes via feedback modal
 
     from apps.activities.models import Activity
 
+    if instance.status == "ended" and instance.answered_at:
+        outcome = _OUTCOME_MAP["ended_answered"]
+    elif instance.status == "ended":
+        outcome = _OUTCOME_MAP["ended_no_answer"]
+    else:
+        outcome = _OUTCOME_MAP.get(instance.status, f"Call {instance.status}")
+
     Activity.objects.filter(pk=instance.activity_id, status="planned").update(
         status="completed",
-        outcome=_OUTCOME_MAP.get(instance.status, f"Call {instance.status}"),
+        outcome=outcome,
         completed_at=timezone.now(),
     )
 

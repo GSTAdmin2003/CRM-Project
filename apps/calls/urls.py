@@ -17,6 +17,11 @@ urlpatterns = [
     path("inbound/register/", template_views.register_inbound_call, name="register_inbound_call"),
     path("inbound/missed/", template_views.record_missed_call, name="record_missed_call"),
     path("<int:pk>/ended/", template_views.call_ended, name="call_ended"),
+    path(
+        "<int:pk>/upload-browser-recording/",
+        template_views.upload_browser_recording,
+        name="upload_browser_recording",
+    ),
     path("<int:pk>/hangup/", template_views.hangup_call, name="hangup_call"),
     path("<int:pk>/answer/", template_views.answer_call, name="answer_call"),
     path("<int:pk>/status/", template_views.call_status, name="call_status"),

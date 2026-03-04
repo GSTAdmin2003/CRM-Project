@@ -122,9 +122,14 @@ class CallRecording(models.Model):
         return f"{size:.1f} TB"
 
 
+# Maps contact preferred_language keys (ISO-639-1) to ElevenLabs Scribe ISO-639-3 codes.
+# Also includes the 3-letter codes themselves so lookups work in both directions
+# (e.g. when retranscribing with a stored language_code like 'kat').
 LANGUAGE_TO_STT_CODE = {
-    'en': 'en',
-    'ka': 'ka',
+    'en': 'eng',
+    'ka': 'kat',
+    'eng': 'eng',
+    'kat': 'kat',
 }
 
 

@@ -99,7 +99,12 @@ class ARIEventHandler:
                     break
                 try:
                     event = json.loads(raw_message)
-                    self._dispatch(event)
+                    # Run _dispatch in a thread so that synchronous Django ORM
+                    # calls inside the handlers are allowed.  Calling sync ORM
+                    # directly from an async coroutine raises
+                    # "SynchronousOnlyOperation: You cannot call this from an
+                    # async context".
+                    await asyncio.to_thread(self._dispatch, event)
                 except Exception as exc:
                     logger.error(f"Error processing ARI event: {exc}")
 
@@ -229,7 +234,8 @@ class ARIEventHandler:
                 call.save()
             CallLog.objects.create(call=call, event="stasis_end", data=event)
             logger.info(f"Call ended: {channel_id}, duration: {call.duration}s")
-            self._trigger_recording_processing(call)
+            # Recording is triggered by _on_channel_destroyed (fires after this,
+            # giving MixMonitor more time to flush the WAV file to disk).
         except Call.DoesNotExist:
             logger.warning(f"StasisEnd for unknown channel: {channel_id}")
 
@@ -412,11 +418,22 @@ class ARIEventHandler:
             logger.debug(f"Channel destroyed for untracked channel: {channel_id}")
 
     def _trigger_recording_processing(self, call):
-        """Queue async processing of the call recording."""
+        """Queue async processing of the call recording.
+
+        Only triggered for calls that were actually answered — MixMonitor uses
+        the `b` option so no file is written for unanswered calls (busy, no_answer,
+        failed).  Skipping those avoids 5 spurious retries per missed call.
+        """
+        if not call.answered_at:
+            logger.debug(f"Skipping recording for unanswered call {call.id} (status={call.status})")
+            return
         try:
             from .tasks import process_recording
-            process_recording.delay(call.id)
-            logger.info(f"Queued recording processing for call {call.id}")
+            # 10-second countdown gives MixMonitor enough time to flush the WAV
+            # to disk before the task reads it.  The task retries anyway on
+            # "file not found", but starting later reduces unnecessary retries.
+            process_recording.apply_async(args=[call.id], countdown=10)
+            logger.info(f"Queued recording processing for call {call.id} (countdown=10)")
         except Exception as exc:
             logger.error(f"Failed to queue recording processing: {exc}")
 

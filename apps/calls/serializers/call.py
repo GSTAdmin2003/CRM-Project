@@ -74,6 +74,30 @@ class CallDetailSerializer(serializers.ModelSerializer):
     recording = CallRecordingSerializer(read_only=True)
     logs = CallLogSerializer(many=True, read_only=True)
     activity_id = serializers.IntegerField(read_only=True)
+    transcript = serializers.SerializerMethodField()
+    analysis = serializers.SerializerMethodField()
+
+    def get_transcript(self, obj):
+        try:
+            t = obj.transcript
+            return {
+                "status": t.status,
+                "language_code": t.language_code or "",
+                "caller_text": t.caller_text,
+                "agent_text": t.agent_text,
+            }
+        except Exception:
+            return None
+
+    def get_analysis(self, obj):
+        try:
+            a = obj.analysis
+            return {
+                "status": a.status,
+                "analysis_text": a.analysis_text,
+            }
+        except Exception:
+            return None
 
     class Meta:
         model = Call
@@ -99,6 +123,8 @@ class CallDetailSerializer(serializers.ModelSerializer):
             "ended_at",
             "notes",
             "recording",
+            "transcript",
+            "analysis",
             "logs",
             "created_at",
             "updated_at",

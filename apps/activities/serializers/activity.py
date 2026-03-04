@@ -48,6 +48,25 @@ class ActivityDetailSerializer(serializers.ModelSerializer):
         source="created_by.get_full_name", read_only=True, default=""
     )
     is_overdue = serializers.BooleanField(read_only=True)
+    call_recording = serializers.SerializerMethodField()
+
+    def get_call_recording(self, obj):
+        call = obj.call.first()
+        if not call:
+            return None
+        result = {
+            "call_id": call.id,
+            "duration": call.duration_formatted,
+            "direction": call.direction,
+        }
+        try:
+            rec = call.recording
+            result["recording_id"] = rec.id
+            result["file_size"] = rec.file_size_formatted
+            result["download_url"] = f"/calls/recording/{rec.id}/download/"
+        except Exception:
+            pass
+        return result
 
     class Meta:
         model = Activity
@@ -69,6 +88,7 @@ class ActivityDetailSerializer(serializers.ModelSerializer):
             "completed_at",
             "created_at",
             "updated_at",
+            "call_recording",
         ]
         read_only_fields = ["id", "created_by", "completed_at", "created_at", "updated_at"]
 

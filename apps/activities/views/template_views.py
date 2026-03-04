@@ -20,51 +20,32 @@ from ..services import ActivityService
 
 @login_required
 def activity_dashboard(request):
-    """Dashboard view with date filtering and team selection"""
-    view_context = request.GET.get("view", "personal")
-    selected_team_id = request.GET.get("team", "all")
-    date_filter = request.GET.get("filter", "week")
-    custom_date = request.GET.get("date", "")
-    start_date = request.GET.get("start_date", "")
-    end_date = request.GET.get("end_date", "")
+    """Activities dashboard — renders Svelte shell."""
+    import json
+    from django.core.serializers.json import DjangoJSONEncoder
+    from apps.activities.models import ActivityType
 
-    # Permission check for team view
-    if view_context == "team" and not (
-        request.user.is_sales_manager() or request.user.is_sales_executive()
-    ):
-        view_context = "personal"
-
-    activities = ActivityService.get_activities_for_user(
-        user=request.user,
-        view_context=view_context,
-        team_id=selected_team_id,
-        date_filter=date_filter,
-        custom_date=custom_date,
-        start_date=start_date,
-        end_date=end_date,
+    available_teams = SalesTeam.objects.filter(is_active=True) if request.user.is_sales_executive() else []
+    user_team_id = request.user.sales_team.id if request.user.sales_team else None
+    activity_types_data = list(
+        ActivityType.objects.filter(is_active=True).values("id", "name", "icon", "color")
     )
 
-    # Get available teams for executives
-    available_teams = []
-    if request.user.is_sales_executive():
-        available_teams = SalesTeam.objects.filter(is_active=True)
-
-    user_team_id = request.user.sales_team.id if request.user.sales_team else None
-
-    context = {
-        "activities": activities,
-        "view_context": view_context,
-        "selected_team_id": selected_team_id,
-        "date_filter": date_filter,
-        "custom_date": custom_date,
-        "start_date": start_date,
-        "end_date": end_date,
-        "available_teams": available_teams,
-        "user_team_id": user_team_id,
-        "today": __import__("datetime").date.today(),
+    init_data = {
+        "isManager": request.user.is_sales_manager(),
+        "isExecutive": request.user.is_sales_executive(),
+        "userTeamId": user_team_id,
+        "availableTeams": [{"id": t.id, "name": t.name} for t in available_teams],
+        "activityTypes": activity_types_data,
+        "apiUrls": {
+            "activities": "/activities/api/activities/",
+            "activityTypes": "/activities/api/activity-types/",
+        },
     }
 
-    return render(request, "activities/dashboard.html", context)
+    return render(request, "activities/dashboard.html", {
+        "init_data_json": json.dumps(init_data, cls=DjangoJSONEncoder),
+    })
 
 
 @login_required
@@ -225,7 +206,6 @@ def activity_call_hangup(request, pk):
 def activity_call_ended(request, pk):
     """Mark the linked call as ended (called by browser WebRTC session end event)."""
     from django.utils import timezone
-    from apps.calls.tasks import process_recording
 
     activity, ext = _get_phone_call_ext(pk)
     if not ext:
@@ -249,7 +229,9 @@ def activity_call_ended(request, pk):
             ari.ended_at = now
             ari.duration = ext.duration
             ari.save(update_fields=["status", "ended_at", "duration", "updated_at"])
-        process_recording.delay(ext.ari_call_id)
+        # Recording is triggered by the ARI ChannelDestroyed event.
+        # Do NOT queue it here — the browser SIP end-event races with ARI
+        # and causes duplicate processing.
 
     return JsonResponse({"success": True})
 

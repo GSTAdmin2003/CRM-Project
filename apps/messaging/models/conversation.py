@@ -72,6 +72,8 @@ class WhatsAppMessage(models.Model):
     direction = models.CharField(max_length=10, choices=DIRECTION_CHOICES)
     body = models.TextField()
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default="sent")
+    meta_error_code = models.IntegerField(null=True, blank=True)
+    meta_error_message = models.CharField(max_length=500, null=True, blank=True)
     timestamp = models.DateTimeField()
     sent_by = models.ForeignKey(
         settings.AUTH_USER_MODEL,

@@ -108,6 +108,7 @@ class WhatsAppService:
                     import logging as _logging
                     _log = _logging.getLogger('apps.messaging')
                     msg_status = status.get("status", "")
+                    update_fields = {"status": msg_status}
                     if msg_status == "failed":
                         errors = status.get("errors", [])
                         _log.warning(
@@ -115,9 +116,16 @@ class WhatsAppService:
                             f"recipient={status.get('recipient_id')!r} "
                             f"errors={errors}"
                         )
+                        if errors:
+                            first = errors[0]
+                            update_fields["meta_error_code"] = first.get("code")
+                            # Prefer 'title' (short), fall back to 'message'
+                            update_fields["meta_error_message"] = (
+                                first.get("title") or first.get("message") or ""
+                            )
                     updated = WhatsAppMessage.objects.filter(
                         wa_message_id=status["id"]
-                    ).update(status=msg_status)
+                    ).update(**update_fields)
                     if updated:
                         # Notify so read/delivered ticks update in real time
                         msg_obj = WhatsAppMessage.objects.filter(
@@ -195,16 +203,27 @@ class WhatsAppService:
             raise NotFoundError(f"Lead {lead_id} not found.")
 
         contact = lead.contact
-        if not contact:
+
+        # Representative name always comes from the lead's own fields (synced when a rep is picked).
+        recipient_name = lead.contact_full_name or lead.title
+
+        # Phone: prefer contact's mobile → contact's phone → lead's direct phone.
+        contact_phone = (contact.mobile or contact.phone) if contact else ""
+        phone = contact_phone or lead.phone
+        if not phone:
             raise ValidationError(
-                "This lead has no linked contact. Add a contact before sending a pitch."
-            )
-        if not contact.mobile:
-            raise ValidationError(
-                "The linked contact has no mobile number. Add a mobile to send via WhatsApp."
+                "This lead has no phone number. Add a phone number before sending a pitch."
             )
 
-        lang = contact.effective_language
+        # Language: resolve from contact or existing conversation, fall back to 'en'.
+        if contact and contact.effective_language:
+            lang = contact.effective_language
+        else:
+            conv_for_lang = WhatsAppConversation.objects.filter(
+                phone_number=_normalize_phone(phone)
+            ).select_related("contact").first()
+            lang = (conv_for_lang.contact.effective_language
+                    if conv_for_lang and conv_for_lang.contact else "en")
 
         try:
             template = WhatsAppTemplate.objects.get(
@@ -235,16 +254,17 @@ class WhatsAppService:
                 "Go to Settings → CRM → Sales Pitch to upload one."
             )
 
-        conv = WhatsAppService.get_or_create_conversation_for_phone(phone=contact.mobile)
-        WhatsAppService.link_to_contact(conversation_id=conv.id, contact_id=contact.id)
+        conv = WhatsAppService.get_or_create_conversation_for_phone(phone=phone)
+        if contact:
+            WhatsAppService.link_to_contact(conversation_id=conv.id, contact_id=contact.id)
         WhatsAppService.link_to_lead(conversation_id=conv.id, lead_id=lead.id)
 
-        rendered_body = template.render_body([contact.name])
+        rendered_body = template.render_body([recipient_name])
         result = _send_tpl(
-            _normalize_phone(contact.mobile),
+            _normalize_phone(phone),
             template.name,
             lang,
-            [contact.name],
+            [recipient_name],
             document_media_id=media_id,
             document_filename=pdf_filename,
         )
@@ -276,7 +296,7 @@ class WhatsAppService:
                 lead=lead,
                 activity_type=pitch_type,
                 title="Sales pitch sent via WhatsApp",
-                description=f"Pitch PDF sent to {contact.name} ({contact.mobile})",
+                description=f"Pitch PDF sent to {recipient_name} ({phone})",
                 scheduled_date=datetime.date.today(),
                 status="completed",
                 completed_at=_now(),

@@ -19,11 +19,18 @@ from apps.messaging.services import WhatsAppService
 
 @login_required
 def inbox(request):
-    """WhatsApp inbox — list all conversations ordered by last message."""
-    conversations = WhatsAppConversation.objects.select_related(
-        'contact', 'lead'
-    ).order_by('-last_message_at')
-    return render(request, 'messaging/inbox.html', {'conversations': conversations})
+    """WhatsApp inbox — renders Svelte shell."""
+    import json
+    from django.core.serializers.json import DjangoJSONEncoder
+
+    init_data = {
+        'apiUrls': {
+            'conversations': '/messaging/api/conversations/',
+        },
+    }
+    return render(request, 'messaging/inbox.html', {
+        'init_data_json': json.dumps(init_data, cls=DjangoJSONEncoder),
+    })
 
 
 @login_required

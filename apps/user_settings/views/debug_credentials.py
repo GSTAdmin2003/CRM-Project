@@ -918,6 +918,144 @@ def _test_asterisk() -> dict:
 
 
 # ---------------------------------------------------------------------------
+# Celery
+# ---------------------------------------------------------------------------
+
+def _test_celery() -> dict:
+    """Test Celery broker connectivity, worker health, queue depth, and beat schedule."""
+    outgoing = []
+
+    # T1 — broker (Redis) reachable
+    broker_url = getattr(django_settings, "CELERY_BROKER_URL", "redis://redis:6379/0")
+    try:
+        import redis as _redis
+        parsed = broker_url.replace("redis://", "").split("/")
+        host_port = parsed[0].split(":")
+        _host = host_port[0] or "redis"
+        _port = int(host_port[1]) if len(host_port) > 1 else 6379
+        _db = int(parsed[1]) if len(parsed) > 1 else 0
+        t0 = time.monotonic()
+        r = _redis.Redis(host=_host, port=_port, db=_db, socket_connect_timeout=3)
+        r.ping()
+        ms = int((time.monotonic() - t0) * 1000)
+        outgoing.append(_case("Redis broker reachable", "ok", f"{_host}:{_port}/db{_db}  [{ms}ms]"))
+    except ImportError:
+        outgoing.append(_case("Redis broker reachable", "error", "'redis' package not installed"))
+        return {"label": "Celery / Redis", "overall": "error", "outgoing": outgoing, "incoming": None}
+    except Exception as exc:
+        outgoing.append(_case("Redis broker reachable", "error", f"{broker_url} — {exc}"))
+        outgoing.append(_skip("Worker ping", "broker unreachable"))
+        outgoing.append(_skip("Queue depth", "broker unreachable"))
+        outgoing.append(_skip("Beat schedule", "broker unreachable"))
+        return {"label": "Celery / Redis", "overall": "error", "outgoing": outgoing, "incoming": None}
+
+    # T2 — queue depth (how many tasks waiting?)
+    try:
+        depth = r.llen("celery")
+        status = "ok" if depth < 50 else "warning" if depth < 200 else "error"
+        detail = f"{depth} task(s) pending in default queue"
+        if depth > 50:
+            detail += " — queue is building up"
+        outgoing.append(_case("Queue depth", status, detail))
+    except Exception as exc:
+        outgoing.append(_case("Queue depth", "warning", str(exc)[:100]))
+
+    # T3 — worker ping (round-trip to actual Celery process)
+    try:
+        from core.celery import app as celery_app
+        t0 = time.monotonic()
+        responses = celery_app.control.ping(timeout=5)
+        ms = int((time.monotonic() - t0) * 1000)
+        if not responses:
+            outgoing.append(_case("Worker ping", "error",
+                                  f"No workers responded within 5 s — worker may be down  [{ms}ms]"))
+            outgoing.append(_skip("Worker details", "no workers online"))
+        else:
+            worker_names = [list(r.keys())[0] for r in responses if r]
+            outgoing.append(_case("Worker ping", "ok",
+                                  f"{len(worker_names)} worker(s) responded: {', '.join(worker_names)}  [{ms}ms]"))
+
+            # T4 — worker details (active tasks, pool)
+            try:
+                t0 = time.monotonic()
+                stats = celery_app.control.inspect(timeout=4).stats() or {}
+                ms = int((time.monotonic() - t0) * 1000)
+                details = []
+                for wname, wstats in stats.items():
+                    pool = wstats.get("pool", {})
+                    concurrency = pool.get("max-concurrency", "?")
+                    processes = pool.get("processes", [])
+                    total_tasks = wstats.get("total", {})
+                    executed = sum(total_tasks.values()) if total_tasks else 0
+                    details.append(
+                        f"{wname.split('@')[1] if '@' in wname else wname}: "
+                        f"concurrency={concurrency}, pids={len(processes)}, "
+                        f"tasks_executed={executed}"
+                    )
+                if details:
+                    outgoing.append(_case("Worker details", "ok", " | ".join(details) + f"  [{ms}ms]"))
+                else:
+                    outgoing.append(_case("Worker details", "warning", f"No stats returned  [{ms}ms]"))
+
+                # T5 — active (running) tasks
+                t0 = time.monotonic()
+                active = celery_app.control.inspect(timeout=3).active() or {}
+                ms = int((time.monotonic() - t0) * 1000)
+                total_active = sum(len(tasks) for tasks in active.values())
+                if total_active == 0:
+                    outgoing.append(_case("Active tasks", "ok", f"0 tasks currently running  [{ms}ms]"))
+                else:
+                    task_names = [
+                        t.get("name", "?").split(".")[-1]
+                        for tasks in active.values() for t in tasks
+                    ]
+                    outgoing.append(_case("Active tasks", "ok",
+                                         f"{total_active} running: {', '.join(task_names)}  [{ms}ms]"))
+            except Exception as exc:
+                outgoing.append(_case("Worker details", "warning", str(exc)[:120]))
+
+    except Exception as exc:
+        outgoing.append(_case("Worker ping", "error", str(exc)[:150]))
+        outgoing.append(_skip("Worker details", "ping failed"))
+
+    # T6 — Beat: check celerybeat-schedule file mtime (shows beat is alive)
+    try:
+        import os
+        import datetime
+        schedule_path = "/app/celerybeat-schedule"
+        if os.path.exists(schedule_path):
+            mtime = os.path.getmtime(schedule_path)
+            age_s = time.time() - mtime
+            age_str = (
+                f"{int(age_s)}s ago" if age_s < 120
+                else f"{int(age_s/60)}m ago" if age_s < 3600
+                else f"{int(age_s/3600)}h ago"
+            )
+            # Beat writes to the schedule file every ~5 min (shortest task interval)
+            if age_s < 600:
+                outgoing.append(_case("Celery Beat alive", "ok",
+                                      f"Schedule file updated {age_str} (beat is running)"))
+            elif age_s < 1800:
+                outgoing.append(_case("Celery Beat alive", "warning",
+                                      f"Schedule file last updated {age_str} — beat may have stalled"))
+            else:
+                outgoing.append(_case("Celery Beat alive", "error",
+                                      f"Schedule file last updated {age_str} — beat is likely down"))
+        else:
+            outgoing.append(_case("Celery Beat alive", "warning",
+                                  "celerybeat-schedule file not found — beat may not have started yet"))
+    except Exception as exc:
+        outgoing.append(_case("Celery Beat alive", "warning", str(exc)[:100]))
+
+    return {
+        "label": "Celery / Redis",
+        "overall": _overall(outgoing),
+        "outgoing": outgoing,
+        "incoming": None,
+    }
+
+
+# ---------------------------------------------------------------------------
 # View
 # ---------------------------------------------------------------------------
 
@@ -931,6 +1069,7 @@ def test_integrations_view(request):
     anthropic_key = SystemConfiguration.get_setting("anthropic_api_key") or ""
 
     results = {
+        "celery": _test_celery(),
         "elevenlabs": _test_elevenlabs(elevenlabs_key),
         "anthropic": _test_anthropic(anthropic_key),
         "whatsapp": _test_whatsapp(),

@@ -6,8 +6,12 @@ import { writable } from 'svelte/store';
  * Svelte components subscribe to this store for reactive SIP state.
  */
 function createSipStore() {
+    // Seed from current JsSIP UA state — the sip:registered event may have
+    // already fired before this Svelte module was loaded.
+    const alreadyRegistered = !!(window.sipUA && window.sipUA.isRegistered());
+
     const { subscribe, update } = writable({
-        registered: false,
+        registered: alreadyRegistered,
         hasActiveCall: false,
         isMuted: false,
         isOnHold: false,

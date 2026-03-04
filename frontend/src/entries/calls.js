@@ -1,14 +1,14 @@
 import '../app.css';
 import { installGlobalHandlers } from '../utils/debug.js';
-import LeadFormApp from '../components/lead_form/LeadFormApp.svelte';
+import CallsList from '../components/calls/CallsList.svelte';
 
 installGlobalHandlers();
 
 let instance = null;
 
 function mount() {
-    const el = document.getElementById('svelte-lead-form-root');
-    const dataEl = document.getElementById('lead-form-init-data');
+    const el = document.getElementById('svelte-calls-root');
+    const dataEl = document.getElementById('calls-init-data');
     if (!el || !dataEl) return;
 
     if (instance) {
@@ -20,11 +20,11 @@ function mount() {
     try {
         props = JSON.parse(dataEl.textContent);
     } catch (e) {
-        console.error('lead_form: failed to parse init data', e);
+        console.error('calls: failed to parse init data', e);
         return;
     }
 
-    instance = new LeadFormApp({ target: el, props });
+    instance = new CallsList({ target: el, props });
 }
 
 mount();

@@ -1,4 +1,5 @@
 import { getCsrfToken } from './csrf.js';
+import { dbg } from './debug.js';
 
 /**
  * Thin fetch wrapper: attaches CSRF token + credentials for all mutating requests.
@@ -12,11 +13,22 @@ export async function apiFetch(url, options = {}) {
     if (['POST', 'PUT', 'PATCH', 'DELETE'].includes(method)) {
         headers['X-CSRFToken'] = getCsrfToken();
     }
+
+    dbg('API', `→ ${method} ${url}`, options.body ? JSON.parse(options.body) : '');
+
     const response = await fetch(url, {
         credentials: 'same-origin',
         ...options,
         headers,
     });
+
+    if (!response.ok) {
+        const text = await response.clone().text();
+        console.error('[CRM:API]', `✗ ${method} ${url}`, response.status, text);
+    } else {
+        dbg('API', `← ${response.status} ${url}`);
+    }
+
     return response;
 }
 

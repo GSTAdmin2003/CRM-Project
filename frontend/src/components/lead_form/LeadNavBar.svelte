@@ -7,7 +7,8 @@
 
   function navigate(leadId) {
     if (!leadId) return;
-    const qs = navParams || '';
+    // Only use navParams if it's a proper query string; guard against stale/invalid values.
+    const qs = (typeof navParams === 'string' && navParams.startsWith('?')) ? navParams : '';
     window.crmNavigate(`/crm/opportunities/${leadId}/edit/${qs}`);
   }
 </script>

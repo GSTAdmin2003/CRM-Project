@@ -8,7 +8,7 @@
   export let leadId = null;
   export let apiUrls = {};
   export let activityTypes = [];
-  export let waConversationId = null;
+  export let userLanguage = 'en';
   export let onLeadUpdated = () => {};
 
   const TABS = [
@@ -42,7 +42,7 @@
     {:else if $activeTab === 'activities'}
       <ActivitiesTab {leadId} {apiUrls} {activityTypes} />
     {:else if $activeTab === 'whatsapp'}
-      <WhatsAppTab conversationId={waConversationId} {apiUrls} />
+      <WhatsAppTab {leadId} {apiUrls} {userLanguage} />
     {/if}
   </div>
 </div>

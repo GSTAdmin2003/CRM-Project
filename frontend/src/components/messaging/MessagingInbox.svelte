@@ -3,6 +3,7 @@
   import ChatPane from './ChatPane.svelte';
 
   export let apiUrls = {};
+  export let userLanguage = 'en';
 
   let selectedConversation = null;
 </script>
@@ -19,6 +20,6 @@
 
   <!-- Right pane: chat -->
   <div class="flex-1 flex flex-col overflow-hidden">
-    <ChatPane conversation={selectedConversation} {apiUrls} />
+    <ChatPane conversation={selectedConversation} {apiUrls} {userLanguage} />
   </div>
 </div>

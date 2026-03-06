@@ -46,10 +46,13 @@ stop:
 	@kill $$(lsof -ti:5173) 2>/dev/null || true
 	@kill $$(lsof -ti:4040) 2>/dev/null || true
 
-# Restart Django server
+# Restart: build frontend, collect static, restart container
 restart:
-	@echo "Restarting Docker services..."
+	@echo "Building frontend..."
+	npm run build
+	@echo "Restarting web container..."
 	docker compose restart web
+	@echo "Done."
 
 # Show logs
 logs:

@@ -8,6 +8,7 @@ export async function apiFetch(url, options = {}) {
     const method = (options.method || 'GET').toUpperCase();
     const headers = {
         'Content-Type': 'application/json',
+        'Accept': 'application/json',
         ...(options.headers || {}),
     };
     if (['POST', 'PUT', 'PATCH', 'DELETE'].includes(method)) {

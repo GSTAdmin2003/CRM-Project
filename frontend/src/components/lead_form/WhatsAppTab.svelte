@@ -1,13 +1,17 @@
 <script>
   import { apiGet, apiPost } from '../../utils/api.js';
-  import { onDestroy, tick } from 'svelte';
+  import { onDestroy, onMount, tick } from 'svelte';
 
-  export let conversationId = null;
+  export let leadId = null;
+  let conversationId = null;
   export let apiUrls = {};
+  export let userLanguage = 'en';
 
   let messages = [];
   let loading = true;
+  let resolving = true; // true while for_lead fetch is in-flight
   let sending = false;
+  let sendingHi = false;
   let newMessage = '';
   let error = '';
   let sendError = '';
@@ -24,12 +28,11 @@
 
   async function sendNamedTemplate(templateName) {
     if (sending || !conversationId) return;
-    showTemplates = false;
     sending = true;
     sendError = '';
     try {
       const url = `${apiUrls.conversations}${conversationId}/send_named_template/`;
-      const res = await apiPost(url, { template_name: templateName });
+      const res = await apiPost(url, { template_name: templateName, language: userLanguage });
       if (res.ok) {
         const msg = await res.json();
         messages = [...messages, msg];
@@ -48,6 +51,33 @@
       console.error('[CRM:WhatsApp] Template send error (network):', e);
     } finally {
       sending = false;
+    }
+  }
+
+  async function sendHiForLead() {
+    if (sendingHi || !leadId) return;
+    sendingHi = true;
+    sendError = '';
+    try {
+      const url = `${apiUrls.conversations}send_hi_for_lead/`;
+      const res = await apiPost(url, { lead_id: leadId, language: userLanguage });
+      if (res.ok) {
+        const data = await res.json();
+        conversationId = data.conversation_id;
+        messages = [data.message];
+        await scrollToBottom();
+      } else {
+        let detail = 'Failed to send';
+        try {
+          const err = await res.json();
+          detail = err.detail || err.error || detail;
+        } catch { /* ignore */ }
+        sendError = detail;
+      }
+    } catch (e) {
+      sendError = 'Failed to send — network error';
+    } finally {
+      sendingHi = false;
     }
   }
 
@@ -78,6 +108,25 @@
     }
   }
 
+  onMount(async () => {
+    if (!leadId) {
+      resolving = false;
+      return;
+    }
+    try {
+      const res = await apiGet(`${apiUrls.conversations}for_lead/?lead_id=${leadId}`);
+      if (res.ok) {
+        const data = await res.json();
+        conversationId = data.id;
+      }
+      // 404 = no conversation yet; leave conversationId null
+    } catch {
+      // network error — leave conversationId null, user sees "No conversation yet"
+    } finally {
+      resolving = false;
+    }
+  });
+
   onDestroy(() => {
     _activeConvId = null;
     clearTimeout(wsReconnectTimer);
@@ -89,16 +138,25 @@
     error = '';
     try {
       const res = await apiGet(messagesUrl);
+      const ct = res.headers.get('content-type') || '';
       if (res.ok) {
+        if (!ct.includes('application/json')) {
+          const text = await res.text();
+          console.error('[CRM:WhatsApp] fetchMessages: expected JSON, got', ct, 'from', messagesUrl, '— final URL:', res.url, '— body starts:', text.slice(0, 300));
+          error = 'Failed to load messages';
+          return;
+        }
         const data = await res.json();
         messages = data.results || data;
         await scrollToBottom();
       } else if (res.status === 404) {
-        error = 'Conversation not found';
+        // Conversation no longer exists — reset to "no conversation" so user can start fresh
+        messages = [];
+        conversationId = null;
         console.error('[CRM:WhatsApp] Conversation not found for id', conversationId);
       } else {
         error = 'Failed to load messages';
-        console.error('[CRM:WhatsApp] fetchMessages failed', res.status);
+        console.error('[CRM:WhatsApp] fetchMessages failed', res.status, ct);
       }
     } catch (e) {
       error = 'Failed to load messages';
@@ -239,13 +297,37 @@
   };
 </script>
 
-{#if !conversationId}
-  <div class="text-center py-8 text-gray-400">
-    <svg class="w-10 h-10 mx-auto mb-2 text-gray-300" fill="currentColor" viewBox="0 0 24 24">
+{#if resolving}
+  <p class="text-xs text-gray-400 text-center py-4">Loading…</p>
+{:else if !conversationId}
+  <div class="flex flex-col items-center justify-center py-8 gap-3 text-center">
+    <svg class="w-10 h-10 text-gray-300" fill="currentColor" viewBox="0 0 24 24">
       <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347z"/>
       <path d="M11.5 2C6.253 2 2 6.253 2 11.5c0 1.822.496 3.525 1.355 4.991L2.05 21.95l5.514-1.285A9.45 9.45 0 0011.5 21C16.747 21 21 16.747 21 11.5S16.747 2 11.5 2z"/>
     </svg>
-    <p class="text-sm">No WhatsApp conversation linked to this lead.</p>
+    <p class="text-xs text-gray-400">No conversation yet. Start by saying hi.</p>
+    {#if sendError}
+      <p class="text-xs text-red-500">{sendError}</p>
+    {/if}
+    <button
+      type="button"
+      class="flex items-center gap-1.5 px-4 py-2 bg-green-500 text-white text-sm font-medium rounded-lg hover:bg-green-600 disabled:opacity-50 transition-colors"
+      disabled={sendingHi}
+      on:click={sendHiForLead}
+    >
+      {#if sendingHi}
+        <svg class="w-3.5 h-3.5 animate-spin" fill="none" viewBox="0 0 24 24">
+          <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+          <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path>
+        </svg>
+        Sending…
+      {:else}
+        <svg class="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 24 24">
+          <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347z"/>
+        </svg>
+        Send Hi
+      {/if}
+    </button>
   </div>
 {:else}
   <div class="flex flex-col h-96">
@@ -259,7 +341,28 @@
       {:else if error}
         <p class="text-xs text-red-500 text-center py-4">{error}</p>
       {:else if messages.length === 0}
-        <p class="text-xs text-gray-400 text-center py-4">No messages yet.</p>
+        <div class="flex flex-col items-center justify-center h-full py-8 gap-3">
+          <p class="text-xs text-gray-400">No messages yet. Start the conversation.</p>
+          <button
+            type="button"
+            class="flex items-center gap-1.5 px-4 py-2 bg-green-500 text-white text-sm font-medium rounded-lg hover:bg-green-600 disabled:opacity-50 transition-colors"
+            disabled={sending}
+            on:click={() => sendNamedTemplate('hello_how_are_you')}
+          >
+            {#if sending}
+              <svg class="w-3.5 h-3.5 animate-spin" fill="none" viewBox="0 0 24 24">
+                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path>
+              </svg>
+              Sending…
+            {:else}
+              <svg class="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 24 24">
+                <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347z"/>
+              </svg>
+              Send Hi
+            {/if}
+          </button>
+        </div>
       {:else}
         {#each messages as msg (msg.id)}
           {@const isOut = msg.direction === 'outbound'}
@@ -304,7 +407,8 @@
       </div>
     {/if}
 
-    <!-- Send input -->
+    <!-- Send input (only after conversation has started) -->
+    {#if messages.length > 0}
     <div class="flex gap-2 mt-2 pt-2 border-t border-gray-100">
       <textarea
         bind:value={newMessage}
@@ -346,5 +450,6 @@
         </button>
       {/if}
     </div>
+    {/if}
   </div>
 {/if}

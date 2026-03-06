@@ -15,6 +15,7 @@
   export let stages = [];
   export let activityTypes = [];
   export let waConversationId = null;
+  export let userLanguage = 'en';
   export let prevLeadId = null;
   export let nextLeadId = null;
   export let navParams = '';
@@ -29,7 +30,9 @@
   // computed field on LeadDetailSerializer — resolved by phone number server-side).
   // When the contact/phone changes and the lead is re-PATCHed, the response
   // includes the updated wa_conversation_id — no separate API query needed.
-  $: currentWaConversationId = currentLead.wa_conversation_id ?? null;
+  // Prefer the FK-based value from the serialized lead; fall back to the
+  // phone-resolved value from _resolve_wa_conversation_id (top-level prop).
+  $: currentWaConversationId = (currentLead.wa_conversation_id ?? waConversationId) ?? null;
 
   onMount(() => {
     setCurrentLead(currentLead);
@@ -101,7 +104,7 @@
         {leadId}
         {apiUrls}
         {activityTypes}
-        waConversationId={currentWaConversationId}
+        {userLanguage}
         onLeadUpdated={handleLeadUpdated}
       />
     </div>

@@ -477,6 +477,32 @@ def opportunity_create(request):
     })
 
 
+def _resolve_wa_conversation_id(lead, lead_dict):
+    """Return the WhatsApp conversation ID for a lead.
+
+    Prefers the direct FK link. Falls back to a phone-number lookup so
+    conversations started from the inbox still appear on the lead form.
+    """
+    conv_id = lead_dict.get('wa_conversation_id')
+    if conv_id:
+        return conv_id
+    from apps.messaging.models import WhatsAppConversation
+    from apps.messaging.services.whatsapp_service import _normalize_phone
+    contact = lead.contact
+    phone = (contact.mobile or contact.phone) if contact else ""
+    phone = phone or lead.phone
+    if not phone:
+        return None
+    conv = WhatsAppConversation.objects.filter(phone_number=_normalize_phone(phone)).first()
+    return conv.pk if conv else None
+
+
+@login_required
+def opportunity_edit_redirect(request, pk):
+    """Redirect stale URLs like /opportunities/2/edit/null to the correct edit URL."""
+    return redirect("crm:opportunity_edit", pk=pk)
+
+
 @login_required
 def opportunity_edit(request, pk):
     """Lead/opportunity edit — serves Svelte shell with serialized initial data."""
@@ -538,6 +564,9 @@ def opportunity_edit(request, pk):
     if selected_stage_id:
         nav_params += f"&stage={selected_stage_id}"
 
+    from apps.user_settings.models import UserPreferences
+    user_lang = UserPreferences.get_or_create_for_user(request.user).language
+
     stages = LeadStage.get_stages_for_team(request.user.sales_team)
     activity_types = ActivityType.objects.filter(is_active=True)
     lead_dict = json.loads(JSONRenderer().render(LeadDetailSerializer(lead).data))
@@ -554,7 +583,8 @@ def opportunity_edit(request, pk):
             {'id': t.id, 'name': t.name, 'icon': t.icon, 'color': t.color}
             for t in activity_types
         ],
-        'waConversationId': lead_dict.get('wa_conversation_id'),
+        'waConversationId': _resolve_wa_conversation_id(lead, lead_dict),
+        'userLanguage': user_lang,
         'prevLeadId': prev_lead_id,
         'nextLeadId': next_lead_id,
         'navParams': nav_params,

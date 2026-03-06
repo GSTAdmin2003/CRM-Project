@@ -150,7 +150,7 @@ class WhatsAppTemplateDeleteView(AdminRequiredMixin, View):
 class RefreshTemplateStatusesView(AdminRequiredMixin, View):
     def post(self, request):
         from apps.messaging.models import WhatsAppConfig, WhatsAppTemplate
-        from apps.messaging.meta_client import fetch_template_statuses, _LANGUAGE_TO_LOCALE
+        from apps.messaging.meta_client import fetch_template_details, _LANGUAGE_TO_LOCALE
 
         config = WhatsAppConfig.get_config()
         if not config or not config.can_submit_templates():
@@ -158,27 +158,52 @@ class RefreshTemplateStatusesView(AdminRequiredMixin, View):
             return redirect("settings:whatsapp:templates_list")
 
         try:
-            statuses = fetch_template_statuses(config.waba_id)
+            details = fetch_template_details(config.waba_id)
         except Exception as exc:
             messages.error(request, f"Failed to fetch statuses from Meta: {exc}")
             return redirect("settings:whatsapp:templates_list")
-
-        # Reverse map: locale → short code (e.g. "en_US" → "en")
-        locale_to_lang = {v: k for k, v in _LANGUAGE_TO_LOCALE.items()}
 
         updated = 0
         valid = {c[0] for c in WhatsAppTemplate._meta.get_field("approval_status").choices}
         for tmpl in WhatsAppTemplate.objects.all():
             locale = _LANGUAGE_TO_LOCALE.get(tmpl.language, tmpl.language)
-            meta_status = statuses.get((tmpl.name, locale), "")
-            if meta_status:
-                new_status = meta_status.lower()
+            # Try mapped locale first (e.g. en_US), then bare language code (e.g. en)
+            actual_locale = None
+            meta = details.get((tmpl.name, locale))
+            if meta:
+                actual_locale = locale
             else:
-                # Template not found on Meta (deleted/never submitted) → reset to draft
-                new_status = "draft"
+                meta = details.get((tmpl.name, tmpl.language))
+                if meta:
+                    actual_locale = tmpl.language
+
+            fields_to_save = []
+            new_status = meta.get("status", "").lower() if meta else "draft"
             if new_status in valid and new_status != tmpl.approval_status:
                 tmpl.approval_status = new_status
-                tmpl.save(update_fields=["approval_status"])
+                fields_to_save.append("approval_status")
+
+            if meta and actual_locale:
+                # Save the exact locale Meta uses so we can send with the correct code
+                if actual_locale != tmpl.meta_locale:
+                    tmpl.meta_locale = actual_locale
+                    fields_to_save.append("meta_locale")
+
+                body_text = meta.get("body_text", "")
+                var_count = meta.get("variable_count", 0)
+                if body_text and body_text != tmpl.body_preview:
+                    tmpl.body_preview = body_text
+                    fields_to_save.append("body_preview")
+                if var_count != len(tmpl.variable_names):
+                    existing = list(tmpl.variable_names or [])
+                    tmpl.variable_names = [
+                        existing[i] if i < len(existing) else f"Variable {i + 1}"
+                        for i in range(var_count)
+                    ]
+                    fields_to_save.append("variable_names")
+
+            if fields_to_save:
+                tmpl.save(update_fields=fields_to_save)
                 updated += 1
 
         messages.success(request, f"Statuses refreshed from Meta. {updated} template(s) updated.")
@@ -189,7 +214,6 @@ class SubmitTemplateApprovalView(AdminRequiredMixin, View):
     def post(self, request, pk):
         from apps.messaging.models import WhatsAppTemplate, WhatsAppConfig
         from apps.messaging.meta_client import submit_template_for_approval
-        from apps.crm.models import SalesTeam
 
         template = get_object_or_404(WhatsAppTemplate, pk=pk)
         config = WhatsAppConfig.get_config()
@@ -197,26 +221,27 @@ class SubmitTemplateApprovalView(AdminRequiredMixin, View):
             messages.error(request, "WABA ID not configured. Set it in WhatsApp → Configuration.")
             return redirect("settings:whatsapp:templates_list")
 
-        # Use a team's pitch PDF for this language as the sample HEADER example
-        if template.language == 'ka':
-            team = SalesTeam.objects.filter(is_active=True).exclude(pitch_pdf_ka='').first()
-            pdf_field = 'pitch_pdf_ka'
-            filename_field = 'pitch_pdf_filename_ka'
-        else:
-            team = SalesTeam.objects.filter(is_active=True).exclude(pitch_pdf='').first()
-            pdf_field = 'pitch_pdf'
-            filename_field = 'pitch_pdf_filename'
-
+        # Only sales_pitch_* templates include a document header example
         header_file_path = ""
         header_filename = ""
-        if team:
-            pdf_file = getattr(team, pdf_field)
-            if pdf_file:
-                try:
-                    header_file_path = pdf_file.path
-                    header_filename = getattr(team, filename_field) or "sales_pitch.pdf"
-                except Exception:
-                    pass  # File missing on disk — submit body-only
+        if template.name.startswith("sales_pitch"):
+            from apps.crm.models import SalesTeam
+            if template.language == 'ka':
+                team = SalesTeam.objects.filter(is_active=True).exclude(pitch_pdf_ka='').first()
+                pdf_field = 'pitch_pdf_ka'
+                filename_field = 'pitch_pdf_filename_ka'
+            else:
+                team = SalesTeam.objects.filter(is_active=True).exclude(pitch_pdf='').first()
+                pdf_field = 'pitch_pdf'
+                filename_field = 'pitch_pdf_filename'
+            if team:
+                pdf_file = getattr(team, pdf_field)
+                if pdf_file:
+                    try:
+                        header_file_path = pdf_file.path
+                        header_filename = getattr(team, filename_field) or "sales_pitch.pdf"
+                    except Exception:
+                        pass  # File missing on disk — submit body-only
 
         try:
             submit_template_for_approval(
@@ -235,6 +260,39 @@ class SubmitTemplateApprovalView(AdminRequiredMixin, View):
         return redirect("settings:whatsapp:templates_list")
 
 
+class DeleteFromMetaView(AdminRequiredMixin, View):
+    """Delete a template from Meta (but keep the local DB record) and reset status to draft."""
+
+    def post(self, request, pk):
+        from apps.messaging.models import WhatsAppTemplate, WhatsAppConfig
+        from apps.messaging.meta_client import delete_meta_template_by_name
+
+        template = get_object_or_404(WhatsAppTemplate, pk=pk)
+        config = WhatsAppConfig.get_config()
+        if not config or not config.can_submit_templates():
+            messages.error(request, "WABA ID not configured.")
+            return redirect("settings:whatsapp:templates_list")
+
+        try:
+            found = delete_meta_template_by_name(config.waba_id, template.name)
+            if found:
+                messages.success(
+                    request,
+                    f"'{template.display_name}' deleted from Meta. "
+                    "⏳ Wait 2–3 minutes before clicking Send for Approval — Meta needs time to process the deletion."
+                )
+            else:
+                messages.success(request, f"'{template.display_name}' was already removed from Meta. Status reset to Draft.")
+        except Exception as exc:
+            messages.error(request, f"Delete failed: {exc}")
+            return redirect("settings:whatsapp:templates_list")
+
+        template.approval_status = "draft"
+        template.meta_locale = ""
+        template.save(update_fields=["approval_status", "meta_locale"])
+        return redirect("settings:whatsapp:templates_list")
+
+
 whatsapp_urls = [
     path("", WhatsAppSettingsView.as_view(), name="config"),
     path("templates/", WhatsAppTemplateListView.as_view(), name="templates_list"),
@@ -242,5 +300,6 @@ whatsapp_urls = [
     path("templates/add/", WhatsAppTemplateCreateView.as_view(), name="template_create"),
     path("templates/<int:pk>/edit/", WhatsAppTemplateEditView.as_view(), name="template_edit"),
     path("templates/<int:pk>/delete/", WhatsAppTemplateDeleteView.as_view(), name="template_delete"),
+    path("templates/<int:pk>/delete-from-meta/", DeleteFromMetaView.as_view(), name="template_delete_from_meta"),
     path("templates/<int:pk>/submit-approval/", SubmitTemplateApprovalView.as_view(), name="template_submit_approval"),
 ]

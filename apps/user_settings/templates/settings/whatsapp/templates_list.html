@@ -118,6 +118,15 @@ WhatsApp Templates
                                 <span class="text-xs text-amber-600"><i class="fas fa-clock mr-1"></i>Awaiting Meta</span>
                                 {% elif tmpl.approval_status == 'approved' %}
                                 <span class="text-xs text-green-600"><i class="fas fa-check mr-1"></i>Ready</span>
+                                <form method="post" action="{% url 'settings:whatsapp:template_delete_from_meta' tmpl.pk %}" style="display:inline">
+                                    {% csrf_token %}
+                                    <button type="submit"
+                                        {% if not config.can_submit_templates %}disabled title="Set WABA ID in Configuration first"{% endif %}
+                                        class="text-gray-400 hover:text-red-500 text-xs disabled:opacity-40 disabled:cursor-not-allowed"
+                                        title="Delete from Meta so you can resubmit cleanly">
+                                        <i class="fas fa-trash-alt"></i>
+                                    </button>
+                                </form>
                                 {% endif %}
                             </div>
                         {% endfor %}

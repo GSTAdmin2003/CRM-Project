@@ -35,7 +35,15 @@ def send_text_message(to_number: str, body: str) -> dict:
         "text": {"body": body},
     }
     resp = requests.post(url, json=payload, headers=headers, timeout=10)
-    resp.raise_for_status()
+    if not resp.ok:
+        try:
+            err = resp.json().get("error", {})
+            detail = err.get("message") or resp.text
+            raise ValueError(f"Meta API error {resp.status_code}: {detail}")
+        except ValueError:
+            raise
+        except Exception:
+            resp.raise_for_status()
     return resp.json()
 
 
@@ -56,7 +64,6 @@ def send_template_message(
         raise ValueError(
             "WhatsApp is not configured. Go to Settings → WhatsApp to add your credentials."
         )
-    language_code = _LANGUAGE_TO_LOCALE.get(language_code, language_code)
     url = f"{GRAPH_API_BASE}/{config.phone_number_id}/messages"
     headers = {
         "Authorization": f"Bearer {config.access_token}",
@@ -92,7 +99,18 @@ def send_template_message(
         "template": template_payload,
     }
     resp = requests.post(url, json=payload, headers=headers, timeout=10)
-    resp.raise_for_status()
+    if not resp.ok:
+        try:
+            err = resp.json().get("error", {})
+            detail = err.get("message") or resp.text
+            code = err.get("code", "")
+            raise ValueError(
+                f"Meta API error {resp.status_code} (code={code}): {detail}"
+            )
+        except ValueError:
+            raise
+        except Exception:
+            resp.raise_for_status()
     return resp.json()
 
 
@@ -125,6 +143,51 @@ _LANGUAGE_TO_LOCALE = {
     "en": "en_US",
     "ka": "ka",
 }
+
+
+def fetch_template_details(waba_id: str) -> dict:
+    """Fetch full template details from Meta including components and body variables.
+
+    Returns a dict keyed by (name, locale) → {status, body_text, variable_count}.
+    variable_count is the number of {{N}} placeholders in the BODY component.
+    """
+    import re as _re
+
+    config = _get_config()
+    if not config or not config.is_configured():
+        raise ValueError(
+            "WhatsApp is not configured. Go to Settings → WhatsApp to add your credentials."
+        )
+    results = {}
+    url = f"{GRAPH_API_BASE}/{waba_id}/message_templates"
+    params = {"fields": "name,language,status,components", "limit": 100}
+    headers = {"Authorization": f"Bearer {config.access_token}"}
+
+    while url:
+        resp = requests.get(url, params=params, headers=headers, timeout=15)
+        if not resp.ok:
+            try:
+                msg = resp.json().get("error", {}).get("message", resp.text)
+            except Exception:
+                msg = resp.text
+            raise ValueError(f"Meta API error {resp.status_code}: {msg}")
+        data = resp.json()
+        for t in data.get("data", []):
+            key = (t.get("name", ""), t.get("language", ""))
+            body = next(
+                (c for c in t.get("components", []) if c.get("type") == "BODY"), {}
+            )
+            body_text = body.get("text", "")
+            variable_count = len(set(_re.findall(r"\{\{\d+\}\}", body_text)))
+            results[key] = {
+                "status": t.get("status", "").lower(),
+                "body_text": body_text,
+                "variable_count": variable_count,
+            }
+        url = data.get("paging", {}).get("next")
+        params = {}
+
+    return results
 
 
 def fetch_template_statuses(waba_id: str) -> dict:
@@ -162,6 +225,30 @@ def fetch_template_statuses(waba_id: str) -> dict:
         params = {}  # next URL already includes params
 
     return results
+
+
+def delete_meta_template_by_name(waba_id: str, template_name: str) -> bool:
+    """Delete ALL variants of a template from Meta using name-only delete.
+
+    Returns True if Meta accepted the request, False if the template wasn't found.
+    Raises ValueError on API error.
+    """
+    config = _get_config()
+    resp = requests.delete(
+        f"{GRAPH_API_BASE}/{waba_id}/message_templates",
+        params={"name": template_name},
+        headers={"Authorization": f"Bearer {config.access_token}"},
+        timeout=10,
+    )
+    if resp.status_code == 404:
+        return False
+    if not resp.ok:
+        try:
+            msg = resp.json().get("error", {}).get("message", resp.text)
+        except Exception:
+            msg = resp.text
+        raise ValueError(f"Meta API error {resp.status_code}: {msg}")
+    return True
 
 
 def _get_meta_template_id(waba_id: str, template_name: str, locale: str) -> str:
@@ -285,17 +372,7 @@ def submit_template_for_approval(
         raise ValueError(
             "WhatsApp is not configured. Go to Settings → WhatsApp to add your credentials."
         )
-    locale = _LANGUAGE_TO_LOCALE.get(language, language)
-
-    # Delete any existing Meta template for this name+locale before resubmitting.
-    # Meta rejects submissions (2388049) if the template already exists — even in PENDING state.
-    import time
-
-    existing_id = _get_meta_template_id(waba_id, template_name, locale)
-    if existing_id:
-        _delete_meta_template(waba_id, existing_id, template_name)
-        # Give Meta a moment to process the deletion before resubmitting.
-        time.sleep(3)
+    locale = language
 
     url = f"{GRAPH_API_BASE}/{waba_id}/message_templates"
     auth_headers = {

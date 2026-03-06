@@ -23,10 +23,13 @@ def inbox(request):
     import json
     from django.core.serializers.json import DjangoJSONEncoder
 
+    from apps.user_settings.models import UserPreferences
+    user_lang = UserPreferences.get_or_create_for_user(request.user).language
     init_data = {
         'apiUrls': {
             'conversations': '/messaging/api/conversations/',
         },
+        'userLanguage': user_lang,
     }
     return render(request, 'messaging/inbox.html', {
         'init_data_json': json.dumps(init_data, cls=DjangoJSONEncoder),

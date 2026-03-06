@@ -114,6 +114,63 @@ class ConversationViewSet(ListModelMixin, RetrieveModelMixin, GenericViewSet):
         serializer = WhatsAppMessageSerializer(message)
         return Response(serializer.data, status=status.HTTP_201_CREATED)
 
+    @action(detail=False, methods=["get"], url_path="for_lead")
+    def for_lead(self, request):
+        """Resolve conversation for a lead: FK lookup first, then phone fallback."""
+        lead_id = request.query_params.get("lead_id")
+        if not lead_id:
+            return Response({"detail": "lead_id is required."}, status=status.HTTP_400_BAD_REQUEST)
+        try:
+            from apps.crm.models import Lead
+
+            lead = Lead.objects.select_related("contact").get(id=int(lead_id))
+        except (Lead.DoesNotExist, ValueError, TypeError):
+            return Response({"detail": "Lead not found."}, status=status.HTTP_404_NOT_FOUND)
+
+        conv = WhatsAppConversation.objects.filter(lead_id=lead.id).first()
+        if not conv:
+            from apps.messaging.services.whatsapp_service import _normalize_phone
+
+            contact = lead.contact
+            phone = (contact.mobile or contact.phone) if contact else ""
+            phone = phone or lead.phone
+            if phone:
+                conv = WhatsAppConversation.objects.filter(
+                    phone_number=_normalize_phone(phone)
+                ).first()
+
+        if not conv:
+            return Response({"detail": "No conversation found."}, status=status.HTTP_404_NOT_FOUND)
+
+        serializer = self.get_serializer(conv)
+        return Response(serializer.data)
+
+    @action(detail=False, methods=["post"], url_path="send_hi_for_lead")
+    def send_hi_for_lead(self, request):
+        """Create/find a conversation for the lead's phone and send the greeting template."""
+        from core.exceptions import NotFoundError, ValidationError
+
+        lead_id = request.data.get("lead_id")
+        language = (request.data.get("language") or "en").strip()
+        if not lead_id:
+            return Response({"detail": "lead_id is required."}, status=status.HTTP_400_BAD_REQUEST)
+        try:
+            conv, message = WhatsAppService.send_hi_for_lead(
+                lead_id=int(lead_id), language=language, sent_by=request.user
+            )
+        except (NotFoundError, ValidationError) as exc:
+            return Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+        except Exception as exc:
+            return Response({"detail": str(exc)}, status=status.HTTP_502_BAD_GATEWAY)
+
+        return Response(
+            {
+                "conversation_id": conv.id,
+                "message": WhatsAppMessageSerializer(message).data,
+            },
+            status=status.HTTP_201_CREATED,
+        )
+
     @action(detail=True, methods=["post"], url_path="send_named_template")
     def send_named_template(self, request, pk=None):
         """Send a template by name, auto-resolving language from the conversation's contact."""
@@ -147,9 +204,11 @@ class ConversationViewSet(ListModelMixin, RetrieveModelMixin, GenericViewSet):
             serializer = WhatsAppMessageSerializer(message)
             return Response(serializer.data, status=status.HTTP_201_CREATED)
 
-        # Generic template: resolve language from contact, look up approved template.
-        contact = conversation.contact
-        language = contact.effective_language if contact else "en"
+        # Generic template: resolve language — body override > contact > default.
+        language = request.data.get("language", "").strip()
+        if not language:
+            contact = conversation.contact
+            language = contact.effective_language if contact else "en"
 
         # Try language-suffixed name first (e.g. hello_how_are_you_ka),
         # then the plain name (e.g. hello_how_are_you for en).

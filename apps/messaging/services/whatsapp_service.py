@@ -143,8 +143,11 @@ class WhatsAppService:
         conv = WhatsAppConversation.objects.get(id=conversation_id)
         template = WhatsAppTemplate.objects.get(id=template_id)
         rendered_body = template.render_body(variables)
+        # Use meta_locale (populated by Refresh Statuses) so we send the exact
+        # locale code Meta registered the template under, avoiding error 132012.
+        send_locale = template.meta_locale or template.language
         result = _send_template_api(
-            conv.phone_number, template.name, template.language, variables
+            conv.phone_number, template.name, send_locale, variables
         )
         wa_id = result.get("messages", [{}])[0].get("id")
         msg = WhatsAppMessage.objects.create(
@@ -161,6 +164,67 @@ class WhatsAppService:
         conv_id = conv.id
         transaction.on_commit(lambda: _notify_conversation(conv_id))
         return msg
+
+    @staticmethod
+    @transaction.atomic
+    def send_hi_for_lead(
+        *, lead_id: int, language: str, sent_by
+    ) -> tuple:
+        """Get-or-create a conversation for the lead's phone, then send the 'hello_how_are_you'
+        template in the given language.
+
+        Returns (WhatsAppConversation, WhatsAppMessage).
+        Raises: core.exceptions.NotFoundError, core.exceptions.ValidationError
+        """
+        from core.exceptions import NotFoundError, ValidationError
+        from apps.crm.models import Lead
+
+        try:
+            lead = Lead.objects.select_related("contact").get(id=lead_id)
+        except Lead.DoesNotExist:
+            raise NotFoundError(f"Lead {lead_id} not found.")
+
+        contact = lead.contact
+        phone = (contact.mobile or contact.phone) if contact else ""
+        phone = phone or lead.phone
+        if not phone:
+            raise ValidationError(
+                "This lead has no phone number. Add a phone number before sending a message."
+            )
+
+        # Resolve template for language
+        template = (
+            WhatsAppTemplate.objects.filter(
+                name=f"hello_how_are_you_{language}",
+                language=language,
+                is_active=True,
+                approval_status="approved",
+            ).first()
+            or WhatsAppTemplate.objects.filter(
+                name="hello_how_are_you",
+                language=language,
+                is_active=True,
+                approval_status="approved",
+            ).first()
+        )
+        if not template:
+            raise ValidationError(
+                f"No approved 'hello_how_are_you' template for language '{language}'. "
+                "Submit the template for Meta approval first."
+            )
+
+        conv = WhatsAppService.get_or_create_conversation_for_phone(phone=phone)
+        if contact:
+            WhatsAppService.link_to_contact(conversation_id=conv.id, contact_id=contact.id)
+        WhatsAppService.link_to_lead(conversation_id=conv.id, lead_id=lead.id)
+
+        message = WhatsAppService.send_template_message(
+            conversation_id=conv.id,
+            template_id=template.id,
+            variables=[],
+            sent_by=sent_by,
+        )
+        return conv, message
 
     @staticmethod
     def mark_conversation_read(*, conversation_id: int) -> None:
@@ -260,10 +324,11 @@ class WhatsAppService:
         WhatsAppService.link_to_lead(conversation_id=conv.id, lead_id=lead.id)
 
         rendered_body = template.render_body([recipient_name])
+        send_locale = template.meta_locale or template.language
         result = _send_tpl(
             _normalize_phone(phone),
             template.name,
-            lang,
+            send_locale,
             [recipient_name],
             document_media_id=media_id,
             document_filename=pdf_filename,

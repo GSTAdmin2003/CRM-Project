@@ -35,6 +35,12 @@ class WhatsAppTemplate(models.Model):
         default=list,
         help_text="Ordered list of UI labels for each placeholder (e.g. ['Customer Name', 'Date'])",
     )
+    meta_locale = models.CharField(
+        max_length=20,
+        blank=True,
+        default='',
+        help_text="Exact locale code Meta registered this template under (populated by Refresh Statuses)",
+    )
     is_active = models.BooleanField(default=True)
     approval_status = models.CharField(
         max_length=20, choices=APPROVAL_STATUS_CHOICES, default='draft',

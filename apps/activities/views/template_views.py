@@ -4,12 +4,16 @@ Template views — existing Django views preserved during DRF transition.
 These views render HTML templates and use ActivityService for business logic.
 """
 
+import json
+
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
+from django.core.serializers.json import DjangoJSONEncoder
 from django.http import Http404, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.views.decorators.http import require_GET, require_POST
 
+from apps.activities.models import ActivityType
 from apps.crm.models import SalesTeam
 from core.exceptions import NotFoundError, PermissionDeniedError, ValidationError
 
@@ -62,10 +66,25 @@ def activity_create(request):
         if form.is_valid():
             form.save()
             return redirect("activities:dashboard")
-    else:
-        form = ActivityForm(user=request.user, lead_id=lead_id)
 
-    return render(request, "activities/activity_form.html", {"form": form, "action": "Create Activity"})
+    init_data = {
+        "activity": None,
+        "activityTypes": list(
+            ActivityType.objects.filter(is_active=True).values("id", "name", "icon", "color")
+        ),
+        "leadId": int(lead_id) if lead_id else None,
+        "apiUrls": {
+            "activities": "/activities/api/activities/",
+            "activityTypes": "/activities/api/activity-types/",
+            "leads": "/crm/api/leads/",
+        },
+    }
+
+    return render(
+        request,
+        "activities/activity_form.html",
+        {"init_data_json": json.dumps(init_data, cls=DjangoJSONEncoder)},
+    )
 
 
 @login_required
@@ -79,20 +98,49 @@ def activity_detail(request, pk):
     if not activity.can_be_viewed_by(request.user):
         raise Http404()
 
-    # For Phone Call activities, pass the PhoneCallExtension for call details display
-    phone_call = getattr(activity, "phone_call", None)
+    init_data = {
+        "activity": {
+            "id": activity.id,
+            "title": activity.title,
+            "description": activity.description,
+            "scheduledDate": activity.scheduled_date.isoformat() if activity.scheduled_date else None,
+            "completedDate": activity.completed_at.isoformat() if getattr(activity, "completed_at", None) else None,
+            "status": activity.status,
+            "outcome": activity.outcome if hasattr(activity, "outcome") else "",
+            "activityType": {
+                "id": activity.activity_type.id,
+                "name": activity.activity_type.name,
+                "icon": activity.activity_type.icon,
+                "color": activity.activity_type.color,
+            } if activity.activity_type else None,
+            "leadTitle": activity.lead.title if activity.lead else None,
+            "leadId": activity.lead_id,
+            "assignedToName": activity.assigned_to.get_full_name() if activity.assigned_to else None,
+            "createdByName": activity.created_by.get_full_name() if activity.created_by else None,
+            "createdAt": activity.created_at.isoformat(),
+        },
+        "canEdit": activity.can_be_edited_by(request.user),
+        "apiUrls": {
+            "activityDetail": f"/activities/api/activities/{activity.pk}/",
+            "complete": f"/activities/api/activities/{activity.pk}/complete/",
+            "activities": "/activities/api/activities/",
+        },
+    }
 
     return render(
         request,
         "activities/activity_detail.html",
-        {"activity": activity, "phone_call": phone_call, "can_edit": activity.can_be_edited_by(request.user)},
+        {"init_data_json": json.dumps(init_data, cls=DjangoJSONEncoder)},
     )
 
 
 @login_required
 def activity_edit(request, pk):
     """Edit existing activity"""
-    activity = get_object_or_404(Activity, pk=pk)
+    activity = get_object_or_404(
+        Activity.objects.select_related("activity_type", "lead", "assigned_to"),
+        pk=pk,
+    )
 
     if not activity.can_be_edited_by(request.user):
         raise Http404()
@@ -102,20 +150,40 @@ def activity_edit(request, pk):
         if form.is_valid():
             form.save()
             return redirect("activities:dashboard")
-    else:
-        form = ActivityForm(instance=activity, user=request.user)
 
-    phone_call = getattr(activity, "phone_call", None)
+    init_data = {
+        "activity": {
+            "id": activity.id,
+            "title": activity.title,
+            "description": activity.description,
+            "scheduledDate": activity.scheduled_date.isoformat() if activity.scheduled_date else None,
+            "status": activity.status,
+            "outcome": activity.outcome if hasattr(activity, "outcome") else "",
+            "activityTypeId": activity.activity_type_id,
+            "leadId": activity.lead_id,
+            "assignedToId": activity.assigned_to_id,
+        },
+        "activityTypes": list(
+            ActivityType.objects.filter(is_active=True).values("id", "name", "icon", "color")
+        ),
+        "leadId": activity.lead_id,
+        "apiUrls": {
+            "activities": "/activities/api/activities/",
+            "activityTypes": "/activities/api/activity-types/",
+            "leads": "/crm/api/leads/",
+        },
+    }
+
     return render(
         request,
         "activities/activity_form.html",
-        {"form": form, "activity": activity, "action": "Edit Activity", "phone_call": phone_call},
+        {"init_data_json": json.dumps(init_data, cls=DjangoJSONEncoder)},
     )
 
 
 @login_required
 def activity_delete(request, pk):
-    """Delete activity"""
+    """Delete activity — POST deletes, GET redirects to detail page (delete via modal there)."""
     activity = get_object_or_404(Activity, pk=pk)
 
     if not activity.can_be_edited_by(request.user):
@@ -125,7 +193,7 @@ def activity_delete(request, pk):
         activity.delete()
         return redirect("activities:dashboard")
 
-    return render(request, "activities/activity_confirm_delete.html", {"activity": activity})
+    return redirect("activities:activity_detail", pk=pk)
 
 
 @login_required

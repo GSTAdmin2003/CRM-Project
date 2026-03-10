@@ -1,66 +1,7 @@
 {% extends 'settings/base.html' %}
-
-{% block page_title %}Working Hours{% endblock %}
-{% block page_description %}Set the hours and days when inbound calls should be accepted{% endblock %}
-
+{% load django_vite %}
+{% block extra_head %}{% vite_asset 'src/entries/voip_working_hours.js' %}{% endblock %}
 {% block settings_content %}
-
-{% if messages %}
-{% for message in messages %}
-<div class="mb-4 {% if message.tags == 'success' %}bg-green-50 border-green-200 text-green-700{% else %}bg-red-50 border-red-200 text-red-700{% endif %} border rounded-md p-4">
-    <div class="text-sm">{{ message }}</div>
-</div>
-{% endfor %}
-{% endif %}
-
-<form method="post">
-    {% csrf_token %}
-
-    <p class="text-sm text-gray-500 mb-6">
-        Calls received outside these hours will play the non-working hours sound (if configured). Leave blank to accept calls at all times.
-    </p>
-
-    <!-- Time Range -->
-    <div class="grid grid-cols-1 gap-6 sm:grid-cols-2 mb-8">
-        <div>
-            <label for="id_working_hours_start" class="block text-sm font-medium text-gray-700">Start Time</label>
-            <div class="mt-1">{{ form.working_hours_start }}</div>
-            {% if form.working_hours_start.errors %}
-            <p class="mt-1 text-sm text-red-600">{{ form.working_hours_start.errors.0 }}</p>
-            {% endif %}
-        </div>
-        <div>
-            <label for="id_working_hours_end" class="block text-sm font-medium text-gray-700">End Time</label>
-            <div class="mt-1">{{ form.working_hours_end }}</div>
-            {% if form.working_hours_end.errors %}
-            <p class="mt-1 text-sm text-red-600">{{ form.working_hours_end.errors.0 }}</p>
-            {% endif %}
-        </div>
-    </div>
-
-    <!-- Working Days -->
-    <div class="mb-8">
-        <label class="block text-sm font-medium text-gray-700 mb-3">Working Days</label>
-        {% if form.working_days_choices.errors %}
-        <p class="mb-2 text-sm text-red-600">{{ form.working_days_choices.errors.0 }}</p>
-        {% endif %}
-        <div class="flex flex-wrap gap-3">
-            {% for value, label in weekday_choices %}
-            <label class="inline-flex items-center">
-                <input type="checkbox" name="working_days_choices" value="{{ value }}"
-                       {% if value in form.working_days_choices.value %}checked{% endif %}
-                       class="rounded border-gray-300 text-indigo-600 shadow-sm focus:border-indigo-300 focus:ring focus:ring-indigo-200 focus:ring-opacity-50">
-                <span class="ml-2 text-sm text-gray-700">{{ label }}</span>
-            </label>
-            {% endfor %}
-        </div>
-    </div>
-
-    <div class="flex justify-end pt-4 border-t border-gray-200">
-        <button type="submit" class="bg-indigo-600 py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white hover:bg-indigo-700">
-            <i class="fas fa-save mr-2"></i>Save Working Hours
-        </button>
-    </div>
-</form>
-
+<script id="voip_working_hours-init-data" type="application/json">{{ init_data_json|safe }}</script>
+<div id="svelte-voip_working_hours-root"></div>
 {% endblock %}

@@ -10,6 +10,7 @@ import json
 
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
+from django.core.serializers.json import DjangoJSONEncoder
 from django.db.models import Q, Sum
 from django.http import Http404, HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
@@ -29,6 +30,8 @@ from datetime import timedelta
 @login_required
 def crm_dashboard(request):
     """CRM main dashboard"""
+    from django.core.serializers.json import DjangoJSONEncoder
+
     user_leads = request.user.get_accessible_leads_queryset()
 
     # Get this week's activities based on user role
@@ -41,13 +44,35 @@ def crm_dashboard(request):
         scheduled_date__lte=week_end
     ).select_related('activity_type', 'lead', 'assigned_to').order_by('scheduled_date', 'created_at')
 
-    context = {
-        'total_leads': user_leads.count(),
-        'total_value': user_leads.aggregate(total=Sum('estimated_value'))['total'] or 0,
-        'week_activities': week_activities,
+    init_data = {
+        "totalLeads": user_leads.count(),
+        "totalValue": float(user_leads.aggregate(total=Sum('estimated_value'))['total'] or 0),
+        "weekActivities": [
+            {
+                "id": a.id,
+                "title": a.title,
+                "scheduledDate": a.scheduled_date.isoformat() if a.scheduled_date else None,
+                "leadTitle": a.lead.title if a.lead else None,
+                "assignedTo": a.assigned_to.get_full_name() if a.assigned_to else None,
+                "activityType": {
+                    "name": a.activity_type.name,
+                    "icon": a.activity_type.icon,
+                    "color": a.activity_type.color,
+                } if a.activity_type else None,
+                "status": a.status,
+            }
+            for a in week_activities
+        ],
+        "apiUrls": {
+            "leads": "/crm/api/leads/",
+            "activities": "/activities/api/activities/",
+            "teams": "/crm/api/teams/",
+        },
     }
 
-    return render(request, 'crm/dashboard.html', context)
+    return render(request, 'crm/dashboard.html', {
+        'init_data_json': json.dumps(init_data, cls=DjangoJSONEncoder),
+    })
 
 
 @login_required
@@ -487,13 +512,13 @@ def _resolve_wa_conversation_id(lead, lead_dict):
     if conv_id:
         return conv_id
     from apps.messaging.models import WhatsAppConversation
-    from apps.messaging.services.whatsapp_service import _normalize_phone
+    from apps.messaging.services.helpers import normalize_phone
     contact = lead.contact
     phone = (contact.mobile or contact.phone) if contact else ""
     phone = phone or lead.phone
     if not phone:
         return None
-    conv = WhatsAppConversation.objects.filter(phone_number=_normalize_phone(phone)).first()
+    conv = WhatsAppConversation.objects.filter(phone_number=normalize_phone(phone)).first()
     return conv.pk if conv else None
 
 
@@ -655,108 +680,169 @@ def send_sales_pitch(request, pk):
 
 
 @login_required
+def stage_list(request):
+    """Pipeline stage list — renders Svelte shell."""
+    from django.core.serializers.json import DjangoJSONEncoder
+
+    stages_qs = LeadStage.objects.filter(is_active=True).order_by('order').select_related('sales_team')
+    init_data = {
+        "stages": [
+            {
+                "id": s.id,
+                "name": s.name,
+                "color": s.color,
+                "probability": s.probability,
+                "isClosedStage": s.is_closed_stage,
+                "order": s.order,
+                "teamName": s.sales_team.name if s.sales_team else None,
+            }
+            for s in stages_qs
+        ],
+        "apiUrls": {"stages": "/crm/api/stages/"},
+    }
+    return render(request, 'crm/stage_list.html', {
+        'init_data_json': json.dumps(init_data, cls=DjangoJSONEncoder),
+    })
+
+
+@login_required
+def stage_create(request):
+    """Pipeline stage create — renders Svelte shell."""
+    from django.core.serializers.json import DjangoJSONEncoder
+
+    init_data = {
+        "stage": None,
+        "teams": [{"id": t.id, "name": t.name} for t in SalesTeam.objects.filter(is_active=True)],
+        "teamId": request.GET.get('team_id'),
+        "apiUrls": {"stages": "/crm/api/stages/"},
+    }
+    return render(request, 'crm/stage_form.html', {
+        'init_data_json': json.dumps(init_data, cls=DjangoJSONEncoder),
+    })
+
+
+@login_required
+def stage_edit(request, pk):
+    """Pipeline stage edit — renders Svelte shell."""
+    from django.core.serializers.json import DjangoJSONEncoder
+
+    stage = get_object_or_404(LeadStage, pk=pk)
+    init_data = {
+        "stage": {
+            "id": stage.id,
+            "name": stage.name,
+            "color": stage.color,
+            "probability": stage.probability,
+            "isClosedStage": stage.is_closed_stage,
+            "order": stage.order,
+            "salesTeamId": stage.sales_team.id if stage.sales_team else None,
+        },
+        "teams": [{"id": t.id, "name": t.name} for t in SalesTeam.objects.filter(is_active=True)],
+        "teamId": request.GET.get('team_id'),
+        "apiUrls": {"stages": "/crm/api/stages/"},
+    }
+    return render(request, 'crm/stage_form.html', {
+        'init_data_json': json.dumps(init_data, cls=DjangoJSONEncoder),
+    })
+
+
+@login_required
 def team_list(request):
-    """Sales team list"""
-    teams = SalesTeam.objects.filter(is_active=True)
-    return render(request, 'crm/team_list.html', {'teams': teams})
+    """Sales team list — renders Svelte shell."""
+    from django.core.serializers.json import DjangoJSONEncoder
+
+    teams = SalesTeam.objects.filter(is_active=True).order_by('name')
+    init_data = {
+        "teams": [
+            {
+                "id": t.id,
+                "name": t.name,
+                "managerName": t.manager.get_full_name() if t.manager else None,
+                "memberCount": t.get_team_members().count(),
+            }
+            for t in teams
+        ],
+        "canCreate": request.user.is_sales_manager() or request.user.is_sales_executive() or request.user.is_staff,
+        "apiUrls": {"teams": "/crm/api/teams/"},
+    }
+    return render(request, 'crm/team_list.html', {
+        'init_data_json': json.dumps(init_data, cls=DjangoJSONEncoder),
+    })
 
 
 @login_required
 def team_detail(request, pk):
-    """Sales team detail"""
+    """Sales team detail — renders Svelte shell."""
+    from django.core.serializers.json import DjangoJSONEncoder
+
     team = get_object_or_404(SalesTeam, pk=pk)
-    return render(request, 'crm/team_detail.html', {'team': team})
+    members = team.get_team_members()
+    init_data = {
+        "team": {
+            "id": team.id,
+            "name": team.name,
+            "description": getattr(team, 'description', '') or '',
+            "managerName": team.manager.get_full_name() if team.manager else None,
+        },
+        "members": [
+            {"id": m.id, "name": m.get_full_name(), "email": m.email}
+            for m in members
+        ],
+        "apiUrls": {
+            "teams": "/crm/api/teams/",
+            "stages": "/crm/api/stages/",
+        },
+    }
+    return render(request, 'crm/team_detail.html', {
+        'init_data_json': json.dumps(init_data, cls=DjangoJSONEncoder),
+    })
 
 
 @login_required
 def team_create(request):
-    """Sales team creation"""
+    """Sales team creation — renders Svelte shell."""
+    from django.core.serializers.json import DjangoJSONEncoder
+
     if not (request.user.is_sales_manager() or request.user.is_sales_executive()):
         messages.error(request, 'You do not have permission to create teams.')
         return redirect('crm:team_list')
 
-    if request.method == 'POST':
-        name = request.POST.get('name', '').strip()
-        description = request.POST.get('description', '').strip()
-        manager_id = request.POST.get('manager')
-        is_active = request.POST.get('is_active') == 'on'
-
-        if not name:
-            messages.error(request, 'Team name is required.')
-            return redirect('crm:team_create')
-
-        # Get manager if specified
-        manager = None
-        if manager_id:
-            try:
-                manager = User.objects.get(id=manager_id)
-            except User.DoesNotExist:
-                messages.error(request, 'Selected manager not found.')
-                return redirect('crm:team_create')
-
-        # Create team
-        team = SalesTeam.objects.create(
-            name=name,
-            description=description,
-            manager=manager,
-            is_active=is_active
-        )
-
-        return redirect('crm:team_detail', pk=team.pk)
-
-    # Get potential managers (users with manager or executive roles)
-    users = User.objects.filter(
-        user_roles__role__name__in=['Sales Manager', 'Sales Executive'],
-        is_active=True
-    ).distinct().order_by('first_name', 'last_name', 'username')
-
-    return render(request, 'crm/team_form.html', {'users': users})
+    managers = User.objects.filter(is_active=True).order_by('first_name', 'last_name')
+    init_data = {
+        "team": None,
+        "managers": [{"id": u.id, "name": u.get_full_name()} for u in managers],
+        "apiUrls": {"teams": "/crm/api/teams/"},
+    }
+    return render(request, 'crm/team_form.html', {
+        'init_data_json': json.dumps(init_data, cls=DjangoJSONEncoder),
+    })
 
 
 @login_required
 def team_edit(request, pk):
-    """Sales team edit"""
+    """Sales team edit — renders Svelte shell."""
+    from django.core.serializers.json import DjangoJSONEncoder
+
     team = get_object_or_404(SalesTeam, pk=pk)
 
     if not (request.user.is_sales_manager() or request.user.is_sales_executive()):
         messages.error(request, 'You do not have permission to edit teams.')
         return redirect('crm:team_detail', pk=pk)
 
-    if request.method == 'POST':
-        name = request.POST.get('name', '').strip()
-        description = request.POST.get('description', '').strip()
-        manager_id = request.POST.get('manager')
-        is_active = request.POST.get('is_active') == 'on'
-
-        if not name:
-            messages.error(request, 'Team name is required.')
-            return render(request, 'crm/team_form.html', {'team': team})
-
-        # Get manager if specified
-        manager = None
-        if manager_id:
-            try:
-                manager = User.objects.get(id=manager_id)
-            except User.DoesNotExist:
-                messages.error(request, 'Selected manager not found.')
-                return render(request, 'crm/team_form.html', {'team': team})
-
-        # Update team
-        team.name = name
-        team.description = description
-        team.manager = manager
-        team.is_active = is_active
-        team.save()
-
-        return redirect('crm:team_detail', pk=team.pk)
-
-    # Get potential managers (users with manager or executive roles)
-    users = User.objects.filter(
-        user_roles__role__name__in=['Sales Manager', 'Sales Executive'],
-        is_active=True
-    ).distinct().order_by('first_name', 'last_name', 'username')
-
-    return render(request, 'crm/team_form.html', {'team': team, 'users': users})
+    managers = User.objects.filter(is_active=True).order_by('first_name', 'last_name')
+    init_data = {
+        "team": {
+            "id": team.id,
+            "name": team.name,
+            "description": getattr(team, 'description', '') or '',
+            "managerId": team.manager.id if team.manager else None,
+        },
+        "managers": [{"id": u.id, "name": u.get_full_name()} for u in managers],
+        "apiUrls": {"teams": "/crm/api/teams/"},
+    }
+    return render(request, 'crm/team_form.html', {
+        'init_data_json': json.dumps(init_data, cls=DjangoJSONEncoder),
+    })
 
 
 @login_required
@@ -935,6 +1021,11 @@ def team_stage_create(request, team_pk):
 
     context = {
         'team': team,
+        'init_data_json': json.dumps({
+            'team': {'id': team.pk, 'name': team.name},
+            'stage': None,
+            'apiUrls': {'stages': '/crm/api/stages/'},
+        }, cls=DjangoJSONEncoder),
     }
 
     return render(request, 'crm/team_stage_form.html', context)
@@ -987,6 +1078,17 @@ def team_stage_edit(request, team_pk, stage_pk):
     context = {
         'team': team,
         'stage': stage,
+        'init_data_json': json.dumps({
+            'team': {'id': team.pk, 'name': team.name},
+            'stage': {
+                'id': stage.pk,
+                'name': stage.name,
+                'color': stage.color,
+                'probability': stage.probability,
+                'is_closed_stage': stage.is_closed_stage,
+            },
+            'apiUrls': {'stages': '/crm/api/stages/'},
+        }, cls=DjangoJSONEncoder),
     }
 
     return render(request, 'crm/team_stage_form.html', context)
@@ -1013,9 +1115,22 @@ def team_stage_delete(request, team_pk, stage_pk):
         stage.delete()
         return redirect('crm:team_detail', pk=team_pk)
 
+    from django.urls import reverse
     context = {
         'team': team,
         'stage': stage,
+        'init_data_json': json.dumps({
+            'title': f'Delete Stage — {team.name}',
+            'message': f'This will permanently delete "{stage.name}" from {team.name}\'s pipeline. This cannot be undone.',
+            'details': [
+                {'label': 'Team', 'value': team.name},
+                {'label': 'Stage', 'value': stage.name},
+                {'label': 'Color', 'value': stage.color},
+            ],
+            'confirmLabel': 'Delete Stage',
+            'confirmClass': 'bg-red-600 hover:bg-red-700',
+            'cancelUrl': reverse('crm:team_detail', kwargs={'pk': team_pk}),
+        }, cls=DjangoJSONEncoder),
     }
 
     return render(request, 'crm/team_stage_confirm_delete.html', context)
@@ -1222,8 +1337,24 @@ def lead_delete(request, pk):
         messages.success(request, f'Lead "{lead_identifier}" deleted successfully.')
         return redirect('crm:lead_list')
 
+    lead_name = lead.contact.name if lead.contact else (lead.company.display_name if lead.company else f'Lead #{lead.pk}')
+    details = []
+    if lead.contact:
+        details.append({'label': 'Contact', 'value': lead.contact.name})
+    if lead.company:
+        details.append({'label': 'Company', 'value': lead.company.display_name})
+    details.append({'label': 'Status', 'value': lead.get_status_display()})
+
     context = {
         'lead': lead,
+        'init_data_json': json.dumps({
+            'title': 'Delete Lead',
+            'message': f'Are you sure you want to delete "{lead_name}"? This action cannot be undone.',
+            'details': details,
+            'confirmLabel': 'Delete Lead',
+            'confirmClass': 'bg-red-600 hover:bg-red-700',
+            'cancelUrl': f'/crm/leads/{lead.pk}/',
+        }, cls=DjangoJSONEncoder),
     }
 
     return render(request, 'crm/incoming_lead_confirm_delete.html', context)
@@ -1297,8 +1428,28 @@ def lead_convert(request, pk):
         messages.success(request, f'Lead converted to opportunity successfully.')
         return redirect('crm:opportunity_edit', pk=opportunity.pk)
 
+    details = []
+    if lead.contact:
+        details.append({'label': 'Contact', 'value': lead.contact.name})
+        if lead.contact.email:
+            details.append({'label': 'Email', 'value': lead.contact.email})
+    if lead.company:
+        details.append({'label': 'Company', 'value': lead.company.display_name})
+    if lead.assigned_to:
+        details.append({'label': 'Assigned To', 'value': lead.assigned_to.get_full_name() or lead.assigned_to.username})
+    if lead.sales_team:
+        details.append({'label': 'Sales Team', 'value': lead.sales_team.name})
+
     context = {
         'lead': lead,
+        'init_data_json': json.dumps({
+            'title': 'Convert Lead to Opportunity',
+            'message': 'This will create a new opportunity from this lead. The lead will be marked as "Converted" and linked to the new opportunity.',
+            'details': details,
+            'confirmLabel': 'Convert to Opportunity',
+            'confirmClass': 'bg-green-600 hover:bg-green-700',
+            'cancelUrl': f'/crm/leads/{lead.pk}/',
+        }, cls=DjangoJSONEncoder),
     }
 
     return render(request, 'crm/incoming_lead_confirm_convert.html', context)
@@ -1310,7 +1461,9 @@ def lead_convert(request, pk):
 
 @login_required
 def opportunity_import(request):
-    """Lead import page - shows upload form, preview, or results based on session state"""
+    """Lead import page — renders Svelte shell."""
+    from django.core.serializers.json import DjangoJSONEncoder
+
     # Handle cancel action - clear session and reset to upload state
     if request.GET.get('cancel') == '1':
         request.session.pop('lead_import_state', None)
@@ -1318,22 +1471,16 @@ def opportunity_import(request):
         request.session.pop('lead_import_results', None)
         return redirect('crm:opportunity_import')
 
-    import_state = request.session.get('lead_import_state', 'upload')
-    preview_data = request.session.get('lead_import_preview', None)
-    import_results = request.session.get('lead_import_results', None)
-
-    context = {
-        'import_state': import_state,
-        'preview_data': preview_data,
-        'import_results': import_results,
+    init_data = {
+        "apiUrls": {
+            "upload": "/crm/opportunities/import/upload/",
+            "confirm": "/crm/opportunities/import/confirm/",
+            "template": "/crm/opportunities/import/template/",
+        },
     }
-
-    # Clean up results state after displaying
-    if import_state == 'results':
-        request.session.pop('lead_import_state', None)
-        request.session.pop('lead_import_results', None)
-
-    return render(request, 'crm/lead_import.html', context)
+    return render(request, 'crm/lead_import.html', {
+        'init_data_json': json.dumps(init_data, cls=DjangoJSONEncoder),
+    })
 
 
 @login_required

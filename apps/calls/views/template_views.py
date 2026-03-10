@@ -38,18 +38,56 @@ def call_list(request):
 
 @login_required
 def call_detail(request, pk):
-    """Display call details"""
+    """Call detail — renders Svelte shell."""
+    import json
+    from django.core.serializers.json import DjangoJSONEncoder
+    from apps.calls.serializers.call import CallDetailSerializer
+
     call = get_object_or_404(
         Call.objects.select_related("contact", "opportunity", "user", "recording"),
         pk=pk,
     )
-    logs = call.logs.order_by("timestamp")
 
-    context = {
-        "call": call,
-        "logs": logs,
+    # Preload related objects to avoid lazy-load errors in serializer
+    try:
+        _ = call.transcript
+    except Exception:
+        pass
+    try:
+        _ = call.analysis
+    except Exception:
+        pass
+    try:
+        logs = list(call.logs.order_by("timestamp"))
+    except Exception:
+        logs = []
+
+    serializer_data = CallDetailSerializer(call, context={'request': request}).data
+
+    recording_pk = None
+    if hasattr(call, 'recording') and call.recording is not None:
+        recording_pk = call.recording.pk
+
+    init_data = {
+        "call": dict(serializer_data),
+        "apiUrls": {
+            "callDetail": f"/calls/api/calls/{call.pk}/",
+            "hangup": f"/calls/{call.pk}/hangup/",
+            "startTranscription": f"/calls/{call.pk}/transcript/start/",
+            "cancelTranscription": f"/calls/{call.pk}/transcript/cancel/",
+            "startAnalysis": f"/calls/{call.pk}/analysis/start/",
+            "analysisStatus": f"/calls/{call.pk}/analysis/status/",
+            "updateNotes": f"/calls/{call.pk}/notes/",
+            "linkContact": f"/calls/{call.pk}/link-contact/",
+            "linkOpportunity": f"/calls/{call.pk}/link-opportunity/",
+            "recordingDownload": f"/calls/recording/{recording_pk}/download/" if recording_pk else None,
+            "contacts": "/contacts/api/contacts/",
+            "leads": "/crm/api/leads/",
+        }
     }
-    return render(request, "calls/call_detail.html", context)
+    return render(request, "calls/call_detail.html", {
+        "init_data_json": json.dumps(init_data, cls=DjangoJSONEncoder),
+    })
 
 
 @login_required
@@ -995,12 +1033,23 @@ def sip_settings_view(request):
     else:
         form = SIPSettingsForm(instance=sip)
 
+    import json
+    from django.core.serializers.json import DjangoJSONEncoder
+    init_data = {
+        "apiUrls": {
+            "sipSettings": "/settings/api/sip/",
+            "voipConfig": "/settings/api/voip/config/",
+            "voipSounds": "/settings/api/voip/sounds/",
+            "workingHours": "/settings/api/voip/working-hours/",
+        }
+    }
     return render(request, "calls/sip_settings.html", {
         "form": form,
         "sip_settings": sip,
         "weekday_choices": WEEKDAY_CHOICES,
         "current_section": "voip",
         "current_page": "sip_credentials",
+        "init_data_json": json.dumps(init_data, cls=DjangoJSONEncoder),
     })
 
 
@@ -1335,11 +1384,22 @@ def voip_config_view(request):
     else:
         form = SIPConfigForm(instance=sip)
 
+    import json
+    from django.core.serializers.json import DjangoJSONEncoder
+    init_data = {
+        "apiUrls": {
+            "sipSettings": "/settings/api/sip/",
+            "voipConfig": "/settings/api/voip/config/",
+            "voipSounds": "/settings/api/voip/sounds/",
+            "workingHours": "/settings/api/voip/working-hours/",
+        }
+    }
     return render(request, "calls/voip_config.html", {
         "form": form,
         "sip_settings": sip,
         "current_section": "voip",
         "current_page": "voip_config",
+        "init_data_json": json.dumps(init_data, cls=DjangoJSONEncoder),
     })
 
 
@@ -1394,11 +1454,22 @@ def voip_sounds_view(request):
     else:
         form = SIPSoundsForm(instance=sip)
 
+    import json
+    from django.core.serializers.json import DjangoJSONEncoder
+    init_data = {
+        "apiUrls": {
+            "sipSettings": "/settings/api/sip/",
+            "voipConfig": "/settings/api/voip/config/",
+            "voipSounds": "/settings/api/voip/sounds/",
+            "workingHours": "/settings/api/voip/working-hours/",
+        }
+    }
     return render(request, "calls/voip_sounds.html", {
         "form": form,
         "sip_settings": sip,
         "current_section": "voip",
         "current_page": "voip_sounds",
+        "init_data_json": json.dumps(init_data, cls=DjangoJSONEncoder),
     })
 
 
@@ -1426,10 +1497,21 @@ def voip_working_hours_view(request):
     else:
         form = SIPWorkingHoursForm(instance=sip)
 
+    import json
+    from django.core.serializers.json import DjangoJSONEncoder
+    init_data = {
+        "apiUrls": {
+            "sipSettings": "/settings/api/sip/",
+            "voipConfig": "/settings/api/voip/config/",
+            "voipSounds": "/settings/api/voip/sounds/",
+            "workingHours": "/settings/api/voip/working-hours/",
+        }
+    }
     return render(request, "calls/voip_working_hours.html", {
         "form": form,
         "sip_settings": sip,
         "weekday_choices": WEEKDAY_CHOICES,
         "current_section": "voip",
         "current_page": "voip_working_hours",
+        "init_data_json": json.dumps(init_data, cls=DjangoJSONEncoder),
     })

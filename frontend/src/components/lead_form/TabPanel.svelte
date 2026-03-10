@@ -42,7 +42,7 @@
     {:else if $activeTab === 'activities'}
       <ActivitiesTab {leadId} {apiUrls} {activityTypes} />
     {:else if $activeTab === 'whatsapp'}
-      <WhatsAppTab {leadId} {apiUrls} {userLanguage} />
+      <WhatsAppTab {leadId} {lead} {apiUrls} {userLanguage} />
     {/if}
   </div>
 </div>

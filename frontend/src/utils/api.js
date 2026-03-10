@@ -19,6 +19,7 @@ export async function apiFetch(url, options = {}) {
 
     const response = await fetch(url, {
         credentials: 'same-origin',
+        cache: 'no-store', // never use a cached redirect — prevents stale 3xx from earlier sessions
         ...options,
         headers,
     });

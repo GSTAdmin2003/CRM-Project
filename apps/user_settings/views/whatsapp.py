@@ -1,5 +1,8 @@
+import json
+
 from django.contrib import messages
 from django.contrib.auth.mixins import UserPassesTestMixin
+from django.core.serializers.json import DjangoJSONEncoder
 from django.shortcuts import get_object_or_404, redirect
 from django.urls import path
 from django.views import View
@@ -38,6 +41,9 @@ class WhatsAppSettingsView(SettingsBaseMixin, AdminRequiredMixin, FormView):
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         context["config"] = self._get_config()
+        context["init_data_json"] = json.dumps({
+            "apiUrls": {"credentials": "/settings/api/whatsapp/credentials/"}
+        }, cls=DjangoJSONEncoder)
         return context
 
     def form_valid(self, form):
@@ -71,6 +77,16 @@ class WhatsAppTemplateListView(SettingsBaseMixin, AdminRequiredMixin, ListView):
         for _name, group in groupby(ctx['templates'], key=lambda t: t.name):
             grouped.append(list(group))
         ctx['template_groups'] = grouped
+        ctx["init_data_json"] = json.dumps({
+            "apiUrls": {
+                "templates": "/settings/api/whatsapp/templates/",
+                "refresh": "/settings/api/whatsapp/templates/refresh/",
+                "templateDetail": "/settings/api/whatsapp/templates/{id}/",
+                "submit": "/settings/api/whatsapp/templates/{id}/submit/",
+                "deleteFromMeta": "/settings/api/whatsapp/templates/{id}/delete-from-meta/",
+                "createUrl": "/settings/whatsapp/templates/add/",
+            }
+        }, cls=DjangoJSONEncoder)
         return ctx
 
 
@@ -96,6 +112,13 @@ class WhatsAppTemplateCreateView(SettingsBaseMixin, AdminRequiredMixin, FormView
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         context["edit_mode"] = False
+        context["init_data_json"] = json.dumps({
+            "template": None,
+            "apiUrls": {
+                "templates": "/settings/api/whatsapp/templates/",
+                "listUrl": "/settings/whatsapp/templates/",
+            }
+        }, cls=DjangoJSONEncoder)
         return context
 
 
@@ -133,7 +156,25 @@ class WhatsAppTemplateEditView(SettingsBaseMixin, AdminRequiredMixin, FormView):
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         context["edit_mode"] = True
-        context["template_obj"] = self._get_template()
+        t = self._get_template()
+        context["template_obj"] = t
+        context["init_data_json"] = json.dumps({
+            "template": {
+                "id": t.pk,
+                "name": t.name,
+                "display_name": t.display_name,
+                "language": t.language,
+                "body_preview": t.body_preview,
+                "variable_names": t.variable_names,
+                "is_active": t.is_active,
+                "approval_status": t.approval_status,
+            },
+            "apiUrls": {
+                "templates": "/settings/api/whatsapp/templates/",
+                "templateDetail": f"/settings/api/whatsapp/templates/{t.pk}/",
+                "listUrl": "/settings/whatsapp/templates/",
+            }
+        }, cls=DjangoJSONEncoder)
         return context
 
 

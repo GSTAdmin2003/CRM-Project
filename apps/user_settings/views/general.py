@@ -1,6 +1,9 @@
+import json
+
 from django.contrib import messages
 from django.contrib.auth import get_user_model
 from django.contrib.auth.mixins import UserPassesTestMixin
+from django.core.serializers.json import DjangoJSONEncoder
 from django.shortcuts import redirect
 from django.urls import path
 from django.views import View
@@ -14,7 +17,7 @@ User = get_user_model()
 
 class AdminRequiredMixin(UserPassesTestMixin):
     """Mixin to ensure only admins can access general settings"""
-    
+
     def test_func(self):
         return self.request.user.has_role('Owner') or self.request.user.is_staff
 
@@ -48,20 +51,32 @@ class GeneralIndexView(SettingsBaseMixin, AdminRequiredMixin, TemplateView):
     """General settings overview page"""
     template_name = 'settings/general/index.html'
     settings_section = 'general'
-    
+
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
-        context['roles_count'] = Role.objects.count()
-        context['users_count'] = User.objects.count()
-        context['apps_count'] = AppRegistry.objects.count()
-        context['current_cc'] = SystemConfiguration.get_setting("default_country_code", default="")
+        roles_count = Role.objects.count()
+        users_count = User.objects.count()
+        apps_count = AppRegistry.objects.count()
+        current_cc = SystemConfiguration.get_setting("default_country_code", default="")
+        context['roles_count'] = roles_count
+        context['users_count'] = users_count
+        context['apps_count'] = apps_count
+        context['current_cc'] = current_cc
+        context['init_data_json'] = json.dumps({
+            'stats': {
+                'rolesCount': roles_count,
+                'usersCount': users_count,
+                'appsCount': apps_count,
+            },
+            'currentCc': current_cc,
+            'apiUrls': {
+                'users': '/settings/api/users/',
+                'language': '/settings/api/general/language/',
+                'phoneSettings': '/settings/general/phone-settings/',
+                'userListUrl': '/settings/general/users/',
+            },
+        }, cls=DjangoJSONEncoder)
         return context
-
-
-
-
-
-
 
 
 _LANG_CHOICES = [('en', 'English'), ('ka', 'Georgian')]
@@ -76,8 +91,15 @@ class PreferredLanguageView(SettingsBaseMixin, AdminRequiredMixin, TemplateView)
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
-        context['current_language'] = SystemConfiguration.get_setting('default_preferred_language', 'en')
+        current_language = SystemConfiguration.get_setting('default_preferred_language', 'en')
+        context['current_language'] = current_language
         context['language_choices'] = _LANG_CHOICES
+        context['init_data_json'] = json.dumps({
+            'currentLanguage': current_language,
+            'apiUrls': {
+                'language': '/settings/api/general/language/',
+            },
+        }, cls=DjangoJSONEncoder)
         return context
 
     def post(self, request, *args, **kwargs):

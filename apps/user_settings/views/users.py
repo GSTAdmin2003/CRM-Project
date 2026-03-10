@@ -1,5 +1,8 @@
+import json
+
 from django.contrib import messages
 from django.contrib.messages.views import SuccessMessageMixin
+from django.core.serializers.json import DjangoJSONEncoder
 from django.db import transaction
 from django.db.models import Q, Prefetch
 from django.shortcuts import get_object_or_404, redirect
@@ -57,6 +60,16 @@ class UserListView(SettingsBaseMixin, AdminRequiredMixin, ListView):
         context['search_query'] = self.request.GET.get('q', '')
         context['selected_role'] = self.request.GET.get('role', '')
         context['selected_status'] = self.request.GET.get('status', '')
+        context['init_data_json'] = json.dumps({
+            'apiUrls': {
+                'users': '/settings/api/users/',
+                'userDetail': '/settings/api/users/{id}/',
+                'toggleActive': '/settings/api/users/{id}/toggle-active/',
+                'roles': '/settings/api/roles/',
+                'createUrl': '/settings/general/users/create/',
+                'editUrl': '/settings/general/users/{id}/edit/',
+            },
+        }, cls=DjangoJSONEncoder)
         return context
 
 
@@ -74,6 +87,16 @@ class UserCreateView(SettingsBaseMixin, AdminRequiredMixin, SuccessMessageMixin,
         context = super().get_context_data(**kwargs)
         context['edit_mode'] = False
         context['page_title'] = 'Create User'
+        roles = list(Role.objects.filter(is_active=True).values('id', 'name', 'description'))
+        context['init_data_json'] = json.dumps({
+            'user': None,
+            'roles': roles,
+            'apiUrls': {
+                'users': '/settings/api/users/',
+                'roles': '/settings/api/roles/',
+                'listUrl': '/settings/general/users/',
+            },
+        }, cls=DjangoJSONEncoder)
         return context
 
     @transaction.atomic
@@ -105,13 +128,33 @@ class UserEditView(SettingsBaseMixin, AdminRequiredMixin, SuccessMessageMixin, U
         context = super().get_context_data(**kwargs)
         context['edit_mode'] = True
         context['page_title'] = f"Edit {self.object.get_full_name() or self.object.username}"
+        user_obj = self.object
+        user_role_ids = list(user_obj.user_roles.values_list('role_id', flat=True))
+        roles = list(Role.objects.filter(is_active=True).values('id', 'name', 'description'))
+        context['init_data_json'] = json.dumps({
+            'user': {
+                'id': user_obj.id,
+                'username': user_obj.username,
+                'email': user_obj.email,
+                'first_name': user_obj.first_name,
+                'last_name': user_obj.last_name,
+                'is_active': user_obj.is_active,
+                'roleIds': user_role_ids,
+            },
+            'roles': roles,
+            'apiUrls': {
+                'users': '/settings/api/users/',
+                'userDetail': f'/settings/api/users/{user_obj.id}/',
+                'roles': '/settings/api/roles/',
+                'listUrl': '/settings/general/users/',
+            },
+        }, cls=DjangoJSONEncoder)
         return context
 
     @transaction.atomic
     def form_valid(self, form):
         # Guard: prevent removing own Owner role
         if self.object.pk == self.request.user.pk:
-            selected_role_names = {r.name for r in form.cleaned_data.get('roles', [])}
             if not form.cleaned_data.get('is_active', True):
                 messages.error(self.request, 'You cannot deactivate your own account.')
                 return self.form_invalid(form)

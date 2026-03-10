@@ -1,8 +1,11 @@
-from django.shortcuts import render, redirect, get_object_or_404
-from django.contrib.auth.decorators import login_required
+import json
+
 from django.contrib import messages
-from django.urls import reverse
+from django.contrib.auth.decorators import login_required
+from django.core.serializers.json import DjangoJSONEncoder
 from django.db import models
+from django.shortcuts import render, redirect, get_object_or_404
+from django.urls import reverse
 from django.views.generic import ListView, TemplateView
 
 from apps.crm.models import LeadStage
@@ -35,8 +38,12 @@ def global_stages_view(request):
         'current_section': 'crm',
         'current_page': 'global_stages',
         'global_stages': global_stages,
+        'init_data_json': json.dumps(
+            {'apiUrls': {'stages': '/crm/api/stages/'}},
+            cls=DjangoJSONEncoder,
+        ),
     }
-    
+
     return render(request, 'settings/crm/global_stages.html', context)
 
 
@@ -174,6 +181,13 @@ class SalesTeamPitchListView(SettingsBaseMixin, AdminRequiredMixin, ListView):
         ctx['auto_send_pitch_enabled'] = bool(
             SystemConfiguration.get_setting(self.AUTO_SEND_PITCH_KEY, False)
         )
+        ctx['init_data_json'] = json.dumps({
+            'apiUrls': {
+                'pitchDefault': '/settings/api/whatsapp/pitch/default/upload/',
+                'pitchTeam': '/settings/api/whatsapp/pitch/teams/{id}/upload/',
+                'teams': '/crm/api/teams/',
+            }
+        }, cls=DjangoJSONEncoder)
         return ctx
 
     def post(self, request, *args, **kwargs):
@@ -193,80 +207,26 @@ class SalesTeamPitchListView(SettingsBaseMixin, AdminRequiredMixin, ListView):
 
 
 class SalesTeamPitchEditView(SettingsBaseMixin, AdminRequiredMixin, TemplateView):
-    template_name = "settings/whatsapp/sales_team_pitch_edit.html"
+    """Redirect to PitchManager — uploads are handled inline by the Svelte component."""
     settings_section = "crm"
     settings_page = "sales_pitch"
 
-    def _get_team(self, pk):
-        from apps.crm.models import SalesTeam
-        return get_object_or_404(SalesTeam, pk=pk)
-
-    def get_context_data(self, **kwargs):
-        ctx = super().get_context_data(**kwargs)
-        team = self._get_team(self.kwargs['pk'])
-        ctx['team'] = team
-        from apps.user_settings.forms import get_sales_team_pitch_form
-        ctx['form'] = get_sales_team_pitch_form()(instance=team)
-        return ctx
+    def get(self, request, pk):
+        return redirect("settings:crm:sales_team_pitch_list")
 
     def post(self, request, pk):
-        from apps.messaging.services.whatsapp_service import WhatsAppService
-        from core.exceptions import NotFoundError, ValidationError as SvcError
-
-        team = self._get_team(pk)
-        language = request.POST.get('language', 'en')
-        if language not in ('en', 'ka'):
-            language = 'en'
-        uploaded_file = request.FILES.get('pitch_pdf')
-        if not uploaded_file:
-            messages.error(request, "Please select a PDF file.")
-            return redirect("settings:crm:sales_team_pitch_edit", pk=pk)
-        try:
-            WhatsAppService.upload_team_pitch_pdf(
-                sales_team_id=team.id,
-                file=uploaded_file,
-                filename=uploaded_file.name,
-                language=language,
-            )
-            lang_label = 'Georgian' if language == 'ka' else 'English'
-            messages.success(request, f"{lang_label} PDF uploaded for '{team.name}' and registered with Meta.")
-        except (NotFoundError, SvcError) as exc:
-            messages.error(request, str(exc))
         return redirect("settings:crm:sales_team_pitch_list")
 
 
 class DefaultPitchEditView(SettingsBaseMixin, AdminRequiredMixin, TemplateView):
-    template_name = "settings/whatsapp/default_pitch_edit.html"
+    """Redirect to PitchManager — uploads are handled inline by the Svelte component."""
     settings_section = "crm"
     settings_page = "sales_pitch"
 
-    def get_context_data(self, **kwargs):
-        ctx = super().get_context_data(**kwargs)
-        from apps.messaging.models import WhatsAppConfig
-        ctx['config'] = WhatsAppConfig.get_or_create_config()
-        return ctx
+    def get(self, request):
+        return redirect("settings:crm:sales_team_pitch_list")
 
     def post(self, request):
-        from apps.messaging.services.whatsapp_service import WhatsAppService
-        from core.exceptions import ValidationError as SvcError
-
-        language = request.POST.get('language', 'en')
-        if language not in ('en', 'ka'):
-            language = 'en'
-        uploaded_file = request.FILES.get('pitch_pdf')
-        if not uploaded_file:
-            messages.error(request, "Please select a PDF file.")
-            return redirect("settings:crm:default_pitch_edit")
-        try:
-            WhatsAppService.upload_default_pitch_pdf(
-                file=uploaded_file,
-                filename=uploaded_file.name,
-                language=language,
-            )
-            lang_label = 'Georgian' if language == 'ka' else 'English'
-            messages.success(request, f"Default {lang_label} pitch PDF uploaded and registered with Meta.")
-        except SvcError as exc:
-            messages.error(request, str(exc))
         return redirect("settings:crm:sales_team_pitch_list")
 
 

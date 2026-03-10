@@ -31,6 +31,12 @@ DEBUG = os.getenv('DEBUG', 'False').lower() in ('true', '1', 'yes')
 
 ALLOWED_HOSTS = os.getenv('ALLOWED_HOSTS', 'localhost,127.0.0.1').split(',')
 
+# Allow CSRF-protected POST requests from the Vite dev server (localhost:5173).
+# In production this env var should list the actual domain(s).
+CSRF_TRUSTED_ORIGINS = os.getenv(
+    'CSRF_TRUSTED_ORIGINS', 'http://localhost:5173,http://localhost:8000'
+).split(',')
+
 # Application definition
 
 DJANGO_APPS = [
@@ -228,6 +234,9 @@ REST_FRAMEWORK = {
     'DEFAULT_PERMISSION_CLASSES': [
         'rest_framework.permissions.IsAuthenticated',
     ],
+    'DEFAULT_RENDERER_CLASSES': [
+        'rest_framework.renderers.JSONRenderer',
+    ],
     'DEFAULT_PAGINATION_CLASS': 'rest_framework.pagination.PageNumberPagination',
     'PAGE_SIZE': 25,
     'DEFAULT_FILTER_BACKENDS': [
@@ -261,7 +270,9 @@ CHANNEL_LAYERS = {
 # =============================================================================
 DJANGO_VITE = {
     "default": {
-        "dev_mode": DEBUG,
+        # VITE_DEV_MODE=true  → use Vite dev server (HMR, live reload for frontend work)
+        # VITE_DEV_MODE=false → use pre-built static assets from static/dist/ (default)
+        "dev_mode": os.getenv("VITE_DEV_MODE", "false").lower() in ("true", "1", "yes"),
         "dev_server_host": "localhost",
         "dev_server_port": 5173,
         "static_url_prefix": "dist",

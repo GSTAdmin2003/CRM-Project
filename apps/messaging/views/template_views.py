@@ -38,14 +38,8 @@ def inbox(request):
 
 @login_required
 def conversation_detail(request, pk):
-    conv = get_object_or_404(WhatsAppConversation, pk=pk)
-    WhatsAppService.mark_conversation_read(conversation_id=pk)
-    messages_qs = conv.messages.order_by("timestamp")
-    return render(
-        request,
-        "messaging/conversation.html",
-        {"conv": conv, "messages": messages_qs},
-    )
+    # Redirect to the Svelte inbox — the messaging component handles conversation selection.
+    return redirect(f'/messaging/?conv={pk}')
 
 
 @login_required

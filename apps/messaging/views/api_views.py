@@ -129,14 +129,14 @@ class ConversationViewSet(ListModelMixin, RetrieveModelMixin, GenericViewSet):
 
         conv = WhatsAppConversation.objects.filter(lead_id=lead.id).first()
         if not conv:
-            from apps.messaging.services.whatsapp_service import _normalize_phone
+            from apps.messaging.services.helpers import normalize_phone
 
             contact = lead.contact
             phone = (contact.mobile or contact.phone) if contact else ""
             phone = phone or lead.phone
             if phone:
                 conv = WhatsAppConversation.objects.filter(
-                    phone_number=_normalize_phone(phone)
+                    phone_number=normalize_phone(phone)
                 ).first()
 
         if not conv:

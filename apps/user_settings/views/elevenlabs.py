@@ -2,8 +2,11 @@
 Transcription settings — ElevenLabs API key, default keywords, and
 per-team keyword vocabulary.
 """
+import json
+
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
+from django.core.serializers.json import DjangoJSONEncoder
 from django.shortcuts import redirect, render
 from django.urls import path
 
@@ -76,6 +79,10 @@ def elevenlabs_config_view(request):
         'status': status,
         'error': error,
         'auto_transcribe': auto_transcribe,
+        'init_data_json': json.dumps(
+            {'apiUrls': {'config': '/settings/api/elevenlabs/config/'}},
+            cls=DjangoJSONEncoder,
+        ),
     }
     return render(request, 'settings/elevenlabs/config.html', context)
 
@@ -129,6 +136,10 @@ def elevenlabs_vocabulary_view(request):
         'stt_keywords_en': SystemConfiguration.get_setting(KEYWORDS_KEY_EN) or '',
         'stt_keywords_ka': SystemConfiguration.get_setting(KEYWORDS_KEY_KA) or '',
         'teams': teams,
+        'init_data_json': json.dumps(
+            {'apiUrls': {'vocabulary': '/settings/api/elevenlabs/vocabulary/'}},
+            cls=DjangoJSONEncoder,
+        ),
     }
     return render(request, 'settings/elevenlabs/vocabulary.html', context)
 
@@ -211,6 +222,10 @@ def ai_config_view(request):
         'error': error,
         'auto_enabled': auto_enabled,
         'default_days': default_days,
+        'init_data_json': json.dumps(
+            {'apiUrls': {'aiConfig': '/settings/api/elevenlabs/ai/'}},
+            cls=DjangoJSONEncoder,
+        ),
     }
     return render(request, 'settings/elevenlabs/ai_config.html', context)
 
@@ -240,6 +255,10 @@ def team_products_view(request):
         'current_section': 'elevenlabs',
         'current_page': 'team_products',
         'teams': teams,
+        'init_data_json': json.dumps(
+            {'apiUrls': {'teamProducts': '/settings/api/elevenlabs/team-products/'}},
+            cls=DjangoJSONEncoder,
+        ),
     }
     return render(request, 'settings/elevenlabs/team_products.html', context)
 

@@ -1,3 +1,6 @@
+import json
+
+from django.core.serializers.json import DjangoJSONEncoder
 from django.views.generic import UpdateView, TemplateView
 from django.contrib.auth.views import PasswordChangeView
 from django.contrib.messages.views import SuccessMessageMixin
@@ -20,9 +23,26 @@ class ProfilePersonalInfoView(SettingsBaseMixin, SuccessMessageMixin, UpdateView
     success_url = reverse_lazy('settings:profile:personal_info')
     settings_section = 'profile'
     settings_page = 'personal_info'
-    
+
     def get_object(self):
         return self.request.user
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        user = self.request.user
+        context['init_data_json'] = json.dumps({
+            'currentUser': {
+                'id': user.id,
+                'username': user.username,
+                'email': user.email,
+                'first_name': user.first_name,
+                'last_name': user.last_name,
+            },
+            'apiUrls': {
+                'profile': '/settings/api/profile/',
+            },
+        }, cls=DjangoJSONEncoder)
+        return context
 
 
 class ProfileSecurityView(SettingsBaseMixin, SuccessMessageMixin, PasswordChangeView):
@@ -34,6 +54,15 @@ class ProfileSecurityView(SettingsBaseMixin, SuccessMessageMixin, PasswordChange
     settings_section = 'profile'
     settings_page = 'security'
 
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context['init_data_json'] = json.dumps({
+            'apiUrls': {
+                'changePassword': '/settings/api/profile/change-password/',
+            },
+        }, cls=DjangoJSONEncoder)
+        return context
+
 
 class ProfilePreferencesView(SettingsBaseMixin, SuccessMessageMixin, UpdateView):
     """View for updating user preferences"""
@@ -44,16 +73,27 @@ class ProfilePreferencesView(SettingsBaseMixin, SuccessMessageMixin, UpdateView)
     success_url = reverse_lazy('settings:profile:preferences')
     settings_section = 'profile'
     settings_page = 'preferences'
-    
+
     def get_object(self):
         return UserPreferences.get_or_create_for_user(self.request.user)
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        preferences = self.get_object()
+        context['init_data_json'] = json.dumps({
+            'currentLanguage': preferences.language,
+            'apiUrls': {
+                'language': '/settings/api/general/language/',
+            },
+        }, cls=DjangoJSONEncoder)
+        return context
 
 
 class ProfileIndexView(SettingsBaseMixin, TemplateView):
     """Profile overview page"""
     template_name = 'settings/profile/index.html'
     settings_section = 'profile'
-    
+
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         context['user'] = self.request.user

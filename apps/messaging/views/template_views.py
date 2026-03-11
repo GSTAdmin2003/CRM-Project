@@ -1,10 +1,9 @@
 import json
 
 from django.conf import settings
-from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.http import HttpResponse, JsonResponse
-from django.shortcuts import get_object_or_404, redirect, render
+from django.shortcuts import get_object_or_404, redirect
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_POST
 
@@ -19,62 +18,13 @@ from apps.messaging.services import WhatsAppService
 
 @login_required
 def inbox(request):
-    """WhatsApp inbox — renders Svelte shell."""
-    import json
-    from django.core.serializers.json import DjangoJSONEncoder
-
-    from apps.user_settings.models import UserPreferences
-    user_lang = UserPreferences.get_or_create_for_user(request.user).language
-    init_data = {
-        'apiUrls': {
-            'conversations': '/messaging/api/conversations/',
-        },
-        'userLanguage': user_lang,
-    }
-    return render(request, 'messaging/inbox.html', {
-        'init_data_json': json.dumps(init_data, cls=DjangoJSONEncoder),
-    })
+    """Messaging is only accessible from leads — redirect to opportunities."""
+    return redirect('/crm/opportunities/')
 
 
 @login_required
 def conversation_detail(request, pk):
-    # Redirect to the Svelte inbox — the messaging component handles conversation selection.
-    return redirect(f'/messaging/?conv={pk}')
-
-
-@login_required
-def messages_partial(request, pk):
-    conv = get_object_or_404(WhatsAppConversation, pk=pk)
-    WhatsAppService.mark_conversation_read(conversation_id=pk)
-    messages_qs = conv.messages.order_by("timestamp")
-    return render(
-        request,
-        "messaging/messages_partial.html",
-        {"messages": messages_qs},
-    )
-
-
-@login_required
-@require_POST
-def send_message(request, pk):
-    body = request.POST.get("body", "").strip()
-    is_ajax = request.headers.get("X-Requested-With") == "XMLHttpRequest"
-    if not body:
-        if is_ajax:
-            return JsonResponse({"error": "Message cannot be empty."}, status=400)
-        messages.warning(request, "Message cannot be empty.")
-    else:
-        try:
-            WhatsAppService.send_message(
-                conversation_id=pk, body=body, sent_by=request.user
-            )
-            if is_ajax:
-                return JsonResponse({"success": True})
-        except Exception as e:
-            if is_ajax:
-                return JsonResponse({"error": str(e)}, status=500)
-            messages.error(request, f"Failed to send: {e}")
-    return redirect("messaging:conversation_detail", pk=pk)
+    return redirect('/crm/opportunities/')
 
 
 

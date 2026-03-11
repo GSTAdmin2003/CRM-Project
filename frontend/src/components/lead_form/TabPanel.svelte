@@ -4,12 +4,22 @@
   import ActivitiesTab from './ActivitiesTab.svelte';
   import WhatsAppTab from './WhatsAppTab.svelte';
 
+  import { beforeUpdate } from 'svelte';
+
   export let lead = {};
   export let leadId = null;
   export let apiUrls = {};
   export let activityTypes = [];
   export let userLanguage = 'en';
   export let onLeadUpdated = () => {};
+
+  let _prevTabLead = undefined;
+  beforeUpdate(() => {
+    if (_prevTabLead !== undefined && lead !== _prevTabLead) {
+      console.log('[CRM:TAB-PANEL] lead prop changed — phone:', lead?.phone, '| was:', _prevTabLead?.phone, '| activeTab:', $activeTab);
+    }
+    _prevTabLead = lead;
+  });
 
   const TABS = [
     { id: 'notes', label: 'Notes' },

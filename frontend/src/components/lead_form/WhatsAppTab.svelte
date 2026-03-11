@@ -40,22 +40,16 @@
   // Compares object reference — handleLeadUpdated always creates a new object after API save.
   let _prevLead = undefined;
   $: {
+    const newPhone = lead?.phone || null;
+    const prevPhone = _prevLead?.phone || null;
+    console.log('[CRM:WA-TAB] reactive lead check — same ref?', lead === _prevLead,
+      '| prevPhone:', prevPhone, '| newPhone:', newPhone,
+      '| _prevLead undefined?', _prevLead === undefined);
     if (_prevLead !== undefined && lead !== _prevLead) {
+      console.log('[CRM:WA-TAB] lead changed → calling fetchConversations. phone:', newPhone);
       fetchConversations();
     }
     _prevLead = lead;
-  }
-
-  function formatRelativeTime(timestamp) {
-    if (!timestamp) return '';
-    const diff = Date.now() - new Date(timestamp).getTime();
-    const mins = Math.floor(diff / 60000);
-    if (mins < 1) return 'Just now';
-    if (mins < 60) return `${mins}m ago`;
-    const hours = Math.floor(mins / 60);
-    if (hours < 24) return `${hours}h ago`;
-    const days = Math.floor(hours / 24);
-    return `${days}d ago`;
   }
 
   async function fetchConversations() {
@@ -66,22 +60,31 @@
     const url = phone
       ? `${apiUrls.conversations}?phone=${encodeURIComponent(phone)}`
       : `${apiUrls.conversations}?lead_id=${leadId}`;
+    console.log('[CRM:WA-TAB] fetchConversations ▶', { phone, url, leadId, lead });
     try {
       const res = await apiGet(url);
+      console.log('[CRM:WA-TAB] fetchConversations response status:', res.status);
       if (res.ok) {
         const data = await res.json();
+        console.log('[CRM:WA-TAB] fetchConversations data:', data);
         conversations = data.results || data;
+        console.log('[CRM:WA-TAB] conversations count:', conversations.length, conversations.map(c => ({id:c.id, phone:c.phone_number, lead:c.lead})));
         // Auto-select: prefer FK-linked conv, else most recent
         const match = conversations.find(c => c.lead === leadId) || conversations[0] || null;
+        console.log('[CRM:WA-TAB] auto-select match:', match?.id, '| current selectedConv:', selectedConversation?.id);
         if (match && (!selectedConversation || selectedConversation.id !== match.id)) {
           selectConversation(match);
         } else if (!match) {
+          console.log('[CRM:WA-TAB] no match → clearing selectedConversation');
           selectedConversation = null;
         }
       } else {
+        const body = await res.text();
+        console.error('[CRM:WA-TAB] fetchConversations FAILED', res.status, body);
         listError = 'Failed to load conversations';
       }
-    } catch {
+    } catch (e) {
+      console.error('[CRM:WA-TAB] fetchConversations ERROR', e);
       listError = 'Failed to load conversations';
     } finally {
       loadingList = false;
@@ -161,10 +164,12 @@
   }
 
   onMount(() => {
+    console.log('[CRM:WA-TAB] onMount — lead:', lead, 'phone:', lead?.phone, 'leadId:', leadId);
     fetchConversations();
   });
 
   onDestroy(() => {
+    console.log('[CRM:WA-TAB] onDestroy');
     _activeConvId = null;
     clearTimeout(wsReconnectTimer);
     disconnectWs();
@@ -306,7 +311,7 @@
   }
 
   function handleKeydown(e) {
-    if (e.key === 'Enter' && !e.shiftKey) {
+    if (e.key === 'Enter' && !e.shiftKey && windowOpen) {
       e.preventDefault();
       sendMessage();
     }
@@ -359,37 +364,13 @@
     </button>
   </div>
 {:else}
-  <!-- Inbox-style layout: sidebar + chat pane -->
+  <!-- Chat pane -->
   <div class="flex h-96 border border-gray-100 rounded-lg overflow-hidden">
-    <!-- Left: conversation list sidebar (w-44) -->
-    <div class="w-44 flex-shrink-0 border-r border-gray-100 overflow-y-auto bg-gray-50">
-      {#if listError}
-        <p class="text-xs text-red-500 p-3">{listError}</p>
-      {/if}
-      {#each conversations as conv (conv.id)}
-        <button
-          type="button"
-          class="w-full text-left px-3 py-2 text-xs hover:bg-gray-100 border-b border-gray-100
-                 {selectedConversation?.id === conv.id ? 'bg-green-50 border-r-2 border-green-500' : ''}"
-          on:click={() => selectConversation(conv)}
-        >
-          <div class="font-medium truncate">{conv.display_name || conv.phone_number || 'Unknown'}</div>
-          {#if conv.last_message_at}
-            <div class="text-gray-400 text-[10px]">{formatRelativeTime(conv.last_message_at)}</div>
-          {/if}
-          {#if conv.unread_count > 0}
-            <span class="inline-block bg-green-500 text-white rounded-full px-1.5 text-[10px] mt-0.5">
-              {conv.unread_count}
-            </span>
-          {/if}
-        </button>
-      {/each}
-    </div>
-
-    <!-- Right: chat pane -->
     <div class="flex-1 flex flex-col overflow-hidden">
-      {#if !selectedConversation}
-        <p class="text-gray-400 text-xs m-auto">Select a conversation</p>
+      {#if listError}
+        <p class="text-xs text-red-500 text-center py-4">{listError}</p>
+      {:else if !selectedConversation}
+        <p class="text-gray-400 text-xs m-auto">Loading…</p>
       {:else}
         <!-- Message list -->
         <div

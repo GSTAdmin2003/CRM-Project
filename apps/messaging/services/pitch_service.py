@@ -102,6 +102,28 @@ class PitchService:
             variables=[],
             sent_by=sent_by,
         )
+
+        try:
+            from apps.activities.models import Activity, ActivityType
+            wa_type, _ = ActivityType.objects.get_or_create(
+                name="WhatsApp",
+                defaults={"icon": "fab fa-whatsapp", "color": "#25D366"},
+            )
+            recipient_name = lead.contact_full_name or lead.title
+            Activity.objects.create(
+                lead=lead,
+                activity_type=wa_type,
+                title="WhatsApp greeting sent",
+                description=f"Sent 'hello_how_are_you' template to {recipient_name} ({phone})",
+                scheduled_date=datetime.date.today(),
+                status="completed",
+                completed_at=now(),
+                created_by=sent_by,
+                assigned_to=sent_by,
+            )
+        except Exception:
+            pass
+
         return conv, message
 
     @staticmethod

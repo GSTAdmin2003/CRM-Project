@@ -39,7 +39,12 @@
   });
 
   function handleLeadUpdated(updatedLead) {
+    console.log('[CRM:LEAD-APP] handleLeadUpdated called ▶',
+      'updatedLead.phone:', updatedLead?.phone,
+      '| updatedLead.contact:', updatedLead?.contact,
+      '| updatedLead keys:', Object.keys(updatedLead || {}));
     currentLead = { ...currentLead, ...updatedLead };
+    console.log('[CRM:LEAD-APP] currentLead after merge — phone:', currentLead.phone, 'contact:', currentLead.contact);
     setCurrentLead(currentLead);
   }
 

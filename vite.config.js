@@ -20,7 +20,6 @@ export default defineConfig({
         opportunity_list: path.resolve(__dirname, 'frontend/src/entries/opportunity_list.js'),
         lead_incoming: path.resolve(__dirname, 'frontend/src/entries/lead_incoming.js'),
         activities: path.resolve(__dirname, 'frontend/src/entries/activities.js'),
-        messaging: path.resolve(__dirname, 'frontend/src/entries/messaging.js'),
         calls: path.resolve(__dirname, 'frontend/src/entries/calls.js'),
         // Phase 1 — CRM management pages
         crm_dashboard: path.resolve(__dirname, 'frontend/src/entries/crm_dashboard.js'),

@@ -117,6 +117,7 @@
   }
 
   async function selectContact(contact) {
+    console.log('[CRM:CONTACT-SEC] selectContact ▶', { id: contact.id, name: contact.name, phone: contact.phone, mobile: contact.mobile });
     selectedContactId = contact.id;
     showContactGrid = false;
     fullName = contact.name || '';
@@ -124,14 +125,24 @@
     phone = contact.phone || contact.mobile || '';
     position = contact.position || '';
 
-    const res = await apiPatch(apiUrls.lead, {
+    const patchBody = {
       contact_id: contact.id,
       full_name: contact.name || '',
       email: contact.email || '',
       phone: contact.phone || contact.mobile || '',
       position: contact.position || '',
-    });
-    if (res.ok) onLeadUpdated(await res.json());
+    };
+    console.log('[CRM:CONTACT-SEC] PATCHing lead with:', patchBody);
+    const res = await apiPatch(apiUrls.lead, patchBody);
+    console.log('[CRM:CONTACT-SEC] PATCH response status:', res.status);
+    if (res.ok) {
+      const updatedLead = await res.json();
+      console.log('[CRM:CONTACT-SEC] PATCH response lead.phone:', updatedLead?.phone, '| lead.contact:', updatedLead?.contact);
+      onLeadUpdated(updatedLead);
+    } else {
+      const body = await res.text();
+      console.error('[CRM:CONTACT-SEC] PATCH FAILED:', res.status, body);
+    }
   }
 
   $: selectedContact = contacts.find(c => c.id === selectedContactId);

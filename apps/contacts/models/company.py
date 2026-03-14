@@ -54,7 +54,7 @@ class Company(models.Model):
         return f"{self.legal_name} ({self.legal_id})"
 
     def get_absolute_url(self):
-        return reverse('contacts:company_detail', kwargs={'pk': self.pk})
+        return reverse('contacts:company_edit', kwargs={'pk': self.pk})
 
     @property
     def display_name(self):

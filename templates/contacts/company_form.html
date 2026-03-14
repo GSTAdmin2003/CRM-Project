@@ -1,245 +1,391 @@
 {% extends 'base.html' %}
-
-{% block title %}{{ action }} Contact - CRM System{% endblock %}
+{% block title %}{% if action == 'Edit' %}{{ company.display_name }}{% else %}New Contact{% endif %} - CRM{% endblock %}
 
 {% block extra_css %}
-<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
 <style>
-.form-control {
-    display: block;
+  .crm-input {
     width: 100%;
-    padding: 0.5rem 0.75rem;
-    font-size: 0.875rem;
-    line-height: 1.5;
-    color: #374151;
-    background-color: #fff;
-    background-clip: padding-box;
-    border: 1px solid #d1d5db;
-    border-radius: 0.375rem;
-    transition: border-color 0.15s ease-in-out, box-shadow 0.15s ease-in-out;
-}
-.form-control:focus {
-    border-color: #6366f1;
-    outline: 0;
-    box-shadow: 0 0 0 0.2rem rgba(99, 102, 241, 0.25);
-}
+    box-sizing: border-box;
+    font-size: 13px;
+    padding: 6px 10px;
+    border: 1px solid #e5e7eb;
+    border-radius: 6px;
+    background: #fff;
+    color: #111827;
+    outline: none;
+    transition: border-color .15s, box-shadow .15s;
+  }
+  .crm-input:focus {
+    border-color: #185FA5;
+    box-shadow: 0 0 0 3px rgba(24,95,165,.12);
+  }
+  .crm-label {
+    display: block;
+    font-size: 11px;
+    font-weight: 500;
+    color: #6b7280;
+    margin-bottom: 4px;
+    text-transform: uppercase;
+    letter-spacing: .04em;
+  }
+  .section-title {
+    font-size: 11px;
+    font-weight: 600;
+    color: #9ca3af;
+    text-transform: uppercase;
+    letter-spacing: .06em;
+    margin: 0 0 14px;
+  }
 </style>
 {% endblock %}
 
 {% block content %}
-<div class="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-6">
-    <!-- Header -->
-    <div class="mb-8">
-        <nav class="flex mb-2">
-            <a href="{% url 'contacts:dashboard_home' %}" class="text-indigo-600 hover:text-indigo-900">Contacts</a>
-            <span class="mx-2 text-gray-400">/</span>
-            <a href="{% url 'contacts:company_list' %}" class="text-indigo-600 hover:text-indigo-900">Contacts</a>
-            <span class="mx-2 text-gray-400">/</span>
-            {% if company %}
-            <a href="{% url 'contacts:company_detail' company.pk %}" class="text-indigo-600 hover:text-indigo-900">{{ company.display_name }}</a>
-            <span class="mx-2 text-gray-400">/</span>
-            {% endif %}
-            <span class="text-gray-500">{{ action }} Contact</span>
-        </nav>
-        <h1 class="text-3xl font-bold text-gray-900">{{ action }} Contact</h1>
-        <p class="mt-2 text-gray-600">
-            {% if action == 'Create' %}
-                Add a new contact.
-            {% else %}
-                Update contact information.
-            {% endif %}
+<div class="mx-auto max-w-6xl px-4 sm:px-6 lg:px-8 py-6">
+
+  {% if messages %}
+  <div class="mb-4 space-y-2">
+    {% for message in messages %}
+    <div class="flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm
+      {% if message.tags == 'success' %}bg-green-50 text-green-800 border border-green-200
+      {% else %}bg-red-50 text-red-800 border border-red-200{% endif %}">
+      <i class="fas {% if message.tags == 'success' %}fa-check-circle text-green-500{% else %}fa-exclamation-circle text-red-500{% endif %}"></i>
+      {{ message }}
+    </div>
+    {% endfor %}
+  </div>
+  {% endif %}
+
+  <!-- ── Header ── -->
+  <div class="flex items-center justify-between mb-5">
+
+    <!-- Identity -->
+    <div class="flex items-center gap-3">
+      <div class="w-10 h-10 rounded-lg flex-shrink-0 flex items-center justify-center text-base font-semibold
+        {% if action == 'Edit' %}bg-blue-100 text-blue-700{% else %}bg-gray-100 text-gray-400{% endif %}">
+        {% if action == 'Edit' %}{{ company.display_name|slice:":1"|upper }}{% else %}<i class="fas fa-plus text-sm"></i>{% endif %}
+      </div>
+      <div>
+        <h1 class="text-base font-semibold text-gray-900 leading-tight">
+          {% if action == 'Edit' %}{{ company.display_name }}{% else %}New Contact{% endif %}
+        </h1>
+        {% if action == 'Edit' %}
+        <p class="text-xs text-gray-400 mt-0.5">
+          {{ company.legal_name }}{% if company.legal_id %} &middot; {{ company.legal_id }}{% endif %}{% if company.industry %} &middot; {{ company.industry }}{% endif %}
         </p>
+        {% endif %}
+      </div>
     </div>
 
-    <!-- Form -->
-    <div class="max-w-3xl">
-        <div class="bg-white shadow rounded-lg">
-            <form method="post" class="px-4 py-5 sm:p-6">
-                {% csrf_token %}
+    <!-- Actions -->
+    <div class="flex items-center gap-2">
+      {% if action == 'Edit' %}
+      <span id="save-status" class="text-xs text-gray-400 mr-1"></span>
+      {% endif %}
+      <a href="{% url 'contacts:company_list' %}"
+         class="text-xs px-3 py-1.5 rounded-md border border-gray-200 bg-white text-gray-600 hover:bg-gray-50 transition-colors">
+        ← Back
+      </a>
+      {% if action == 'Edit' %}
+      <a href="{% url 'contacts:company_delete' company.pk %}"
+         class="text-xs px-3 py-1.5 rounded-md border border-red-200 bg-white text-red-500 hover:bg-red-50 transition-colors">
+        Delete
+      </a>
+      {% else %}
+      <button type="submit" form="contact-form"
+              class="text-xs px-4 py-1.5 rounded-md bg-[#185FA5] text-white hover:bg-blue-700 transition-colors font-medium">
+        Create
+      </button>
+      {% endif %}
+    </div>
+  </div>
 
-                <!-- Contact Type -->
-                <div class="mb-6 pb-6 border-b border-gray-200">
-                    <label class="block text-sm font-medium text-gray-700 mb-3">Contact Type</label>
-                    <div class="flex gap-6">
-                        {% for value, label in form.contact_type.field.choices %}
-                        <label class="flex items-center gap-2 cursor-pointer">
-                            <input type="radio" name="contact_type" value="{{ value }}"
-                                   id="contact_type_{{ value }}"
-                                   {% if form.contact_type.value == value %}checked{% elif not form.contact_type.value and value == 'company' %}checked{% endif %}
-                                   class="h-4 w-4 text-indigo-600 border-gray-300 focus:ring-indigo-500"
-                                   onchange="toggleContactTypeFields()">
-                            <span class="text-sm font-medium text-gray-700">{{ label }}</span>
-                        </label>
-                        {% endfor %}
-                    </div>
-                </div>
+  <!-- ── Main layout ── -->
+  <div class="grid grid-cols-5 gap-4 items-start">
 
-                <!-- Preferred Pitch Language -->
-                <div class="mb-6 pb-6 border-b border-gray-200">
-                    <label class="block text-sm font-medium text-gray-700 mb-1">Preferred Language</label>
-                    <p class="text-xs text-gray-500 mb-3">Which language should communications be sent in? Leave as System Default to follow the global setting.</p>
-                    <div class="flex gap-6">
-                        {% for value, label in form.preferred_language.field.choices %}
-                        <label class="flex items-center gap-2 cursor-pointer">
-                            <input type="radio" name="preferred_language" value="{{ value }}"
-                                   id="preferred_language_{{ value|default:'default' }}"
-                                   {% if form.preferred_language.value == value %}checked{% elif not form.preferred_language.value and value == '' %}checked{% endif %}
-                                   class="h-4 w-4 text-indigo-600 border-gray-300 focus:ring-indigo-500">
-                            <span class="text-sm text-gray-700">{{ label }}</span>
-                        </label>
-                        {% endfor %}
-                    </div>
-                </div>
+    <!-- ──────────── Left (form) — 3 cols ──────────── -->
+    <div class="col-span-3 flex flex-col gap-4">
 
-                <div class="grid grid-cols-1 gap-6 sm:grid-cols-2">
-                    <!-- Legal ID -->
-                    <div class="sm:col-span-1">
-                        <label for="{{ form.legal_id.id_for_label }}" class="block text-sm font-medium text-gray-700">
-                            Legal ID <span class="text-red-500">*</span>
-                        </label>
-                        <div class="mt-1">
-                            {{ form.legal_id }}
-                        </div>
-                        {% if form.legal_id.errors %}
-                            <div class="mt-1 text-sm text-red-600">
-                                {{ form.legal_id.errors.0 }}
-                            </div>
-                        {% endif %}
-                        <p class="mt-1 text-sm text-gray-500">Unique legal identifier for the contact</p>
-                    </div>
+      <!-- Contact details card -->
+      <div class="bg-white border border-gray-100 rounded-xl shadow-sm p-5">
+        <p class="section-title">Contact details</p>
 
-                    <!-- Legal Name -->
-                    <div class="sm:col-span-1">
-                        <label for="{{ form.legal_name.id_for_label }}" class="block text-sm font-medium text-gray-700">
-                            Legal Name <span class="text-red-500">*</span>
-                        </label>
-                        <div class="mt-1">
-                            {{ form.legal_name }}
-                        </div>
-                        {% if form.legal_name.errors %}
-                            <div class="mt-1 text-sm text-red-600">
-                                {{ form.legal_name.errors.0 }}
-                            </div>
-                        {% endif %}
-                    </div>
+        <form id="contact-form" method="post">
+          {% csrf_token %}
 
-                    <!-- Brand Name (Company only) -->
-                    <div class="sm:col-span-1" id="field-brand-name">
-                        <label for="{{ form.brand_name.id_for_label }}" class="block text-sm font-medium text-gray-700">
-                            Brand Name
-                        </label>
-                        <div class="mt-1">
-                            {{ form.brand_name }}
-                        </div>
-                        {% if form.brand_name.errors %}
-                            <div class="mt-1 text-sm text-red-600">
-                                {{ form.brand_name.errors.0 }}
-                            </div>
-                        {% endif %}
-                        <p class="mt-1 text-sm text-gray-500">Trading or brand name (if different from legal name)</p>
-                    </div>
+          <!-- Type -->
+          <div class="flex gap-5 mb-5 pb-4 border-b border-gray-100">
+            {% for value, label in form.contact_type.field.choices %}
+            <label class="flex items-center gap-2 text-sm text-gray-700 cursor-pointer select-none">
+              <input type="radio" name="contact_type" value="{{ value }}"
+                     {% if form.contact_type.value == value %}checked{% elif not form.contact_type.value and value == 'company' %}checked{% endif %}
+                     class="accent-[#185FA5]"
+                     onchange="toggleTypeFields()">
+              {{ label }}
+            </label>
+            {% endfor %}
+          </div>
 
-                    <!-- Industry (Company only) -->
-                    <div class="sm:col-span-1" id="field-industry">
-                        <label for="{{ form.industry.id_for_label }}" class="block text-sm font-medium text-gray-700">
-                            Industry
-                        </label>
-                        <div class="mt-1">
-                            {{ form.industry }}
-                        </div>
-                        {% if form.industry.errors %}
-                            <div class="mt-1 text-sm text-red-600">
-                                {{ form.industry.errors.0 }}
-                            </div>
-                        {% endif %}
-                    </div>
+          <!-- 2-col field grid -->
+          <div class="grid grid-cols-2 gap-x-4 gap-y-3">
 
-                    <!-- Category -->
-                    <div class="sm:col-span-1" id="field-category">
-                        <label for="{{ form.category.id_for_label }}" class="block text-sm font-medium text-gray-700">
-                            Category
-                        </label>
-                        <div class="mt-1">
-                            {{ form.category }}
-                        </div>
-                        {% if form.category.errors %}
-                            <div class="mt-1 text-sm text-red-600">
-                                {{ form.category.errors.0 }}
-                            </div>
-                        {% endif %}
-                    </div>
+            <div>
+              <label class="crm-label">Legal ID <span class="text-red-400 normal-case">*</span></label>
+              {{ form.legal_id }}
+              {% if form.legal_id.errors %}<p class="mt-1 text-xs text-red-500">{{ form.legal_id.errors.0 }}</p>{% endif %}
+            </div>
 
-                    <!-- Company Email -->
-                    <div class="sm:col-span-1">
-                        <label for="{{ form.company_email.id_for_label }}" class="block text-sm font-medium text-gray-700">
-                            Company Email
-                        </label>
-                        <div class="mt-1">
-                            {{ form.company_email }}
-                        </div>
-                        {% if form.company_email.errors %}
-                            <div class="mt-1 text-sm text-red-600">
-                                {{ form.company_email.errors.0 }}
-                            </div>
-                        {% endif %}
-                    </div>
+            <div>
+              <label class="crm-label">Legal Name <span class="text-red-400 normal-case">*</span></label>
+              {{ form.legal_name }}
+              {% if form.legal_name.errors %}<p class="mt-1 text-xs text-red-500">{{ form.legal_name.errors.0 }}</p>{% endif %}
+            </div>
 
-                    <!-- Company Phone -->
-                    <div class="sm:col-span-1" id="field-company-phone">
-                        <label for="{{ form.company_phone.id_for_label }}" class="block text-sm font-medium text-gray-700">
-                            Company Phone
-                        </label>
-                        <div class="mt-1">
-                            {{ form.company_phone }}
-                        </div>
-                        {% if form.company_phone.errors %}
-                            <div class="mt-1 text-sm text-red-600">
-                                {{ form.company_phone.errors.0 }}
-                            </div>
-                        {% endif %}
-                    </div>
+            <div id="field-brand-name">
+              <label class="crm-label">Brand Name</label>
+              {{ form.brand_name }}
+            </div>
 
-                    <!-- Company Mobile -->
-                    <div class="sm:col-span-1">
-                        <label for="{{ form.company_mobile.id_for_label }}" class="block text-sm font-medium text-gray-700">
-                            Company Mobile
-                        </label>
-                        <div class="mt-1">
-                            {{ form.company_mobile }}
-                        </div>
-                        {% if form.company_mobile.errors %}
-                            <div class="mt-1 text-sm text-red-600">
-                                {{ form.company_mobile.errors.0 }}
-                            </div>
-                        {% endif %}
-                    </div>
-                </div>
+            <div id="field-industry">
+              <label class="crm-label">Industry</label>
+              {{ form.industry }}
+            </div>
 
-                <!-- Form Actions -->
-                <div class="mt-6 flex items-center justify-between">
-                    <a href="{% if company %}{% url 'contacts:company_detail' company.pk %}{% else %}{% url 'contacts:company_list' %}{% endif %}" class="bg-gray-300 hover:bg-gray-400 text-gray-700 px-4 py-2 rounded-md text-sm font-medium">
-                        Cancel
-                    </a>
-                    <button type="submit" class="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-md text-sm font-medium">
-                        {{ action }} Contact
-                    </button>
-                </div>
-            </form>
+            <div id="field-category">
+              <label class="crm-label">Category</label>
+              {{ form.category }}
+            </div>
+
+            <div>
+              <label class="crm-label">Email</label>
+              {{ form.company_email }}
+            </div>
+
+            <div id="field-company-phone">
+              <label class="crm-label">Phone</label>
+              {{ form.company_phone }}
+            </div>
+
+            <div>
+              <label class="crm-label">Mobile</label>
+              {{ form.company_mobile }}
+            </div>
+
+          </div>
+          {% if form.non_field_errors %}
+          <div class="mt-3">
+            {% for error in form.non_field_errors %}
+            <p class="text-xs text-red-500">{{ error }}</p>
+            {% endfor %}
+          </div>
+          {% endif %}
+        </form>
+      </div>
+
+      <!-- Language card -->
+      <div class="bg-white border border-gray-100 rounded-xl shadow-sm p-5">
+        <p class="section-title">Preferred language</p>
+        <div class="flex gap-5">
+          {% for value, label in form.preferred_language.field.choices %}
+          <label class="flex items-center gap-2 text-sm text-gray-700 cursor-pointer select-none">
+            <input type="radio" name="preferred_language" value="{{ value }}"
+                   form="contact-form"
+                   {% if form.preferred_language.value == value %}checked{% elif not form.preferred_language.value and value == '' %}checked{% endif %}
+                   class="accent-[#185FA5]">
+            {{ label }}
+          </label>
+          {% endfor %}
         </div>
+      </div>
+
     </div>
+
+    <!-- ──────────── Right (representatives) — 2 cols ──────────── -->
+    {% if action == 'Edit' and company.contact_type != 'individual' %}
+    <div class="col-span-2">
+      <div class="bg-white border border-gray-100 rounded-xl shadow-sm p-5">
+
+        <!-- Panel header -->
+        <div class="flex items-center justify-between mb-4">
+          <p class="section-title" style="margin:0;">
+            Representatives
+            {% if contacts %}
+            <span class="ml-1.5 font-normal text-xs bg-gray-100 text-gray-500 rounded-full px-2 py-px normal-case tracking-normal">{{ contacts.count }}</span>
+            {% endif %}
+          </p>
+          <a href="{% url 'contacts:contact_create' company.pk %}"
+             class="text-xs px-3 py-1.5 rounded-md bg-[#185FA5] text-white hover:bg-blue-700 transition-colors font-medium">
+            + Add
+          </a>
+        </div>
+
+        {% if contacts %}
+        <div class="space-y-1.5">
+          {% for contact in contacts %}
+          <div class="flex items-center gap-2.5 px-3 py-2.5 rounded-lg
+            {% if company.favorite_contact == contact %}bg-blue-50 border border-blue-100{% else %}border border-gray-100 hover:bg-gray-50{% endif %}
+            transition-colors">
+            <!-- Avatar -->
+            <div class="w-8 h-8 rounded-full flex-shrink-0 flex items-center justify-center text-xs font-semibold
+              {% cycle 'bg-blue-100 text-blue-700' 'bg-emerald-100 text-emerald-700' 'bg-violet-100 text-violet-700' 'bg-amber-100 text-amber-700' %}">
+              {{ contact.name|slice:":2"|upper }}
+            </div>
+            <!-- Info -->
+            <div class="flex-1 min-w-0">
+              <p class="text-sm font-medium text-gray-900 truncate leading-tight">{{ contact.name }}</p>
+              <p class="text-xs text-gray-400 truncate">
+                {% if contact.position %}{{ contact.position }}{% endif %}{% if contact.phone %} &middot; {{ contact.phone }}{% elif contact.mobile %} &middot; {{ contact.mobile }}{% endif %}
+              </p>
+            </div>
+            <!-- Actions -->
+            <div class="flex items-center gap-1 flex-shrink-0">
+              <form method="post" action="{% url 'contacts:toggle_favorite_contact' company.pk contact.pk %}">
+                {% csrf_token %}
+                <button type="submit" title="{% if company.favorite_contact == contact %}Primary{% else %}Set primary{% endif %}"
+                        class="w-6 h-6 flex items-center justify-center rounded hover:bg-white transition-colors text-sm">
+                  {% if company.favorite_contact == contact %}
+                  <span class="text-yellow-400">★</span>
+                  {% else %}
+                  <span class="text-gray-300 hover:text-yellow-300">☆</span>
+                  {% endif %}
+                </button>
+              </form>
+              <a href="{% url 'contacts:contact_edit' company.pk contact.pk %}"
+                 class="w-6 h-6 flex items-center justify-center rounded hover:bg-white transition-colors text-gray-400 hover:text-gray-600 text-xs"
+                 title="Edit">
+                <i class="fas fa-pencil-alt"></i>
+              </a>
+              <a href="{% url 'contacts:contact_delete' company.pk contact.pk %}"
+                 class="w-6 h-6 flex items-center justify-center rounded hover:bg-white transition-colors text-red-300 hover:text-red-500 text-xs"
+                 title="Delete">
+                <i class="fas fa-times"></i>
+              </a>
+            </div>
+          </div>
+          {% endfor %}
+        </div>
+        {% else %}
+        <div class="text-center py-10">
+          <div class="mx-auto w-10 h-10 rounded-full bg-gray-50 border border-gray-100 flex items-center justify-center mb-3">
+            <i class="fas fa-users text-gray-300 text-sm"></i>
+          </div>
+          <p class="text-sm font-medium text-gray-600 mb-1">No representatives</p>
+          <p class="text-xs text-gray-400 mb-4">Add a person who represents this contact.</p>
+          <a href="{% url 'contacts:contact_create' company.pk %}"
+             class="inline-flex items-center gap-1.5 text-xs px-3 py-2 bg-[#185FA5] text-white rounded-md hover:bg-blue-700 transition-colors">
+            <i class="fas fa-user-plus"></i> Add Representative
+          </a>
+        </div>
+        {% endif %}
+
+      </div>
+    </div>
+    {% endif %}
+
+  </div>
 </div>
 {% endblock %}
 
 {% block extra_js %}
 <script>
-function toggleContactTypeFields() {
-    var selected = document.querySelector('input[name="contact_type"]:checked');
-    var isIndividual = selected && selected.value === 'individual';
-    document.getElementById('field-brand-name').style.display = isIndividual ? 'none' : '';
-    document.getElementById('field-industry').style.display = isIndividual ? 'none' : '';
-    document.getElementById('field-category').style.display = isIndividual ? 'none' : '';
-    document.getElementById('field-company-phone').style.display = isIndividual ? 'none' : '';
+// ── Field → API key mapping ──────────────────────────────────────────────────
+const FIELD_MAP = {
+  'legal_id':       'legal_id',
+  'legal_name':     'legal_name',
+  'brand_name':     'brand_name',
+  'industry':       'industry',
+  'category':       'category',
+  'company_email':  'company_email',
+  'company_phone':  'company_phone',
+  'company_mobile': 'company_mobile',
+};
+
+{% if action == 'Edit' %}
+const API_URL = '/contacts/api/companies/{{ company.pk }}/';
+{% endif %}
+
+function getCsrf() {
+  return (document.cookie.match(/csrftoken=([^;]+)/) || [])[1] || '';
 }
-document.addEventListener('DOMContentLoaded', toggleContactTypeFields);
+
+let saveTimer = null;
+
+function setStatus(state, msg) {
+  var el = document.getElementById('save-status');
+  if (!el) return;
+  if (state === 'saving') {
+    el.textContent = 'Saving…';
+    el.style.color = '#9ca3af';
+  } else if (state === 'saved') {
+    el.textContent = 'Saved';
+    el.style.color = '#22c55e';
+    clearTimeout(saveTimer);
+    saveTimer = setTimeout(function () { el.textContent = ''; }, 2000);
+  } else if (state === 'error') {
+    el.textContent = msg || 'Save failed';
+    el.style.color = '#ef4444';
+  }
+}
+
+async function saveField(apiKey, value) {
+  {% if action == 'Edit' %}
+  setStatus('saving');
+  try {
+    var res = await fetch(API_URL, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCsrf() },
+      body: JSON.stringify({ [apiKey]: value }),
+    });
+    if (res.ok) {
+      setStatus('saved');
+    } else {
+      var data = await res.json().catch(function () { return {}; });
+      setStatus('error', data.detail || data[apiKey]?.[0] || 'Save failed');
+    }
+  } catch (e) {
+    setStatus('error', 'Connection error');
+  }
+  {% endif %}
+}
+
+document.addEventListener('DOMContentLoaded', function () {
+  // Style text/email/tel inputs
+  document.querySelectorAll('#contact-form input[type="text"], #contact-form input[type="email"], #contact-form input[type="tel"], #contact-form select').forEach(function (el) {
+    el.classList.add('crm-input');
+
+    {% if action == 'Edit' %}
+    // Auto-save on blur for text fields
+    var apiKey = FIELD_MAP[el.name];
+    if (apiKey) {
+      el.addEventListener('blur', function () { saveField(apiKey, el.value); });
+    }
+    {% endif %}
+  });
+
+  {% if action == 'Edit' %}
+  // Auto-save radios on change
+  document.querySelectorAll('input[name="contact_type"]').forEach(function (r) {
+    r.addEventListener('change', function () {
+      if (r.checked) saveField('contact_type', r.value);
+      toggleTypeFields();
+    });
+  });
+  document.querySelectorAll('input[name="preferred_language"]').forEach(function (r) {
+    r.addEventListener('change', function () {
+      if (r.checked) saveField('preferred_language', r.value);
+    });
+  });
+  {% endif %}
+
+  toggleTypeFields();
+});
+
+function toggleTypeFields() {
+  var sel = document.querySelector('input[name="contact_type"]:checked');
+  var isIndividual = sel && sel.value === 'individual';
+  ['field-brand-name','field-industry','field-category','field-company-phone'].forEach(function (id) {
+    var el = document.getElementById(id);
+    if (el) el.style.display = isIndividual ? 'none' : '';
+  });
+}
 </script>
 {% endblock %}

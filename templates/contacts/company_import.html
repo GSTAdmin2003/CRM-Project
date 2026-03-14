@@ -92,12 +92,48 @@
                 Upload an Excel file to bulk-import contacts with representatives.
             </p>
         </div>
-        <div class="flex gap-3">
-            <a href="{% url 'contacts:company_import_template' %}"
-               class="inline-flex items-center bg-white border border-gray-300 text-gray-700 px-4 py-2 rounded-md text-sm font-medium hover:bg-gray-50 transition">
-                <i class="fas fa-download mr-2"></i>
-                Download Template
-            </a>
+        <div class="flex gap-3 flex-wrap">
+            <!-- Download Template dropdown -->
+            <details class="relative">
+                <summary class="inline-flex items-center gap-2 bg-white border border-gray-300 text-gray-700 px-4 py-2 rounded-md text-sm font-medium hover:bg-gray-50 transition cursor-pointer select-none list-none">
+                    <i class="fas fa-download"></i>
+                    Download Template
+                    <i class="fas fa-chevron-down text-xs text-gray-400"></i>
+                </summary>
+                <div class="absolute right-0 mt-1 w-72 bg-white rounded-lg shadow-lg border border-gray-200 z-50 py-1">
+                    <a href="{% url 'contacts:company_import_template' %}"
+                       class="flex items-center gap-3 px-4 py-3 hover:bg-gray-50 transition text-sm">
+                        <div class="w-8 h-8 rounded-lg bg-red-100 flex items-center justify-center flex-shrink-0">
+                            <i class="fas fa-building text-red-600 text-xs"></i>
+                        </div>
+                        <div>
+                            <div class="font-medium text-gray-900">Company Template</div>
+                            <div class="text-xs text-gray-500">Company fields + representatives</div>
+                        </div>
+                    </a>
+                    <a href="{% url 'contacts:company_import_individual_template' %}"
+                       class="flex items-center gap-3 px-4 py-3 hover:bg-gray-50 transition text-sm">
+                        <div class="w-8 h-8 rounded-lg bg-blue-100 flex items-center justify-center flex-shrink-0">
+                            <i class="fas fa-user text-blue-600 text-xs"></i>
+                        </div>
+                        <div>
+                            <div class="font-medium text-gray-900">Individual Template</div>
+                            <div class="text-xs text-gray-500">ID, full name, email, mobile only</div>
+                        </div>
+                    </a>
+                    <a href="{% url 'contacts:company_import_combined_template' %}"
+                       class="flex items-center gap-3 px-4 py-3 hover:bg-gray-50 transition text-sm">
+                        <div class="w-8 h-8 rounded-lg bg-violet-100 flex items-center justify-center flex-shrink-0">
+                            <i class="fas fa-layer-group text-violet-600 text-xs"></i>
+                        </div>
+                        <div>
+                            <div class="font-medium text-gray-900">Combined Template</div>
+                            <div class="text-xs text-gray-500">All columns, mix types per row</div>
+                        </div>
+                    </a>
+                </div>
+            </details>
+
             <a href="{% url 'contacts:company_list' %}"
                class="inline-flex items-center bg-gray-600 hover:bg-gray-700 text-white px-4 py-2 rounded-md text-sm font-medium transition">
                 <i class="fas fa-arrow-left mr-2"></i>
@@ -174,22 +210,33 @@
                 </h3>
 
                 <ol class="instructions-list text-sm text-gray-600 list-decimal list-inside space-y-1">
-                    <li>Download the template using the button above</li>
+                    <li>Download the right template for your data type</li>
                     <li>Fill in your data following the column structure</li>
-                    <li>Company ID is used to match existing contacts</li>
-                    <li>Representatives are optional (0 or more per row)</li>
+                    <li>Company ID is used to match existing records</li>
                     <li>Upload the file and review the preview</li>
                     <li>Confirm to import valid rows</li>
                 </ol>
 
-                <div class="mt-6 p-4 bg-blue-50 rounded-lg">
-                    <h4 class="font-medium text-blue-900 mb-2">Template Columns</h4>
-                    <div class="text-sm text-blue-800 space-y-2">
-                        <p><span class="inline-block w-3 h-3 rounded" style="background: #FEE2E2;"></span> <strong>Required:</strong> Company ID, Company Name</p>
-                        <p><span class="inline-block w-3 h-3 rounded" style="background: #DBEAFE;"></span> <strong>Company:</strong> Brand, Phone, Mobile, Email, Industry, Category</p>
-                        <p><span class="inline-block w-3 h-3 rounded" style="background: #FEF9C3;"></span> <strong>Representatives:</strong> Position (name) | Email | Phone | Mobile (repeating)</p>
+                <div class="mt-6 p-4 bg-gray-50 rounded-lg border border-gray-200">
+                    <h4 class="font-medium text-gray-900 mb-3">
+                        <i class="fas fa-building text-gray-500 mr-1"></i> Company Template
+                    </h4>
+                    <div class="text-sm text-gray-700 space-y-1.5">
+                        <p><span class="inline-block w-3 h-3 rounded mr-1" style="background: #FEE2E2;"></span> <strong>Required:</strong> Company ID, Company Name</p>
+                        <p><span class="inline-block w-3 h-3 rounded mr-1" style="background: #DBEAFE;"></span> <strong>Optional:</strong> Brand, Phone, Mobile, Email, Industry, Category</p>
+                        <p><span class="inline-block w-3 h-3 rounded mr-1" style="background: #FEF9C3;"></span> <strong>Representatives:</strong> Position header → name | Email | Phone | Mobile</p>
                     </div>
-                    <p class="text-xs text-blue-700 mt-2">Representative format: Use any position as header (e.g., "Director"), cell value = representative name</p>
+                </div>
+
+                <div class="mt-3 p-4 bg-blue-50 rounded-lg border border-blue-100">
+                    <h4 class="font-medium text-blue-900 mb-3">
+                        <i class="fas fa-user text-blue-500 mr-1"></i> Individual Template
+                    </h4>
+                    <div class="text-sm text-blue-800 space-y-1.5">
+                        <p><span class="inline-block w-3 h-3 rounded mr-1" style="background: #DBEAFE;"></span> <strong>Required:</strong> Company ID, Full Name</p>
+                        <p><span class="inline-block w-3 h-3 rounded mr-1" style="background: #F3F4F6;"></span> <strong>Optional:</strong> Email, Mobile</p>
+                        <p class="text-xs text-blue-700 mt-1">No representative columns — individuals are standalone contacts</p>
+                    </div>
                 </div>
             </div>
         </div>
@@ -222,12 +269,27 @@
                         <div class="text-xl font-bold text-red-600">{{ preview_data.error_rows }}</div>
                     </div>
                 </div>
+                {% if preview_data.contact_type != 'individual' %}
                 <div class="flex items-center">
                     <i class="fas fa-users text-yellow-600 text-2xl mr-3"></i>
                     <div>
                         <div class="text-sm text-gray-500">Representative Groups</div>
                         <div class="text-xl font-bold text-gray-900">{{ preview_data.num_contact_groups }}</div>
                     </div>
+                </div>
+                {% endif %}
+                <div class="ml-auto">
+                    {% if preview_data.contact_type == 'individual' %}
+                    <span class="inline-flex items-center px-3 py-1.5 rounded-full text-sm font-medium bg-blue-100 text-blue-800">
+                        <i class="fas fa-user mr-1.5"></i>
+                        Importing as: Individual
+                    </span>
+                    {% else %}
+                    <span class="inline-flex items-center px-3 py-1.5 rounded-full text-sm font-medium bg-gray-100 text-gray-700">
+                        <i class="fas fa-building mr-1.5"></i>
+                        Importing as: Company
+                    </span>
+                    {% endif %}
                 </div>
             </div>
         </div>
@@ -434,7 +496,7 @@
 
 {% block extra_js %}
 <script>
-document.addEventListener('DOMContentLoaded', function() {
+(function() {
     const uploadZone = document.getElementById('upload-zone');
     const fileInput = document.getElementById('excel-file');
     const fileNameDisplay = document.getElementById('file-name');
@@ -492,6 +554,6 @@ document.addEventListener('DOMContentLoaded', function() {
             uploadBtn.disabled = true;
         }
     }
-});
+})();
 </script>
 {% endblock %}

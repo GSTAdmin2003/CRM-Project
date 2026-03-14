@@ -14,8 +14,10 @@ REQUIRED_HEADERS = ['Company ID', 'Company Name']
 
 # Company field mappings (header -> field name)
 COMPANY_HEADER_MAP = {
+    'Contact Type': 'contact_type',  # combined template — per-row discriminator
     'Company ID': 'legal_id',
     'Company Name': 'legal_name',
+    'Full Name': 'legal_name',       # alias used in individual template
     'Brand Name': 'brand_name',
     'Phone': 'company_phone',
     'Mobile': 'company_mobile',
@@ -177,6 +179,16 @@ def parse_excel_file(file_obj, user):
     except Exception as e:
         raise ValueError(f'Could not read Excel file: {str(e)}')
 
+    # Read contact_type from hidden _meta sheet (defaults to 'company')
+    contact_type_override = 'company'
+    if '_meta' in wb.sheetnames:
+        meta_ws = wb['_meta']
+        for row in meta_ws.iter_rows(values_only=True):
+            if row and row[0] == 'contact_type' and len(row) > 1:
+                raw = (str(row[1]) if row[1] else '').strip().lower()
+                contact_type_override = 'individual' if raw == 'individual' else 'company'
+                break
+
     ws = wb.active
 
     # Get headers from first row
@@ -230,8 +242,15 @@ def parse_excel_file(file_obj, user):
             'company_email': get_value_by_index(row_values, company_cols.get('company_email')),
             'industry': get_value_by_index(row_values, company_cols.get('industry')),
             'category': get_value_by_index(row_values, company_cols.get('category')),
+            'contact_type': contact_type_override,
             'exists': False,
         }
+
+        # Per-row Contact Type column (combined template) overrides the _meta default
+        if 'contact_type' in company_cols:
+            raw = get_value_by_index(row_values, company_cols['contact_type']).strip().lower()
+            if raw:
+                company_data['contact_type'] = 'individual' if raw == 'individual' else 'company'
 
         # Check if company exists
         if company_data['legal_id']:
@@ -286,6 +305,7 @@ def parse_excel_file(file_obj, user):
         'valid_rows': valid_rows,
         'error_rows': error_rows,
         'num_contact_groups': num_contact_groups,
+        'contact_type': contact_type_override,
         'rows': rows,
     }
 
@@ -373,25 +393,27 @@ def execute_import(preview_data, user):
                         company_email=company_data.get('company_email', ''),
                         industry=company_data.get('industry', ''),
                         category=company_data.get('category', ''),
+                        contact_type=company_data.get('contact_type', 'company'),
                         created_by=user,
                         updated_by=user,
                     )
                     results['companies_created'] += 1
 
-                # 2. Create Contacts
-                for contact_data in contacts_data:
-                    if not contact_data.get('name'):
-                        continue
+                # 2. Create Contacts (skip for individuals — they have no representatives)
+                if company_data.get('contact_type') != 'individual':
+                    for contact_data in contacts_data:
+                        if not contact_data.get('name'):
+                            continue
 
-                    Contact.objects.create(
-                        company=company,
-                        name=contact_data['name'],
-                        position=contact_data.get('position', ''),
-                        email=contact_data.get('email', ''),
-                        phone=contact_data.get('phone', ''),
-                        mobile=contact_data.get('mobile', ''),
-                    )
-                    results['contacts_created'] += 1
+                        Contact.objects.create(
+                            company=company,
+                            name=contact_data['name'],
+                            position=contact_data.get('position', ''),
+                            email=contact_data.get('email', ''),
+                            phone=contact_data.get('phone', ''),
+                            mobile=contact_data.get('mobile', ''),
+                        )
+                        results['contacts_created'] += 1
 
                 row_result['status'] = 'created'
 

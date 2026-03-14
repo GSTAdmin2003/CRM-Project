@@ -13,7 +13,7 @@
         <div class="flex justify-between items-start">
             <div>
                 <nav class="flex mb-2">
-                    <a href="{% url 'contacts:dashboard_home' %}" class="text-indigo-600 hover:text-indigo-900">Contacts</a>
+                    <a href="{% url 'contacts:company_list' %}" class="text-indigo-600 hover:text-indigo-900">Contacts</a>
                     <span class="mx-2 text-gray-400">/</span>
                     <a href="{% url 'contacts:company_list' %}" class="text-indigo-600 hover:text-indigo-900">Companies</a>
                     <span class="mx-2 text-gray-400">/</span>
@@ -25,10 +25,10 @@
                 <p class="mt-2 text-gray-600">{{ contact.position }} at {{ company.display_name }}</p>
             </div>
             <div class="flex space-x-2">
-                <a href="{% url 'contacts:contact_edit' contact.pk %}" class="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-md text-sm font-medium">
+                <a href="{% url 'contacts:contact_edit' company.pk contact.pk %}" class="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-md text-sm font-medium">
                     <i class="fas fa-edit mr-2"></i>Edit
                 </a>
-                <a href="{% url 'contacts:contact_delete' contact.pk %}" class="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-md text-sm font-medium">
+                <a href="{% url 'contacts:contact_delete' company.pk contact.pk %}" class="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-md text-sm font-medium">
                     <i class="fas fa-trash mr-2"></i>Delete
                 </a>
             </div>

@@ -82,6 +82,7 @@ class CompanyViewSet(viewsets.ModelViewSet):
 
         update_fields = {}
         allowed = {
+            "contact_type", "preferred_language",
             "legal_id", "legal_name", "brand_name",
             "company_phone", "company_mobile", "company_email",
             "industry", "category",

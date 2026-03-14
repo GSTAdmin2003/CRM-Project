@@ -66,8 +66,8 @@ def company_create(request):
             company.created_by = request.user
             company.updated_by = request.user
             company.save()
-            messages.success(request, f'Company "{company.legal_name}" created successfully!')
-            return redirect('contacts:company_detail', pk=company.pk)
+            messages.success(request, f'"{company.legal_name}" created successfully.')
+            return redirect('contacts:company_edit', pk=company.pk)
     else:
         form = CompanyForm()
 
@@ -80,7 +80,7 @@ def company_create(request):
 
 @login_required
 def company_edit(request, pk):
-    """Edit an existing company"""
+    """Edit an existing company — combined edit + detail page"""
     company = get_object_or_404(Company, pk=pk)
 
     if request.method == 'POST':
@@ -89,14 +89,15 @@ def company_edit(request, pk):
             company = form.save(commit=False)
             company.updated_by = request.user
             company.save()
-            messages.success(request, f'Company "{company.legal_name}" updated successfully!')
-            return redirect('contacts:company_detail', pk=company.pk)
+            messages.success(request, f'"{company.display_name}" saved successfully.')
+            return redirect('contacts:company_edit', pk=company.pk)
     else:
         form = CompanyForm(instance=company)
 
     context = {
         'form': form,
         'company': company,
+        'contacts': company.contacts.all(),
         'action': 'Edit',
     }
     return render(request, 'contacts/company_form.html', context)
@@ -144,7 +145,7 @@ def contact_create(request, company_pk):
 
 
 @login_required
-def contact_edit(request, pk):
+def contact_edit(request, company_pk, pk):
     """Edit an existing contact"""
     contact = get_object_or_404(Contact, pk=pk)
 
@@ -167,7 +168,7 @@ def contact_edit(request, pk):
 
 
 @login_required
-def contact_delete(request, pk):
+def contact_delete(request, company_pk, pk):
     """Delete a contact"""
     contact = get_object_or_404(Contact, pk=pk)
     company = contact.company
@@ -197,7 +198,7 @@ def contact_delete(request, pk):
 
 
 @login_required
-def contact_detail(request, pk):
+def contact_detail(request, company_pk, pk):
     """Display contact details"""
     contact = get_object_or_404(Contact, pk=pk)
 
@@ -242,20 +243,6 @@ def toggle_favorite_contact(request, company_pk, contact_pk):
     messages.success(request, message)
     return redirect('contacts:company_detail', pk=company.pk)
 
-
-@login_required
-def dashboard_home(request):
-    """Contacts app dashboard/home page"""
-    companies_count = Company.objects.count()
-    contacts_count = Contact.objects.count()
-    recent_companies = Company.objects.order_by('-created_at')[:5]
-
-    context = {
-        'companies_count': companies_count,
-        'contacts_count': contacts_count,
-        'recent_companies': recent_companies,
-    }
-    return render(request, 'contacts/dashboard.html', context)
 
 
 # =============================================================================
@@ -347,15 +334,45 @@ def company_import_confirm(request):
 
 @login_required
 def company_import_template(request):
-    """Generate and download Excel import template"""
-    from ..services.excel_template import generate_import_template
+    """Generate and download company Excel import template"""
+    from ..services.excel_template import generate_company_template
 
     response = HttpResponse(
         content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
     )
     response['Content-Disposition'] = 'attachment; filename="company_import_template.xlsx"'
 
-    wb = generate_import_template()
+    wb = generate_company_template()
     wb.save(response)
+
+    return response
+
+
+@login_required
+def company_import_individual_template(request):
+    """Generate and download individual Excel import template"""
+    from ..services.excel_template import generate_individual_template
+
+    response = HttpResponse(
+        content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+    )
+    response['Content-Disposition'] = 'attachment; filename="individual_import_template.xlsx"'
+
+    generate_individual_template().save(response)
+
+    return response
+
+
+@login_required
+def company_import_combined_template(request):
+    """Generate and download combined Excel import template (companies + individuals)"""
+    from ..services.excel_template import generate_combined_template
+
+    response = HttpResponse(
+        content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+    )
+    response['Content-Disposition'] = 'attachment; filename="combined_import_template.xlsx"'
+
+    generate_combined_template().save(response)
 
     return response

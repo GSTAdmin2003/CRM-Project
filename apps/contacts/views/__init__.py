@@ -12,12 +12,10 @@ from .template_views import (
     contact_delete,
     contact_detail,
     contact_edit,
-    dashboard_home,
     toggle_favorite_contact,
 )
 
 __all__ = [
-    "dashboard_home",
     "company_list",
     "company_detail",
     "company_create",

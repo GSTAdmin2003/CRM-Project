@@ -13,7 +13,7 @@
         <div class="flex justify-between items-start">
             <div>
                 <nav class="flex mb-2">
-                    <a href="{% url 'contacts:dashboard_home' %}" class="text-indigo-600 hover:text-indigo-900">Contacts</a>
+                    <a href="{% url 'contacts:company_list' %}" class="text-indigo-600 hover:text-indigo-900">Contacts</a>
                     <span class="mx-2 text-gray-400">/</span>
                     <a href="{% url 'contacts:company_list' %}" class="text-indigo-600 hover:text-indigo-900">Contacts</a>
                     <span class="mx-2 text-gray-400">/</span>
@@ -152,7 +152,7 @@
                                             <i class="fas fa-user text-gray-600"></i>
                                         </div>
                                     </div>
-                                    <a href="{% url 'contacts:contact_detail' contact.pk %}" class="flex-1 min-w-0 hover:bg-gray-50 p-2 rounded-md transition-colors cursor-pointer">
+                                    <a href="{% url 'contacts:contact_detail' company.pk contact.pk %}" class="flex-1 min-w-0 hover:bg-gray-50 p-2 rounded-md transition-colors cursor-pointer">
                                         <p class="text-sm font-medium text-gray-900 truncate">
                                             {{ contact.name }}
                                         </p>
@@ -197,10 +197,10 @@
                                             </button>
                                         </form>
                                         <!-- Action Buttons -->
-                                        <a href="{% url 'contacts:contact_edit' contact.pk %}" class="text-indigo-600 hover:text-indigo-900" title="Edit">
+                                        <a href="{% url 'contacts:contact_edit' company.pk contact.pk %}" class="text-indigo-600 hover:text-indigo-900" title="Edit">
                                             <i class="fas fa-edit"></i>
                                         </a>
-                                        <a href="{% url 'contacts:contact_delete' contact.pk %}" class="text-red-600 hover:text-red-900" title="Delete">
+                                        <a href="{% url 'contacts:contact_delete' company.pk contact.pk %}" class="text-red-600 hover:text-red-900" title="Delete">
                                             <i class="fas fa-trash"></i>
                                         </a>
                                     </div>

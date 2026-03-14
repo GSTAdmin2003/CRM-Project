@@ -460,7 +460,7 @@ class Autocomplete {
                 // Fallback: try to construct URL
                 const viewUrlName = this.viewUrlName;
                 if (viewUrlName.includes('company')) {
-                    url = `/contacts/companies/${selectedId}/`;
+                    url = `/contacts/contacts/${selectedId}/`;
                 } else if (viewUrlName.includes('contact')) {
                     url = `/contacts/contacts/${selectedId}/`;
                 }

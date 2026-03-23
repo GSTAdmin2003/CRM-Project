@@ -8,7 +8,8 @@ workflow.
 
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
-from django.db.models import Q
+from django.core.paginator import Paginator
+from django.db.models import Count, Q
 from django.http import HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.views.decorators.http import require_http_methods
@@ -18,11 +19,14 @@ from ..models import Company, Contact
 from ..services import CompanyService, ContactService
 
 
+PAGE_SIZE = 50
+
+
 @login_required
 def company_list(request):
-    """List all companies with search functionality"""
+    """List all companies with search and pagination."""
     search_query = request.GET.get('search', '')
-    companies = Company.objects.all()
+    companies = Company.objects.annotate(contacts_count=Count('contacts'))
 
     if search_query:
         companies = companies.filter(
@@ -35,8 +39,13 @@ def company_list(request):
 
     companies = companies.order_by('legal_name')
 
+    paginator = Paginator(companies, PAGE_SIZE)
+    page_number = request.GET.get('page', 1)
+    page_obj = paginator.get_page(page_number)
+
     context = {
-        'companies': companies,
+        'companies': page_obj,
+        'page_obj': page_obj,
         'search_query': search_query,
         'total_companies': Company.objects.count(),
     }

@@ -693,6 +693,7 @@ def stage_list(request):
                 "color": s.color,
                 "probability": s.probability,
                 "isClosedStage": s.is_closed_stage,
+                "stageType": s.stage_type,
                 "order": s.order,
                 "teamName": s.sales_team.name if s.sales_team else None,
             }
@@ -750,8 +751,30 @@ def stage_edit(request, pk):
 def team_list(request):
     """Sales team list — renders Svelte shell."""
     from django.core.serializers.json import DjangoJSONEncoder
+    from apps.crm.models import LeadStage
+    from apps.crm.services import TeamService
 
     teams = SalesTeam.objects.filter(is_active=True).order_by('name')
+    can_manage_stages = (
+        request.user.has_role('Sales Director')
+        or request.user.has_role('Owner')
+        or request.user.is_staff
+    )
+    global_stages = []
+    if can_manage_stages:
+        global_stages = [
+            {
+                "id": s.id,
+                "name": s.name,
+                "order": s.order,
+                "color": s.color,
+                "probability": s.probability,
+                "isClosedStage": s.is_closed_stage,
+                "stageType": s.stage_type,
+                "description": s.description or "",
+            }
+            for s in LeadStage.objects.filter(sales_team=None, is_active=True).order_by('order')
+        ]
     init_data = {
         "teams": [
             {
@@ -762,8 +785,10 @@ def team_list(request):
             }
             for t in teams
         ],
-        "canCreate": request.user.is_sales_manager() or request.user.is_sales_executive() or request.user.is_staff,
-        "apiUrls": {"teams": "/crm/api/teams/"},
+        "canCreate": TeamService.can_manage(request.user),
+        "canManageStages": can_manage_stages,
+        "globalStages": global_stages,
+        "apiUrls": {"teams": "/crm/api/teams/", "stages": "/crm/api/stages/"},
     }
     return render(request, 'crm/team_list.html', {
         'init_data_json': json.dumps(init_data, cls=DjangoJSONEncoder),
@@ -777,17 +802,23 @@ def team_detail(request, pk):
 
     team = get_object_or_404(SalesTeam, pk=pk)
     members = team.get_team_members()
+    from apps.crm.services import TeamService
+    can_edit = TeamService.can_manage(request.user)
+    all_users = User.objects.filter(is_active=True).order_by('first_name', 'last_name') if can_edit else []
     init_data = {
         "team": {
             "id": team.id,
             "name": team.name,
             "description": getattr(team, 'description', '') or '',
             "managerName": team.manager.get_full_name() if team.manager else None,
+            "managerId": team.manager.id if team.manager else None,
         },
         "members": [
             {"id": m.id, "name": m.get_full_name(), "email": m.email}
             for m in members
         ],
+        "allUsers": [{"id": u.id, "name": u.get_full_name()} for u in all_users],
+        "canEdit": can_edit,
         "apiUrls": {
             "teams": "/crm/api/teams/",
             "stages": "/crm/api/stages/",
@@ -802,8 +833,9 @@ def team_detail(request, pk):
 def team_create(request):
     """Sales team creation — renders Svelte shell."""
     from django.core.serializers.json import DjangoJSONEncoder
+    from apps.crm.services import TeamService
 
-    if not (request.user.is_sales_manager() or request.user.is_sales_executive()):
+    if not TeamService.can_manage(request.user):
         messages.error(request, 'You do not have permission to create teams.')
         return redirect('crm:team_list')
 
@@ -822,10 +854,11 @@ def team_create(request):
 def team_edit(request, pk):
     """Sales team edit — renders Svelte shell."""
     from django.core.serializers.json import DjangoJSONEncoder
+    from apps.crm.services import TeamService
 
     team = get_object_or_404(SalesTeam, pk=pk)
 
-    if not (request.user.is_sales_manager() or request.user.is_sales_executive()):
+    if not TeamService.can_manage(request.user):
         messages.error(request, 'You do not have permission to edit teams.')
         return redirect('crm:team_detail', pk=pk)
 
@@ -1196,7 +1229,7 @@ def _build_contacts_data():
 
 
 # ============================================
-# Lead Views (lead_type='lead')
+# Lead Views (status='new')
 # ============================================
 
 @login_required
@@ -1213,7 +1246,7 @@ def lead_list(request):
         'statusChoices': Lead.STATUS_CHOICES,
         'apiUrls': {
             'leads': '/crm/api/leads/',
-            'leadEdit': '/crm/opportunities/{id}/edit/',
+            'leadEdit': '/crm/leads/{id}/',
         },
     }
     return render(request, 'crm/incoming_lead_list.html', {
@@ -1227,14 +1260,12 @@ def lead_create(request):
     from ..forms import LeadForm
     if request.method == 'POST':
         form = LeadForm(request.POST, user=request.user)
-        form._lead_type = Lead.TYPE_LEAD
         if form.is_valid():
             lead = form.save()
             messages.success(request, 'Lead created successfully.')
             return redirect('crm:lead_detail', pk=lead.pk)
     else:
         form = LeadForm(user=request.user)
-        form._lead_type = Lead.TYPE_LEAD
 
     contacts_by_company, individual_companies = _build_contacts_data()
     stages = LeadStage.get_stages_for_team(request.user.sales_team)
@@ -1250,74 +1281,103 @@ def lead_create(request):
 
 @login_required
 def lead_detail(request, pk):
-    """Detail view for lead"""
-    lead = get_object_or_404(Lead, lead_type=Lead.TYPE_LEAD, pk=pk)
+    """Detail view for lead — renders Svelte shell."""
+    from ..serializers.lead import LeadDetailSerializer
 
-    # Check permissions
+    lead = get_object_or_404(Lead, status="new", pk=pk)
+
     if not lead.can_be_viewed_by(request.user):
         raise Http404("Lead not found")
 
-    context = {
-        'lead': lead,
-        'can_edit': lead.can_be_edited_by(request.user),
-    }
+    serializer_data = LeadDetailSerializer(lead, context={'request': request}).data
 
-    return render(request, 'crm/incoming_lead_detail.html', context)
+    init_data = {
+        'lead': dict(serializer_data),
+        'apiUrls': {
+            'lead': f'/crm/api/leads/{lead.pk}/',
+            'leads': '/crm/api/leads/',
+            'convertToOpportunity': f'/crm/api/leads/{lead.pk}/convert/',
+            'leadEdit': f'/crm/leads/{lead.pk}/edit/',
+        },
+    }
+    return render(request, 'crm/lead_detail.html', {
+        'init_data_json': json.dumps(init_data, cls=DjangoJSONEncoder),
+    })
 
 
 @login_required
 def lead_edit(request, pk):
-    """Edit lead — uses unified lead_form.html"""
-    from ..forms import LeadForm
-    lead = get_object_or_404(Lead, lead_type=Lead.TYPE_LEAD, pk=pk)
+    """Lead edit — serves Svelte shell with serialized initial data."""
+    from rest_framework.renderers import JSONRenderer
+    from apps.activities.models import ActivityType
+    from ..serializers import LeadDetailSerializer
 
+    lead = get_object_or_404(Lead, status="new", pk=pk)
     if not lead.can_be_edited_by(request.user):
-        messages.error(request, 'You do not have permission to edit this lead.')
-        return redirect('crm:lead_detail', pk=lead.pk)
+        raise Http404()
 
-    if request.method == 'POST':
-        form = LeadForm(request.POST, instance=lead, user=request.user)
-        if form.is_valid():
-            lead = form.save()
-            messages.success(request, 'Lead updated successfully.')
-            return redirect('crm:lead_detail', pk=lead.pk)
-    else:
-        form = LeadForm(instance=lead, user=request.user)
+    # Build prev/next navigation among active leads only
+    nav_leads = Lead.objects.filter(
+        status="new", assigned_to=request.user
+    ).order_by('-updated_at')
+    nav_lead_ids = list(nav_leads.values_list('id', flat=True))
 
-    contacts_by_company, individual_companies = _build_contacts_data()
+    prev_lead_id = next_lead_id = None
+    if lead.pk in nav_lead_ids:
+        idx = nav_lead_ids.index(lead.pk)
+        if idx > 0:
+            prev_lead_id = nav_lead_ids[idx - 1]
+        if idx < len(nav_lead_ids) - 1:
+            next_lead_id = nav_lead_ids[idx + 1]
+
+    from apps.user_settings.models import UserPreferences
+    user_lang = UserPreferences.get_or_create_for_user(request.user).language
+
     stages = LeadStage.get_stages_for_team(request.user.sales_team)
+    activity_types = ActivityType.objects.filter(is_active=True)
+    lead_dict = json.loads(JSONRenderer().render(LeadDetailSerializer(lead).data))
 
-    activities = Activity.objects.filter(lead=lead).select_related(
-        'activity_type', 'assigned_to'
-    ).order_by('-scheduled_date', '-created_at')
-
-    from apps.activities.models import ActivityType as ActivityTypeModel
-    activity_types = ActivityTypeModel.objects.filter(is_active=True)
-
-    try:
-        from apps.messaging.models import WhatsAppConversation
-        wa_conversation = lead.whatsapp_conversations.select_related().prefetch_related('messages').first()
-    except Exception:
-        wa_conversation = None
+    init_data = {
+        'leadId': lead.pk,
+        'lead': lead_dict,
+        'stages': [
+            {'id': s.id, 'name': s.name, 'color': s.color,
+             'probability': s.probability, 'is_closed_stage': s.is_closed_stage}
+            for s in stages
+        ],
+        'activityTypes': [
+            {'id': t.id, 'name': t.name, 'icon': t.icon, 'color': t.color}
+            for t in activity_types
+        ],
+        'waConversationId': _resolve_wa_conversation_id(lead, lead_dict),
+        'userLanguage': user_lang,
+        'prevLeadId': prev_lead_id,
+        'nextLeadId': next_lead_id,
+        'navParams': '',
+        'currentIndex': nav_lead_ids.index(lead.pk) + 1 if lead.pk in nav_lead_ids else 0,
+        'totalCount': len(nav_lead_ids),
+        'apiUrls': {
+            'lead': f'/crm/api/leads/{lead.pk}/',
+            'convert': f'/crm/api/leads/{lead.pk}/convert/',
+            'leadStage': f'/crm/api/leads/{lead.pk}/stage/',
+            'activities': '/activities/api/activities/',
+            'activityTypes': '/activities/api/activity-types/',
+            'conversations': '/messaging/api/conversations/',
+            'templates': '/messaging/api/templates/',
+            'companySearch': '/crm/api/company/search/',
+        },
+    }
 
     return render(request, 'crm/lead_form.html', {
-        'form': form,
         'lead': lead,
-        'stages': stages,
-        'contacts_by_company_json': json.dumps(contacts_by_company),
-        'individual_companies_json': json.dumps(individual_companies),
-        'selected_contact_id': form.selected_contact_id if hasattr(form, 'selected_contact_id') else '',
-        'is_lead': True,
-        'activities': activities,
-        'activity_types': activity_types,
-        'wa_conversation': wa_conversation,
+        'init_data_json': json.dumps(init_data, cls=DjangoJSONEncoder),
     })
 
 
 @login_required
 def lead_delete(request, pk):
     """Delete lead"""
-    lead = get_object_or_404(Lead, lead_type=Lead.TYPE_LEAD, pk=pk)
+    lead = get_object_or_404(Lead, status="new", pk=pk)
 
     # Check permissions
     if not lead.can_be_edited_by(request.user):
@@ -1362,97 +1422,30 @@ def lead_delete(request, pk):
 
 @login_required
 def lead_convert(request, pk):
-    """Convert lead to opportunity"""
-    lead = get_object_or_404(Lead, lead_type=Lead.TYPE_LEAD, pk=pk)
+    """Convert lead to opportunity (legacy template-based view — API preferred)."""
+    from ..services import LeadService
+    from core.exceptions import ConflictError, ValidationError as ServiceValidationError
+
+    lead = get_object_or_404(Lead, status="new", pk=pk)
 
     # Check permissions
     if not lead.can_be_edited_by(request.user):
         messages.error(request, 'You do not have permission to convert this lead.')
         return redirect('crm:lead_detail', pk=lead.pk)
 
-    if lead.status == 'converted':
-        messages.warning(request, 'This lead has already been converted.')
-        converted = lead.converted_opportunities.first()
-        if converted:
-            return redirect('crm:opportunity_edit', pk=converted.pk)
-        return redirect('crm:lead_detail', pk=lead.pk)
-
     if request.method == 'POST':
-        # Get default stage for the team
-        default_stage = LeadStage.get_default_stage_for_team(lead.sales_team)
+        try:
+            opportunity = LeadService.convert_lead_to_opportunity(
+                lead=lead, user=request.user
+            )
+            messages.success(request, 'Lead converted to opportunity successfully.')
+            return redirect('crm:opportunity_edit', pk=opportunity.pk)
+        except (ConflictError, ServiceValidationError) as e:
+            messages.error(request, str(e))
+            return redirect('crm:lead_detail', pk=lead.pk)
 
-        # Prepare opportunity title
-        if lead.contact:
-            title = f"Opportunity from {lead.contact.name}"
-            full_name = lead.contact.name
-            email = lead.contact.email
-            phone = lead.contact.phone or lead.contact.mobile
-            position = lead.contact.position
-        elif lead.company:
-            title = f"Opportunity from {lead.company.display_name}"
-            full_name = ""
-            email = lead.company.company_email or ""
-            phone = lead.company.company_phone or ""
-            position = ""
-        else:
-            title = "Opportunity from Lead"
-            full_name = ""
-            email = ""
-            phone = ""
-            position = ""
-
-        # Create opportunity from lead
-        opportunity = Lead.objects.create(
-            lead_type=Lead.TYPE_OPPORTUNITY,
-            title=title,
-            full_name=full_name,
-            email=email,
-            phone=phone,
-            position=position,
-            company=lead.company,
-            company_name=lead.company.legal_name if lead.company else "",
-            contact=lead.contact,
-            stage=default_stage,
-            assigned_to=lead.assigned_to or request.user,
-            sales_team=lead.sales_team,
-            created_by=request.user,
-            notes=f"Converted from lead.\n\nOriginal Message:\n{lead.message}\n\n{lead.notes if lead.notes else ''}"
-        )
-
-        # Update lead status and link converted opportunity
-        lead.status = 'converted'
-        lead.save()
-        opportunity.converted_from = lead
-        opportunity.save(update_fields=['converted_from'])
-
-        messages.success(request, f'Lead converted to opportunity successfully.')
-        return redirect('crm:opportunity_edit', pk=opportunity.pk)
-
-    details = []
-    if lead.contact:
-        details.append({'label': 'Contact', 'value': lead.contact.name})
-        if lead.contact.email:
-            details.append({'label': 'Email', 'value': lead.contact.email})
-    if lead.company:
-        details.append({'label': 'Company', 'value': lead.company.display_name})
-    if lead.assigned_to:
-        details.append({'label': 'Assigned To', 'value': lead.assigned_to.get_full_name() or lead.assigned_to.username})
-    if lead.sales_team:
-        details.append({'label': 'Sales Team', 'value': lead.sales_team.name})
-
-    context = {
-        'lead': lead,
-        'init_data_json': json.dumps({
-            'title': 'Convert Lead to Opportunity',
-            'message': 'This will create a new opportunity from this lead. The lead will be marked as "Converted" and linked to the new opportunity.',
-            'details': details,
-            'confirmLabel': 'Convert to Opportunity',
-            'confirmClass': 'bg-green-600 hover:bg-green-700',
-            'cancelUrl': f'/crm/leads/{lead.pk}/',
-        }, cls=DjangoJSONEncoder),
-    }
-
-    return render(request, 'crm/incoming_lead_confirm_convert.html', context)
+    # GET — show confirmation page
+    return render(request, 'crm/incoming_lead_confirm_convert.html', {'lead': lead})
 
 
 # =============================================================================
@@ -1550,7 +1543,7 @@ def opportunities_bulk_action(request):
         return redirect('crm:opportunity_list')
 
     leads = Lead.objects.filter(
-        id__in=selected_ids, lead_type=Lead.TYPE_OPPORTUNITY
+        id__in=selected_ids, status="converted"
     )
 
     if action == 'delete':
@@ -1575,7 +1568,7 @@ def leads_bulk_action(request):
         return redirect('crm:lead_list')
 
     leads = Lead.objects.filter(
-        id__in=selected_ids, lead_type=Lead.TYPE_LEAD
+        id__in=selected_ids, status="new"
     )
 
     if action == 'delete':

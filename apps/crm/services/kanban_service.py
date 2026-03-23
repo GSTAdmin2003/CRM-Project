@@ -41,9 +41,7 @@ class KanbanService:
             team_id: Team ID string or 'all' for executives.
         """
         # Validate view context based on user permissions
-        if view_context == "team" and not (
-            user.is_sales_manager() or user.is_sales_executive()
-        ):
+        if view_context == "team" and not user.is_sales_manager():
             view_context = "personal"
 
         target_team, selected_team_id = KanbanService._resolve_team(
@@ -102,6 +100,7 @@ class KanbanService:
                     "name": stage.name,
                     "color": stage.color,
                     "probability": stage.probability,
+                    "is_closed_stage": stage.is_closed_stage,
                 },
                 "leads": lead_list,
                 "total_value": sum(
@@ -212,30 +211,27 @@ class KanbanService:
     @staticmethod
     def _get_stages(
         *, view_context: str, selected_team_id: str, target_team
-    ) -> QuerySet[LeadStage]:
-        """Get the appropriate stages for the kanban view."""
+    ) -> list[LeadStage]:
+        """Get the active pipeline stages for the kanban view (won/lost are statuses, not stages)."""
         if view_context == "team" and selected_team_id == "all":
-            # Show global stages when viewing all teams
-            return LeadStage.objects.filter(
-                sales_team=None, is_active=True
-            ).order_by("order")
-
-        # Use team-specific stages or fallback to global
-        return LeadStage.get_stages_for_team(target_team)
+            qs = LeadStage.objects.filter(sales_team=None, is_active=True).order_by("order")
+        else:
+            qs = LeadStage.get_stages_for_team(target_team)
+        return list(qs)
 
     @staticmethod
     def _get_leads(
         *, user, view_context: str, selected_team_id: str, target_team
     ) -> QuerySet[Lead]:
-        """Get the permission-scoped leads queryset for the kanban."""
+        """Get the permission-scoped leads queryset for the kanban (converted only)."""
         if view_context == "team":
             if selected_team_id == "all" and user.is_sales_executive():
-                return Lead.objects.all()
+                return Lead.objects.filter(status="converted")
             elif target_team:
                 team_members = target_team.get_team_members()
-                return Lead.objects.filter(assigned_to__in=team_members)
+                return Lead.objects.filter(assigned_to__in=team_members, status="converted")
             else:
-                return Lead.objects.filter(assigned_to=user)
+                return Lead.objects.filter(assigned_to=user, status="converted")
         else:
             # Personal view — user's own leads
-            return Lead.objects.filter(assigned_to=user)
+            return Lead.objects.filter(assigned_to=user, status="converted")

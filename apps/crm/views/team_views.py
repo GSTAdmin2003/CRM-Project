@@ -5,6 +5,7 @@ All business logic is delegated to TeamService.
 """
 
 from rest_framework import status, viewsets
+from rest_framework.decorators import action
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
@@ -103,3 +104,35 @@ class SalesTeamViewSet(viewsets.ModelViewSet):
             {"detail": "Team deletion is not supported"},
             status=status.HTTP_405_METHOD_NOT_ALLOWED,
         )
+
+    @action(detail=True, methods=["post"], url_path="add_member")
+    def add_member(self, request, pk=None):
+        """POST /crm/api/teams/{id}/add_member/  — body: {user_id: N}"""
+        user_id = request.data.get("user_id")
+        if not user_id:
+            return Response({"detail": "user_id is required"}, status=status.HTTP_400_BAD_REQUEST)
+        try:
+            team = TeamService.get_team_or_raise(pk=pk)
+            TeamService.add_member(team=team, user_id=user_id, requesting_user=request.user)
+        except NotFoundError as e:
+            return Response({"detail": e.message}, status=status.HTTP_404_NOT_FOUND)
+        except PermissionDeniedError as e:
+            return Response({"detail": e.message}, status=status.HTTP_403_FORBIDDEN)
+        members = team.get_team_members()
+        return Response([{"id": m.id, "name": m.get_full_name(), "email": m.email} for m in members])
+
+    @action(detail=True, methods=["post"], url_path="remove_member")
+    def remove_member(self, request, pk=None):
+        """POST /crm/api/teams/{id}/remove_member/  — body: {user_id: N}"""
+        user_id = request.data.get("user_id")
+        if not user_id:
+            return Response({"detail": "user_id is required"}, status=status.HTTP_400_BAD_REQUEST)
+        try:
+            team = TeamService.get_team_or_raise(pk=pk)
+            TeamService.remove_member(team=team, user_id=user_id, requesting_user=request.user)
+        except NotFoundError as e:
+            return Response({"detail": e.message}, status=status.HTTP_404_NOT_FOUND)
+        except PermissionDeniedError as e:
+            return Response({"detail": e.message}, status=status.HTTP_403_FORBIDDEN)
+        members = team.get_team_members()
+        return Response([{"id": m.id, "name": m.get_full_name(), "email": m.email} for m in members])

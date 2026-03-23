@@ -101,11 +101,11 @@ class Command(BaseCommand):
 
         # Create a Lead for this company if not already existing
         lead_created = 0
-        if not Lead.objects.filter(company=company, lead_type='lead').exists():
+        if not Lead.objects.filter(company=company, status='new').exists():
             Lead.objects.create(
-                lead_type='lead',
                 title=company_name,
                 company=company,
+                status='new',
             )
             lead_created = 1
 

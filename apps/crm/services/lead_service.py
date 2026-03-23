@@ -11,7 +11,7 @@ Rules:
 from django.db import transaction
 from django.db.models import QuerySet
 
-from core.exceptions import NotFoundError, PermissionDeniedError, ValidationError
+from core.exceptions import ConflictError, NotFoundError, PermissionDeniedError, ValidationError
 
 from ..models import Lead, LeadActivity, LeadStage
 
@@ -45,7 +45,7 @@ class LeadService:
     @transaction.atomic
     def create_lead(
         *,
-        title: str,
+        title: str = "",
         company_id: int | None = None,
         stage_id: int | None = None,
         assigned_to=None,
@@ -56,18 +56,24 @@ class LeadService:
         Create a new lead with activity logging.
 
         Args:
-            title: Opportunity title (required).
+            title: Lead/opportunity title (optional — defaults to company_name or "New Lead").
             company_id: FK to contacts.Company (optional).
             stage_id: FK to LeadStage. If not provided, uses the default
-                      stage for the assigned user's team.
+                      stage for the assigned user's team. For status='new' leads,
+                      a missing stage is acceptable (stage is nullable).
             assigned_to: User to assign the lead to (optional).
             created_by: User creating the lead (required).
             **kwargs: Optional fields — full_name, email, phone, position,
                       estimated_value, probability, expected_close_date,
                       source, status, notes, contact_id, sales_team_id.
         """
+        # Derive a title if none provided
         if not title or not title.strip():
-            raise ValidationError("Opportunity title is required")
+            title = (
+                kwargs.get("company_name", "")
+                or kwargs.get("full_name", "")
+                or "New Lead"
+            )
 
         # Resolve company
         company = None
@@ -80,13 +86,17 @@ class LeadService:
                 raise NotFoundError(f"Company with id {company_id} not found")
 
         # Resolve stage
+        lead_status = kwargs.get("status", "new")
         if stage_id:
             try:
                 stage = LeadStage.objects.get(pk=stage_id, is_active=True)
             except LeadStage.DoesNotExist:
                 raise NotFoundError(f"Stage with id {stage_id} not found")
+        elif lead_status == "new":
+            # Incoming leads don't require a stage
+            stage = None
         else:
-            # Default to the first stage for the user's team
+            # Opportunities need a stage — default to first available
             user_team = created_by.sales_team if created_by else None
             stage = LeadStage.get_default_stage_for_team(user_team)
             if not stage:
@@ -113,6 +123,10 @@ class LeadService:
                 sales_team = SalesTeam.objects.get(pk=sales_team_id)
             except SalesTeam.DoesNotExist:
                 raise NotFoundError(f"Sales team with id {sales_team_id} not found")
+
+        # Opportunities must always have a team
+        if lead_status == "converted" and not sales_team:
+            raise ValidationError("Opportunities must have a sales team assigned")
 
         # Build allowed kwargs
         allowed_fields = {
@@ -186,6 +200,7 @@ class LeadService:
             "expected_close_date",
             "source",
             "status",
+            "lost_reason",
             "notes",
             "stage_id",
             "assigned_to_id",
@@ -196,6 +211,10 @@ class LeadService:
         for key, value in fields.items():
             if key in allowed_fields:
                 setattr(lead, key, value)
+
+        # Opportunities must always have a team
+        if lead.status == "converted" and not lead.sales_team_id:
+            raise ValidationError("Opportunities must have a sales team assigned")
 
         lead.save()
 
@@ -220,6 +239,101 @@ class LeadService:
             description="Opportunity information was updated",
         )
 
+        return lead
+
+    @staticmethod
+    @transaction.atomic
+    def convert_lead_to_opportunity(*, lead: Lead, user) -> Lead:
+        """
+        Convert a status='new' lead into a pipeline opportunity (status='converted').
+
+        Assigns a default stage if none is set. Raises ConflictError if the lead
+        is not in 'new' status.
+        """
+        if lead.status != "new":
+            raise ConflictError("Only active leads (status=new) can be converted")
+
+        # Opportunities must always have a team
+        team = lead.sales_team or (user.sales_team if user else None)
+        if not team:
+            raise ValidationError(
+                "Opportunities must have a sales team assigned. "
+                "Please assign the lead to a team before converting."
+            )
+
+        # Ensure a stage is assigned — use the 'contacted' stage for converted leads
+        if not lead.stage:
+            stage = LeadStage.get_contacted_stage_for_team(team) or LeadStage.get_default_stage_for_team(team)
+            if not stage:
+                raise ValidationError("No active stages available for conversion")
+            lead.stage = stage
+
+        # Ensure a title
+        if not lead.title or not lead.title.strip():
+            lead.title = lead.company_name or lead.full_name or "Converted Lead"
+
+        lead.status = "converted"
+        lead.save()
+
+        LeadActivity.objects.create(
+            lead=lead,
+            user=user,
+            activity_type="converted",
+            subject=f'Lead "{lead.title}" converted to opportunity',
+            description="Lead converted to pipeline opportunity",
+        )
+        return lead
+
+    @staticmethod
+    @transaction.atomic
+    def mark_won(*, lead: Lead, user) -> Lead:
+        """Mark a converted opportunity as won."""
+        if not lead.can_be_edited_by(user):
+            raise PermissionDeniedError(
+                "You do not have permission to mark this opportunity as won"
+            )
+        if lead.status not in ("converted", "new"):
+            raise ConflictError(
+                f'Cannot mark as won — current status is "{lead.status}"'
+            )
+
+        lead.status = "won"
+        lead.stage = None
+        lead.save()
+
+        LeadActivity.objects.create(
+            lead=lead,
+            user=user,
+            activity_type="updated",
+            subject=f'Opportunity "{lead.title}" marked as won',
+            description="Opportunity marked as won",
+        )
+        return lead
+
+    @staticmethod
+    @transaction.atomic
+    def mark_lost(*, lead: Lead, reason: str = "", user) -> Lead:
+        """Mark a lead or opportunity as lost."""
+        if not lead.can_be_edited_by(user):
+            raise PermissionDeniedError(
+                "You do not have permission to mark this as lost"
+            )
+        if lead.status == "won":
+            raise ConflictError('Cannot mark as lost — opportunity is already won')
+
+        lead.status = "lost"
+        lead.lost_reason = reason
+        lead.stage = None
+        lead.save()
+
+        description = f"Reason: {reason}" if reason else "Marked as lost"
+        LeadActivity.objects.create(
+            lead=lead,
+            user=user,
+            activity_type="updated",
+            subject=f'"{lead.title}" marked as lost',
+            description=description,
+        )
         return lead
 
     @staticmethod

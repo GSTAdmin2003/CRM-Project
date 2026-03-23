@@ -69,9 +69,9 @@ class StageService:
         except SalesTeam.DoesNotExist:
             raise NotFoundError(f"Sales team with id {team_pk} not found")
 
-        # Check permissions
+        # Check permissions: directors can manage any stage; managers only their own team
         if not (
-            user.is_sales_executive()
+            user.is_sales_director()
             or (user.is_sales_manager() and team.manager == user)
         ):
             raise PermissionDeniedError(

@@ -448,20 +448,19 @@ class TestLeadFileModel:
 
 
 # =============================================================================
-# Lead (lead_type='lead')
+# Lead (status='new' incoming leads)
 # =============================================================================
 
 
 @pytest.mark.django_db
 class TestLeadTypeModel:
-    """Tests for leads with lead_type='lead'."""
+    """Tests for incoming leads (Lead with status='new')."""
 
     def test_create_lead(self):
         incoming = LeadTypeLeadFactory(message="Interested in your product")
         assert incoming.pk is not None
-        assert incoming.lead_type == "lead"
-        assert incoming.message == "Interested in your product"
         assert incoming.status == "new"
+        assert incoming.message == "Interested in your product"
 
     def test_str_contains_title(self):
         incoming = LeadTypeLeadFactory()
@@ -470,22 +469,23 @@ class TestLeadTypeModel:
     def test_ordering_by_last_activity_desc(self):
         LeadTypeLeadFactory(message="First")
         LeadTypeLeadFactory(message="Second")
-        leads = list(Lead.objects.filter(lead_type="lead").values_list("message", flat=True))
+        leads = list(Lead.objects.filter(status="new").values_list("message", flat=True))
         # Just verify both are retrievable
         assert "First" in leads
         assert "Second" in leads
 
-    def test_lead_type_discriminator(self):
+    def test_status_discriminator(self):
         incoming = LeadTypeLeadFactory()
-        assert incoming.lead_type == "lead"
-        assert Lead.objects.filter(pk=incoming.pk, lead_type="lead").exists()
+        assert incoming.status == "new"
+        assert Lead.objects.filter(pk=incoming.pk, status="new").exists()
 
-    def test_status_choices_include_converted_and_rejected(self):
+    def test_status_choices_include_won_and_lost(self):
         choice_values = [v for v, _ in Lead.STATUS_CHOICES]
-        assert "converted" in choice_values
-        assert "rejected" in choice_values
         assert "new" in choice_values
-        assert "contacted" in choice_values
+        assert "converted" in choice_values
+        assert "won" in choice_values
+        assert "lost" in choice_values
+        assert "rejected" not in choice_values
 
     def test_status_new(self):
         incoming = LeadTypeLeadFactory(status="new")
@@ -547,7 +547,7 @@ class TestLeadTypeModel:
     def test_converted_opportunity_link(self):
         """converted_opportunity property returns opportunity converted from this lead."""
         incoming = LeadTypeLeadFactory()
-        opportunity = LeadFactory(converted_from=incoming, lead_type="opportunity")
+        opportunity = LeadFactory(converted_from=incoming, status="converted")
         assert incoming.converted_opportunity == opportunity
 
     def test_created_at_and_updated_at_auto_set(self):

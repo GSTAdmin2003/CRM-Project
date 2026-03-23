@@ -105,12 +105,11 @@ class LeadFileFactory(factory.django.DjangoModelFactory):
 
 
 class LeadTypeLeadFactory(factory.django.DjangoModelFactory):
-    """Factory for leads (Lead with lead_type='lead')."""
+    """Factory for incoming leads (Lead with status='new')."""
 
     class Meta:
         model = Lead
 
-    lead_type = "lead"
     title = factory.Sequence(lambda n: f"Lead {n}")
     message = factory.Faker("paragraph")
     status = "new"

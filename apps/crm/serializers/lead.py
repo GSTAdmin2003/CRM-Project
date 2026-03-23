@@ -61,7 +61,6 @@ class LeadListSerializer(serializers.ModelSerializer):
         model = Lead
         fields = [
             "id",
-            "lead_type",
             "title",
             "company_name",
             "company_name_display",
@@ -106,7 +105,6 @@ class LeadDetailSerializer(serializers.ModelSerializer):
         model = Lead
         fields = [
             "id",
-            "lead_type",
             "title",
             "full_name",
             "first_name",
@@ -123,6 +121,7 @@ class LeadDetailSerializer(serializers.ModelSerializer):
             "expected_close_date",
             "source",
             "status",
+            "lost_reason",
             "custom_fields",
             "notes",
             "assigned_to",
@@ -152,9 +151,9 @@ class LeadDetailSerializer(serializers.ModelSerializer):
 
 
 class LeadCreateUpdateSerializer(serializers.Serializer):
-    """Write serializer for opportunities -- delegates to LeadService."""
+    """Write serializer for leads/opportunities -- delegates to LeadService."""
 
-    title = serializers.CharField(max_length=200)
+    title = serializers.CharField(max_length=200, required=False, allow_blank=True, default="")
     full_name = serializers.CharField(max_length=200, required=False, allow_blank=True, default="")
     email = serializers.EmailField(required=False, allow_blank=True, default="")
     phone = serializers.CharField(max_length=20, required=False, allow_blank=True, default="")
@@ -169,6 +168,7 @@ class LeadCreateUpdateSerializer(serializers.Serializer):
     expected_close_date = serializers.DateField(required=False, allow_null=True)
     source = serializers.ChoiceField(choices=Lead.SOURCE_CHOICES, required=False, default="other")
     status = serializers.ChoiceField(choices=Lead.STATUS_CHOICES, required=False, default="new")
+    lost_reason = serializers.CharField(required=False, allow_blank=True, default="")
     notes = serializers.CharField(required=False, allow_blank=True, default="")
     stage_id = serializers.IntegerField(required=False, allow_null=True)
     assigned_to_id = serializers.IntegerField(required=False, allow_null=True)
@@ -178,8 +178,13 @@ class LeadCreateUpdateSerializer(serializers.Serializer):
 
 
 class LeadIncomingCreateSerializer(serializers.Serializer):
-    """Write serializer for leads -- delegates to LeadService.create_lead()."""
+    """Write serializer for incoming leads -- delegates to LeadService.create_lead()."""
 
+    full_name = serializers.CharField(max_length=200, required=False, allow_blank=True, default="")
+    phone = serializers.CharField(max_length=20, required=False, allow_blank=True, default="")
+    company_name = serializers.CharField(
+        max_length=200, required=False, allow_blank=True, default=""
+    )
     company_id = serializers.IntegerField(required=False, allow_null=True)
     contact_id = serializers.IntegerField(required=False, allow_null=True)
     message = serializers.CharField(required=False, allow_blank=True, default="")

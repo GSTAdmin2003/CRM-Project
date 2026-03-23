@@ -9,7 +9,12 @@ from rest_framework.decorators import action
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
-from core.exceptions import ConflictError, NotFoundError, PermissionDeniedError, ValidationError
+from core.exceptions import (
+    ConflictError,
+    NotFoundError,
+    PermissionDeniedError,
+    ValidationError,
+)
 from core.models import User
 
 from ..models import Lead
@@ -53,9 +58,11 @@ class LeadViewSet(viewsets.ModelViewSet):
 
     def get_queryset(self):
         lead_type = self.request.query_params.get("type", "opportunity")
+        qs = LeadService.list_leads_for_user(user=self.request.user)
         if lead_type == "lead":
-            return LeadService.list_leads_for_user(user=self.request.user)
-        return LeadService.list_leads_for_user(user=self.request.user)
+            status = self.request.query_params.get("status", "new")
+            return qs.filter(status=status)
+        return qs.filter(status="converted")
 
     def retrieve(self, request, *args, **kwargs):
         try:
@@ -162,8 +169,8 @@ class LeadViewSet(viewsets.ModelViewSet):
         update_fields = {}
         direct_fields = {
             "title", "full_name", "email", "phone", "company_name", "position",
-            "estimated_value", "expected_close_date", "source", "status", "notes",
-            "stage_id", "company_id", "contact_id", "sales_team_id",
+            "estimated_value", "expected_close_date", "source", "status", "lost_reason",
+            "notes", "stage_id", "company_id", "contact_id", "sales_team_id",
         }
         for field in direct_fields:
             if field in serializer.validated_data:
@@ -198,7 +205,7 @@ class LeadViewSet(viewsets.ModelViewSet):
 
     @action(detail=True, methods=["post"])
     def convert(self, request, pk=None):
-        """Convert a lead (lead_type='lead') into an opportunity."""
+        """Convert a status='new' lead into a pipeline opportunity (status='converted')."""
         try:
             lead = LeadService.get_lead_or_raise(pk=pk)
         except NotFoundError as e:
@@ -220,3 +227,38 @@ class LeadViewSet(viewsets.ModelViewSet):
             return Response({"detail": e.message}, status=status.HTTP_409_CONFLICT)
 
         return Response(LeadDetailSerializer(opportunity).data, status=status.HTTP_201_CREATED)
+
+    @action(detail=True, methods=["post"])
+    def mark_won(self, request, pk=None):
+        """Mark a converted opportunity as won (status='won')."""
+        try:
+            lead = LeadService.get_lead_or_raise(pk=pk)
+        except NotFoundError as e:
+            return Response({"detail": e.message}, status=status.HTTP_404_NOT_FOUND)
+
+        try:
+            lead = LeadService.mark_won(lead=lead, user=request.user)
+        except PermissionDeniedError as e:
+            return Response({"detail": e.message}, status=status.HTTP_403_FORBIDDEN)
+        except ConflictError as e:
+            return Response({"detail": e.message}, status=status.HTTP_409_CONFLICT)
+
+        return Response(LeadDetailSerializer(lead).data)
+
+    @action(detail=True, methods=["post"])
+    def mark_lost(self, request, pk=None):
+        """Mark a lead or opportunity as lost (status='lost'). Accepts optional 'reason' in body."""
+        try:
+            lead = LeadService.get_lead_or_raise(pk=pk)
+        except NotFoundError as e:
+            return Response({"detail": e.message}, status=status.HTTP_404_NOT_FOUND)
+
+        reason = request.data.get("reason", "")
+        try:
+            lead = LeadService.mark_lost(lead=lead, reason=reason, user=request.user)
+        except PermissionDeniedError as e:
+            return Response({"detail": e.message}, status=status.HTTP_403_FORBIDDEN)
+        except ConflictError as e:
+            return Response({"detail": e.message}, status=status.HTTP_409_CONFLICT)
+
+        return Response(LeadDetailSerializer(lead).data)

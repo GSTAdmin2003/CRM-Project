@@ -320,7 +320,7 @@ def parse_excel_file(file_obj, user):
 def execute_import(preview_data, user):
     """
     Execute the import based on validated preview data.
-    Creates Lead records (lead_type='lead', not opportunities).
+    Creates Lead records (status='new' incoming leads, not opportunities).
 
     Args:
         preview_data: The parsed and validated data from parse_excel_file
@@ -422,11 +422,10 @@ def execute_import(preview_data, user):
                     if lead_contact is None:
                         lead_contact = contact
 
-                # 3. Create Lead (lead_type='lead')
+                # 3. Create Lead (status='new')
                 message = lead_data.get('notes', '') or ''
 
                 Lead.objects.create(
-                    lead_type=Lead.TYPE_LEAD,
                     company=company,
                     contact=lead_contact,
                     message=message,

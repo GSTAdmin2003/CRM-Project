@@ -7,14 +7,13 @@ from core.models import User
 
 
 class Lead(models.Model):
-    """Unified Lead model — covers both leads (lead_type='lead') and opportunities (lead_type='opportunity')."""
+    """Unified Lead model — status is the sole discriminator.
 
-    TYPE_LEAD = "lead"
-    TYPE_OPPORTUNITY = "opportunity"
-    TYPE_CHOICES = [
-        ("lead", "Lead"),
-        ("opportunity", "Opportunity"),
-    ]
+    status='new'       → active lead (shown in /crm/leads/)
+    status='converted' → pipeline opportunity (shown in kanban/opportunities)
+    status='won'       → won opportunity
+    status='lost'      → lost lead or lost opportunity
+    """
 
     SOURCE_CHOICES = [
         ("website", "Website"),
@@ -28,17 +27,10 @@ class Lead(models.Model):
 
     STATUS_CHOICES = [
         ("new", "New"),
-        ("contacted", "Contacted"),
-        ("qualified", "Qualified"),
-        ("unqualified", "Unqualified"),
         ("converted", "Converted"),
-        ("rejected", "Rejected"),
+        ("won", "Won"),
+        ("lost", "Lost"),
     ]
-
-    # Type discriminator
-    lead_type = models.CharField(
-        max_length=20, choices=TYPE_CHOICES, default="opportunity", db_index=True
-    )
 
     # Basic Information
     title = models.CharField(max_length=200, verbose_name="Opportunity Title")
@@ -59,6 +51,7 @@ class Lead(models.Model):
         on_delete=models.SET_NULL,
         related_name="converted_opportunities",
     )
+    lost_reason = models.TextField(blank=True, default="")
 
     # Sales Information
     stage = models.ForeignKey(
@@ -122,28 +115,22 @@ class Lead(models.Model):
 
     def can_be_viewed_by(self, user):
         """Check if user can view this lead based on role and team"""
-        # Executives (including Owners) can see all leads
-        if user.is_sales_executive():
+        if user.is_sales_director():
             return True
 
-        # Managers can see their team's leads
+        # Managers see all leads in their team
         if user.is_sales_manager():
             if self.sales_team and user in self.sales_team.get_team_members():
                 return True
             if self.sales_team and self.sales_team.manager == user:
                 return True
 
-        # Sales reps can see their own leads
-        if user.has_role("Sales Rep"):
-            return self.assigned_to == user
-
-        # Lead creator can always see their lead
-        return self.created_by == user
+        # Agents see their own leads
+        return self.assigned_to == user or self.created_by == user
 
     def can_be_edited_by(self, user):
         """Check if user can edit this lead"""
-        # Executives (including Owners) can edit all leads
-        if user.is_sales_executive():
+        if user.is_sales_director():
             return True
 
         # Managers can edit their team's leads
@@ -151,7 +138,7 @@ class Lead(models.Model):
             if self.sales_team and self.sales_team.manager == user:
                 return True
 
-        # Assigned user can edit their lead
+        # Agents can edit their own assigned leads
         return self.assigned_to == user
 
     def save(self, *args, **kwargs):

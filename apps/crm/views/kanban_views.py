@@ -37,7 +37,6 @@ class KanbanView(APIView):
             team_id=team_id,
         )
 
-        # Serialize the kanban stages
         serialized_stages = KanbanStageSerializer(data["stages"], many=True).data
 
         return Response({

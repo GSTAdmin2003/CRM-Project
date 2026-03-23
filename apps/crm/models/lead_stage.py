@@ -5,12 +5,18 @@ from django.core.validators import MinValueValidator, MaxValueValidator
 class LeadStage(models.Model):
     """Kanban stages for opportunities"""
 
+    STAGE_TYPE_CHOICES = [
+        ("normal", "Normal"),
+        ("contacted", "Contacted"),
+    ]
+
     name = models.CharField(max_length=50)
     description = models.TextField(blank=True)
     order = models.IntegerField(default=0)
     color = models.CharField(max_length=7, default="#6B7280")  # Hex color
     is_active = models.BooleanField(default=True)
     is_closed_stage = models.BooleanField(default=False)
+    stage_type = models.CharField(max_length=10, choices=STAGE_TYPE_CHOICES, default="normal")
     probability = models.IntegerField(
         default=0,
         validators=[MinValueValidator(0), MaxValueValidator(100)],
@@ -63,14 +69,27 @@ class LeadStage(models.Model):
         stages = cls.get_stages_for_team(sales_team)
         return stages.first()
 
+    @classmethod
+    def get_contacted_stage_for_team(cls, sales_team=None):
+        """Get the 'contacted' stage for a team, falling back to global."""
+        if sales_team:
+            stage = cls.objects.filter(
+                sales_team=sales_team, is_active=True, stage_type="contacted"
+            ).first()
+            if stage:
+                return stage
+        return cls.objects.filter(
+            sales_team=None, is_active=True, stage_type="contacted"
+        ).first()
+
     def can_be_edited_by(self, user):
         """Check if user can edit this stage"""
-        # Global stages can only be edited by sales executives
+        # Global stages: directors only
         if not self.sales_team:
-            return user.is_sales_executive()
+            return user.is_sales_director()
 
-        # Team stages can be edited by the team manager or sales executives
-        return user.is_sales_executive() or (
+        # Team stages: the team's manager or any director
+        return user.is_sales_director() or (
             user.is_sales_manager() and self.sales_team.manager == user
         )
 

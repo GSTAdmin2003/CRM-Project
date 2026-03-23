@@ -74,17 +74,16 @@ class LeadForm(forms.ModelForm):
         self.fields['message'].required = False
         self.fields['status'].required = False
 
-        # Determine lead_type context for field requirements
-        is_lead_type = (
-            (self.instance.pk and self.instance.lead_type == Lead.TYPE_LEAD)
-            or self.data.get('lead_type') == Lead.TYPE_LEAD
-            or getattr(self, '_lead_type', None) == Lead.TYPE_LEAD
+        # For incoming leads (status='new' or new record) title/stage are optional
+        is_new_lead = (
+            (self.instance.pk and self.instance.status == "new")
+            or not self.instance.pk
         )
-        self.fields['title'].required = not is_lead_type
-        self.fields['stage'].required = not is_lead_type
+        self.fields['title'].required = not is_new_lead
+        self.fields['stage'].required = not is_new_lead
 
-        # Set default status for new leads
-        if is_lead_type and not self.instance.pk:
+        # Set default status for new records
+        if not self.instance.pk:
             self.fields['status'].initial = 'new'
 
         # Set initial values for sales_team autocomplete
@@ -92,7 +91,7 @@ class LeadForm(forms.ModelForm):
             self.fields['sales_team'].initial = self.instance.sales_team.name
 
         # Set default stage if not editing (opportunity only)
-        if not self.instance.pk and not is_lead_type:
+        if not self.instance.pk and not is_new_lead:
             user_team = self.user.sales_team if self.user else None
             default_stage = LeadStage.get_default_stage_for_team(user_team)
             if default_stage:
@@ -131,10 +130,6 @@ class LeadForm(forms.ModelForm):
                 lead.sales_team = SalesTeam.objects.get(id=int(sales_team_id))
             except (SalesTeam.DoesNotExist, ValueError):
                 pass
-
-        # Set lead_type if provided
-        if getattr(self, '_lead_type', None):
-            lead.lead_type = self._lead_type
 
         if not lead.pk and self.user:
             lead.created_by = self.user

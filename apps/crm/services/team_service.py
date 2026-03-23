@@ -18,6 +18,17 @@ from ..models import SalesTeam
 
 
 class TeamService:
+    # -- Permissions -----------------------------------------------------------
+
+    @staticmethod
+    def can_manage(user) -> bool:
+        """Sales Manager or above (includes Director), or IT Admin/staff."""
+        return (
+            user.is_sales_manager()
+            or user.has_role("IT Admin")
+            or user.is_staff
+        )
+
     # -- Queries ---------------------------------------------------------------
 
     @staticmethod
@@ -55,7 +66,7 @@ class TeamService:
             manager_id: Optional FK to User who manages the team.
             is_active: Whether the team is active (default True).
         """
-        if not (created_by.is_sales_manager() or created_by.is_sales_executive()):
+        if not TeamService.can_manage(created_by):
             raise PermissionDeniedError(
                 "You do not have permission to create teams"
             )
@@ -98,7 +109,7 @@ class TeamService:
         """
         team = TeamService.get_team_or_raise(pk=pk)
 
-        if not (user.is_sales_manager() or user.is_sales_executive()):
+        if not TeamService.can_manage(user):
             raise PermissionDeniedError(
                 "You do not have permission to edit teams"
             )
@@ -131,3 +142,35 @@ class TeamService:
 
         team.save()
         return team
+
+    @staticmethod
+    @transaction.atomic
+    def add_member(*, team: SalesTeam, user_id: int, requesting_user) -> "User":
+        """Assign a user to this team."""
+        if not TeamService.can_manage(requesting_user):
+            raise PermissionDeniedError(
+                "You do not have permission to manage team members"
+            )
+        try:
+            member = User.objects.get(pk=user_id, is_active=True)
+        except User.DoesNotExist:
+            raise NotFoundError(f"User with id {user_id} not found")
+        member.sales_team = team
+        member.save(update_fields=["sales_team"])
+        return member
+
+    @staticmethod
+    @transaction.atomic
+    def remove_member(*, team: SalesTeam, user_id: int, requesting_user) -> "User":
+        """Remove a user from this team."""
+        if not TeamService.can_manage(requesting_user):
+            raise PermissionDeniedError(
+                "You do not have permission to manage team members"
+            )
+        try:
+            member = User.objects.get(pk=user_id, is_active=True, sales_team=team)
+        except User.DoesNotExist:
+            raise NotFoundError(f"User with id {user_id} is not a member of this team")
+        member.sales_team = None
+        member.save(update_fields=["sales_team"])
+        return member

@@ -23,6 +23,7 @@ class KanbanStageInfoSerializer(serializers.Serializer):
     name = serializers.CharField(read_only=True)
     color = serializers.CharField(read_only=True)
     probability = serializers.IntegerField(read_only=True)
+    is_closed_stage = serializers.BooleanField(read_only=True)
 
 
 class KanbanStageSerializer(serializers.Serializer):

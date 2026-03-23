@@ -25,49 +25,66 @@ class User(AbstractUser):
     def is_owner(self):
         """Check if user is an owner"""
         return self.has_role('Owner')
-    
-    def is_sales_rep(self):
-        """Check if user is a sales rep"""
-        return self.has_role('Sales Rep')
-    
+
+    # ---- Sales hierarchy (each level includes all levels above) ---------------
+
+    def is_sales_director(self):
+        """Top of the sales hierarchy — sees and manages everything."""
+        return self.has_role('Sales Director') or self.has_role('Owner')
+
     def is_sales_manager(self):
-        """Check if user is a sales manager"""
-        return self.has_role('Sales Manager') or self.has_role('Owner')
-    
+        """Mid level — manages team(s) and agents. Includes directors."""
+        return self.has_role('Sales Manager') or self.is_sales_director()
+
+    def is_sales_agent(self):
+        """Entry level — manages own leads. Includes managers and directors."""
+        return self.has_role('Sales Agent') or self.is_sales_manager()
+
+    # Aliases kept for backward compatibility
     def is_sales_executive(self):
-        """Check if user is a sales executive"""
-        return self.has_role('Sales Executive') or self.has_role('Owner')
-    
+        return self.is_sales_director()
+
+    def is_sales_rep(self):
+        return self.has_role('Sales Agent')
+
+    # ---------------------------------------------------------------------------
+
     def get_accessible_leads_queryset(self):
-        """Get leads queryset based on user role and team"""
+        """Get leads queryset based on user role and team.
+
+        Rules:
+        - Directors: all leads.
+        - Managers with a team: their team's leads.
+        - Any user WITHOUT a sales_team: only status='new' leads with no team.
+        - Agents in a team: their own assigned leads.
+        """
         from apps.crm.models import Lead
 
-        # Executives see all leads
-        if self.is_sales_executive():
+        if self.is_sales_director():
             return Lead.objects.all()
 
-        # Managers see their team's leads
         if self.is_sales_manager() and self.sales_team:
             team_members = self.sales_team.get_team_members()
             return Lead.objects.filter(assigned_to__in=team_members)
 
-        # Sales reps see their own leads
+        # User is not in any team — restrict to unassigned leads only
+        if not self.sales_team:
+            return Lead.objects.filter(sales_team=None, status="new")
+
+        # Agent in a team: their own leads
         return Lead.objects.filter(assigned_to=self)
 
     def get_accessible_activities_queryset(self):
         """Get activities queryset based on user role and team"""
         from apps.activities.models import Activity
 
-        # Executives see all activities
-        if self.is_sales_executive():
+        if self.is_sales_director():
             return Activity.objects.all()
 
-        # Managers see their team's activities
         if self.is_sales_manager() and self.sales_team:
             team_members = self.sales_team.get_team_members()
             return Activity.objects.filter(lead__assigned_to__in=team_members)
 
-        # Sales reps see activities for their own leads
         return Activity.objects.filter(lead__assigned_to=self)
 
 

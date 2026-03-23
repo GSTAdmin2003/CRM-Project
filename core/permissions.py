@@ -9,16 +9,12 @@ from rest_framework.permissions import BasePermission
 
 
 class IsSalesRep(BasePermission):
-    """Allow access to users with any sales role."""
+    """Allow access to any sales role (agent or above)."""
 
     def has_permission(self, request, view):
         if not request.user or not request.user.is_authenticated:
             return False
-        return (
-            request.user.is_sales_rep()
-            or request.user.is_sales_manager()
-            or request.user.is_sales_executive()
-        )
+        return request.user.is_sales_agent()
 
 
 class IsSalesManager(BasePermission):
@@ -27,16 +23,16 @@ class IsSalesManager(BasePermission):
     def has_permission(self, request, view):
         if not request.user or not request.user.is_authenticated:
             return False
-        return request.user.is_sales_manager() or request.user.is_sales_executive()
+        return request.user.is_sales_manager()
 
 
 class IsSalesExecutive(BasePermission):
-    """Allow access to sales executives only."""
+    """Allow access to sales directors and above."""
 
     def has_permission(self, request, view):
         if not request.user or not request.user.is_authenticated:
             return False
-        return request.user.is_sales_executive()
+        return request.user.is_sales_director()
 
 
 class IsOwnerOrReadOnly(BasePermission):

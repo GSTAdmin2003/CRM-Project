@@ -266,6 +266,5 @@ def team_products_view(request):
 elevenlabs_urls = [
     path('config/', elevenlabs_config_view, name='config'),
     path('vocabulary/', elevenlabs_vocabulary_view, name='vocabulary'),
-    path('ai-config/', ai_config_view, name='ai_config'),
     path('team-products/', team_products_view, name='team_products'),
 ]

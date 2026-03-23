@@ -1,9 +1,0 @@
-{% extends 'settings/base.html' %}
-{% load django_vite %}
-
-{% block extra_head %}{% vite_asset 'src/entries/settings_dashboard.js' %}{% endblock %}
-
-{% block settings_content %}
-<script id="settings_dashboard-init-data" type="application/json">{{ init_data_json|safe }}</script>
-<div id="svelte-settings_dashboard-root"></div>
-{% endblock %}

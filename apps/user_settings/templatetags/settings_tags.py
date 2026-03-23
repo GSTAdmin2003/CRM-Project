@@ -18,7 +18,7 @@ def user_is_admin(user):
     """Check if a user is an admin (staff or Owner)"""
     if not user.is_authenticated:
         return False
-    return user.is_staff or user.has_role('Owner')
+    return user.is_staff or user.has_role('Owner') or user.has_role('IT Admin')
 
 
 @register.filter

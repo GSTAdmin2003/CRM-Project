@@ -10,6 +10,7 @@
   let email = user ? user.email : '';
   let firstName = user ? user.first_name : '';
   let lastName = user ? user.last_name : '';
+  const extension = user ? (user.extension || '') : '';
   let isActive = user ? user.is_active : true;
   let selectedRoleIds = user ? (user.roleIds || []) : [];
 
@@ -45,6 +46,9 @@
       if (!password) { fieldErrors.password = 'Password is required.'; }
       else if (password.length < 8) { fieldErrors.password = 'Password must be at least 8 characters.'; }
       if (password !== password2) { fieldErrors.password2 = 'Passwords do not match.'; }
+    } else {
+      if (password && password.length < 8) { fieldErrors.password = 'Password must be at least 8 characters.'; }
+      if (password && password !== password2) { fieldErrors.password2 = 'Passwords do not match.'; }
     }
     if (!email.trim()) { fieldErrors.email = 'Email is required.'; }
 
@@ -58,10 +62,13 @@
       first_name: firstName.trim(),
       last_name: lastName.trim(),
       is_active: isActive,
+      role_ids: selectedRoleIds,
     };
 
     if (!editMode) {
       payload.username = username.trim();
+      payload.password = password;
+    } else if (password) {
       payload.password = password;
     }
 
@@ -163,7 +170,7 @@
       </div>
 
       <!-- Email -->
-      <div class="sm:col-span-2">
+      <div>
         <label class="block text-sm font-medium text-gray-700 mb-1">
           Email <span class="text-red-500">*</span>
         </label>
@@ -178,38 +185,49 @@
         {/if}
       </div>
 
-      <!-- Password — create only -->
-      {#if !editMode}
+      <!-- Extension (read-only, shown in edit mode only) -->
+      {#if editMode}
         <div>
-          <label class="block text-sm font-medium text-gray-700 mb-1">
-            Password <span class="text-red-500">*</span>
-          </label>
-          <input
-            type="password"
-            bind:value={password}
-            class="block w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
-            placeholder="At least 8 characters"
-          />
-          {#if fieldErrors.password}
-            <p class="mt-1 text-xs text-red-600">{fieldErrors.password}</p>
-          {/if}
-        </div>
-        <div>
-          <label class="block text-sm font-medium text-gray-700 mb-1">
-            Confirm Password <span class="text-red-500">*</span>
-          </label>
-          <input
-            type="password"
-            bind:value={password2}
-            class="block w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
-            placeholder="Repeat password"
-          />
-          {#if fieldErrors.password2}
-            <p class="mt-1 text-xs text-red-600">{fieldErrors.password2}</p>
-          {/if}
-          <p class="mt-1 text-xs text-gray-400">Minimum 8 characters.</p>
+          <label class="block text-sm font-medium text-gray-700 mb-1">SIP Extension</label>
+          <p class="px-3 py-2 text-sm text-gray-900 bg-gray-50 border border-gray-200 rounded-lg font-mono">{extension || '—'}</p>
+          <p class="mt-1 text-xs text-gray-400">Auto-assigned. Contact IT to change.</p>
         </div>
       {/if}
+
+      <!-- Password -->
+      <div>
+        {#if editMode}
+          <label class="block text-sm font-medium text-gray-700 mb-1">New Password</label>
+        {:else}
+          <label class="block text-sm font-medium text-gray-700 mb-1">Password <span class="text-red-500">*</span></label>
+        {/if}
+        <input
+          type="password"
+          bind:value={password}
+          class="block w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+          placeholder={editMode ? 'Leave blank to keep current password' : 'At least 8 characters'}
+        />
+        {#if fieldErrors.password}
+          <p class="mt-1 text-xs text-red-600">{fieldErrors.password}</p>
+        {/if}
+      </div>
+      <div>
+        {#if editMode}
+          <label class="block text-sm font-medium text-gray-700 mb-1">Confirm New Password</label>
+        {:else}
+          <label class="block text-sm font-medium text-gray-700 mb-1">Confirm Password <span class="text-red-500">*</span></label>
+        {/if}
+        <input
+          type="password"
+          bind:value={password2}
+          class="block w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+          placeholder={editMode ? 'Leave blank to keep current password' : 'Repeat password'}
+        />
+        {#if fieldErrors.password2}
+          <p class="mt-1 text-xs text-red-600">{fieldErrors.password2}</p>
+        {/if}
+        <p class="mt-1 text-xs text-gray-400">{editMode ? 'Leave blank to keep the current password.' : 'Minimum 8 characters.'}</p>
+      </div>
 
     </div>
   </div>
@@ -222,25 +240,31 @@
     <div class="grid grid-cols-1 sm:grid-cols-2 gap-6">
 
       <!-- Roles checkboxes -->
-      <div>
-        <p class="text-sm font-medium text-gray-700 mb-2">Roles</p>
-        <div class="space-y-2 border border-gray-200 rounded-lg p-3 bg-gray-50">
-          {#if roles.length > 0}
-            {#each roles as role}
-              <label class="flex items-center gap-3 cursor-pointer group">
-                <input
-                  type="checkbox"
-                  checked={selectedRoleIds.includes(role.id)}
-                  on:change={() => toggleRole(role.id)}
-                  class="h-4 w-4 text-indigo-600 border-gray-300 rounded focus:ring-indigo-500"
-                />
-                <span class="text-sm text-gray-700 group-hover:text-gray-900">{role.name}</span>
-              </label>
-            {/each}
-          {:else}
-            <p class="text-sm text-gray-400 italic">No roles defined.</p>
+      <div class="sm:col-span-2 grid grid-cols-1 sm:grid-cols-2 gap-4">
+        {#each [
+          { label: 'Technical', names: ['Owner', 'IT Admin'] },
+          { label: 'Sales Hierarchy', names: ['Sales Director', 'Sales Manager', 'Sales Agent'] },
+        ] as group}
+          {@const groupRoles = roles.filter(r => group.names.includes(r.name))}
+          {#if groupRoles.length > 0}
+            <div>
+              <p class="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">{group.label}</p>
+              <div class="space-y-2 border border-gray-200 rounded-lg p-3 bg-gray-50">
+                {#each groupRoles as role}
+                  <label class="flex items-center gap-3 cursor-pointer group">
+                    <input
+                      type="checkbox"
+                      checked={selectedRoleIds.includes(role.id)}
+                      on:change={() => toggleRole(role.id)}
+                      class="h-4 w-4 text-indigo-600 border-gray-300 rounded focus:ring-indigo-500"
+                    />
+                    <span class="text-sm text-gray-700 group-hover:text-gray-900">{role.name}</span>
+                  </label>
+                {/each}
+              </div>
+            </div>
           {/if}
-        </div>
+        {/each}
       </div>
 
       <!-- Status -->

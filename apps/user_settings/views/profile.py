@@ -1,7 +1,7 @@
 import json
 
 from django.core.serializers.json import DjangoJSONEncoder
-from django.views.generic import UpdateView, TemplateView
+from django.views.generic import UpdateView, RedirectView
 from django.contrib.auth.views import PasswordChangeView
 from django.contrib.messages.views import SuccessMessageMixin
 from django.urls import reverse_lazy, path
@@ -89,21 +89,9 @@ class ProfilePreferencesView(SettingsBaseMixin, SuccessMessageMixin, UpdateView)
         return context
 
 
-class ProfileIndexView(SettingsBaseMixin, TemplateView):
-    """Profile overview page"""
-    template_name = 'settings/profile/index.html'
-    settings_section = 'profile'
-
-    def get_context_data(self, **kwargs):
-        context = super().get_context_data(**kwargs)
-        context['user'] = self.request.user
-        context['preferences'] = UserPreferences.get_or_create_for_user(self.request.user)
-        return context
-
-
 # URL patterns for profile section
 profile_urls = [
-    path('', ProfileIndexView.as_view(), name='index'),
+    path('', RedirectView.as_view(pattern_name='settings:profile:personal_info'), name='index'),
     path('personal-info/', ProfilePersonalInfoView.as_view(), name='personal_info'),
     path('security/', ProfileSecurityView.as_view(), name='security'),
     path('preferences/', ProfilePreferencesView.as_view(), name='preferences'),

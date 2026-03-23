@@ -1,4 +1,3 @@
-from django.views.generic import TemplateView
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.contrib.auth import get_user_model
 from ..models import SettingsCategory, SettingsPage
@@ -36,13 +35,13 @@ class SettingsBaseMixin(LoginRequiredMixin):
     def user_has_category_access(self, category):
         """Check if user has access to a category"""
         if category.name == 'general':
-            return self.request.user.has_role('Owner') or self.request.user.is_staff
+            return self.request.user.has_role('Owner') or self.request.user.has_role('IT Admin') or self.request.user.is_staff
         return True
     
     def user_has_page_access(self, page):
         """Check if user has access to a specific page"""
         if page.category.name == 'general':
-            return self.request.user.has_role('Owner') or self.request.user.is_staff
+            return self.request.user.has_role('Owner') or self.request.user.has_role('IT Admin') or self.request.user.is_staff
         return True
     
     def get_current_section(self):
@@ -54,18 +53,3 @@ class SettingsBaseMixin(LoginRequiredMixin):
         return getattr(self, 'settings_page', None)
 
 
-class SettingsHomeView(SettingsBaseMixin, TemplateView):
-    """Settings dashboard/home view"""
-    template_name = 'settings/dashboard.html'
-    settings_section = 'dashboard'
-
-    def get_context_data(self, **kwargs):
-        context = super().get_context_data(**kwargs)
-        context['user_preferences'] = getattr(self.request.user, 'preferences', None)
-        try:
-            from apps.messaging.models import WhatsAppConfig
-            config = WhatsAppConfig.get_config()
-            context['wa_config_active'] = config is not None and config.is_active and config.is_configured()
-        except Exception:
-            context['wa_config_active'] = False
-        return context

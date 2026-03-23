@@ -209,7 +209,7 @@
                   <p class="text-sm font-medium text-gray-900 truncate">
                     {getDisplayName(u)}
                   </p>
-                  <p class="text-xs text-gray-500 truncate">@{u.username} · {u.email}</p>
+                  <p class="text-xs text-gray-500 truncate">@{u.username} · {u.email}{u.extension ? ` · ext. ${u.extension}` : ''}</p>
                 </div>
               </div>
 

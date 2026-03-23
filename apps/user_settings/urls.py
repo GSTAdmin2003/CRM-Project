@@ -1,5 +1,5 @@
 from django.urls import path, include
-from .views.base import SettingsHomeView
+from django.views.generic import RedirectView
 from .views.profile import profile_urls
 from .views.general import general_urls
 from .views.crm import crm_urls
@@ -8,6 +8,7 @@ from .views.users import users_urls
 from .views.whatsapp import whatsapp_urls
 from .views.elevenlabs import elevenlabs_urls
 from .views.debug_credentials import debug_urls
+from .views.api_views import api_urlpatterns
 
 app_name = 'settings'
 
@@ -21,7 +22,8 @@ elevenlabs_patterns = (elevenlabs_urls, 'elevenlabs')
 debug_patterns = (debug_urls, 'debug')
 
 urlpatterns = [
-    path('', SettingsHomeView.as_view(), name='home'),
+    path('', RedirectView.as_view(pattern_name='settings:profile:personal_info'), name='home'),
+    path('api/', include(api_urlpatterns)),
     path('profile/', include(profile_patterns)),
     path('general/', include(general_patterns)),
     path('crm/', include(crm_patterns)),

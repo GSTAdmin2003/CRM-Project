@@ -19,7 +19,11 @@ User = get_user_model()
 
 
 def _is_admin(user):
-    return user.is_staff or (hasattr(user, 'has_role') and user.has_role('Owner'))
+    return user.is_staff or (hasattr(user, 'has_role') and (user.has_role('Owner') or user.has_role('IT Admin')))
+
+
+def _is_it_admin(user):
+    return user.is_staff or (hasattr(user, 'has_role') and (user.has_role('IT Admin') or user.has_role('Owner')))
 
 
 # ─── Profile ──────────────────────────────────────────────────────────────────
@@ -77,7 +81,7 @@ class UserListAPIView(APIView):
 
         from apps.user_settings.serializers.users import UserListSerializer
 
-        qs = User.objects.order_by('-date_joined')
+        qs = User.objects.prefetch_related('user_roles__role').order_by('-date_joined')
 
         q = request.query_params.get('q', '').strip()
         if q:
@@ -101,11 +105,14 @@ class UserListAPIView(APIView):
             return Response({'detail': 'Admin access required.'}, status=status.HTTP_403_FORBIDDEN)
 
         from apps.user_settings.serializers.users import UserCreateUpdateSerializer
+        from core.models import Role, UserRole
         s = UserCreateUpdateSerializer(data=request.data)
         s.is_valid(raise_exception=True)
         user = s.save()
-        user.set_unusable_password()
-        user.save(update_fields=['password'])
+        role_ids = request.data.get('role_ids', [])
+        if role_ids:
+            for role in Role.objects.filter(id__in=role_ids, is_active=True):
+                UserRole.objects.get_or_create(user=user, role=role, defaults={'assigned_by': request.user})
         return Response(UserCreateUpdateSerializer(user).data, status=status.HTTP_201_CREATED)
 
 
@@ -125,10 +132,20 @@ class UserDetailAPIView(APIView):
             return Response({'detail': 'Admin access required.'}, status=status.HTTP_403_FORBIDDEN)
 
         from apps.user_settings.serializers.users import UserCreateUpdateSerializer
+        from core.models import Role, UserRole
         user = get_object_or_404(User, pk=pk)
         s = UserCreateUpdateSerializer(user, data=request.data, partial=True)
         s.is_valid(raise_exception=True)
         s.save()
+        if 'role_ids' in request.data:
+            role_ids = request.data.get('role_ids', [])
+            desired = set(Role.objects.filter(id__in=role_ids, is_active=True).values_list('id', flat=True))
+            current = set(user.user_roles.values_list('role_id', flat=True))
+            for role_id in current - desired:
+                user.user_roles.filter(role_id=role_id).delete()
+            for role_id in desired - current:
+                role = Role.objects.get(id=role_id)
+                UserRole.objects.create(user=user, role=role, assigned_by=request.user)
         return Response(s.data)
 
 
@@ -234,8 +251,8 @@ class VoipConfigAPIView(APIView):
             return None
 
     def get(self, request):
-        if not _is_admin(request.user):
-            return Response({'detail': 'Admin access required.'}, status=status.HTTP_403_FORBIDDEN)
+        if not _is_it_admin(request.user):
+            return Response({'detail': 'IT admin access required.'}, status=status.HTTP_403_FORBIDDEN)
 
         from apps.user_settings.serializers.sip import SipSerializer
         sip = self._get_sip(request.user)
@@ -244,8 +261,8 @@ class VoipConfigAPIView(APIView):
         return Response(SipSerializer(sip).data)
 
     def patch(self, request):
-        if not _is_admin(request.user):
-            return Response({'detail': 'Admin access required.'}, status=status.HTTP_403_FORBIDDEN)
+        if not _is_it_admin(request.user):
+            return Response({'detail': 'IT admin access required.'}, status=status.HTTP_403_FORBIDDEN)
 
         from apps.calls.models import SIPSettings
         from apps.user_settings.serializers.sip import SipSerializer
@@ -276,8 +293,8 @@ class WorkingHoursAPIView(APIView):
             return None
 
     def get(self, request):
-        if not _is_admin(request.user):
-            return Response({'detail': 'Admin access required.'}, status=status.HTTP_403_FORBIDDEN)
+        if not _is_it_admin(request.user):
+            return Response({'detail': 'IT admin access required.'}, status=status.HTTP_403_FORBIDDEN)
 
         sip = self._get_sip(request.user)
         if sip is None:
@@ -289,8 +306,8 @@ class WorkingHoursAPIView(APIView):
         })
 
     def patch(self, request):
-        if not _is_admin(request.user):
-            return Response({'detail': 'Admin access required.'}, status=status.HTTP_403_FORBIDDEN)
+        if not _is_it_admin(request.user):
+            return Response({'detail': 'IT admin access required.'}, status=status.HTTP_403_FORBIDDEN)
 
         from apps.calls.models import SIPSettings
         sip = self._get_sip(request.user)

@@ -120,6 +120,7 @@ class UserEditView(SettingsBaseMixin, AdminRequiredMixin, SuccessMessageMixin, U
     template_name = 'settings/users/form.html'
     success_url = reverse_lazy('settings:users:list')
     settings_section = 'general'
+    settings_section = 'general'
 
     def get_success_message(self, cleaned_data):
         return f"User '{self.object.username}' was updated successfully."
@@ -139,6 +140,7 @@ class UserEditView(SettingsBaseMixin, AdminRequiredMixin, SuccessMessageMixin, U
                 'first_name': user_obj.first_name,
                 'last_name': user_obj.last_name,
                 'is_active': user_obj.is_active,
+                'extension': user_obj.extension,
                 'roleIds': user_role_ids,
             },
             'roles': roles,

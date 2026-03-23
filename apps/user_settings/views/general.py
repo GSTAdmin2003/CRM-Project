@@ -19,7 +19,7 @@ class AdminRequiredMixin(UserPassesTestMixin):
     """Mixin to ensure only admins can access general settings"""
 
     def test_func(self):
-        return self.request.user.has_role('Owner') or self.request.user.is_staff
+        return self.request.user.has_role('Owner') or self.request.user.has_role('IT Admin') or self.request.user.is_staff
 
 
 class PhoneSettingsView(SettingsBaseMixin, AdminRequiredMixin, View):

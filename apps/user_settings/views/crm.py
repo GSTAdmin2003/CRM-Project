@@ -16,8 +16,8 @@ from .general import AdminRequiredMixin
 @login_required
 def global_stages_view(request):
     """Global pipeline stages management"""
-    # Check permissions - only owners and sales executives can manage global stages
-    if not (request.user.has_role('Owner') or request.user.is_sales_executive()):
+    # Check permissions - only Owner or IT Admin can manage global stages
+    if not (request.user.has_role('Owner') or request.user.has_role('IT Admin') or request.user.is_staff):
         messages.error(request, 'You do not have permission to manage global pipeline stages.')
         return redirect('settings:home')
     
@@ -232,9 +232,10 @@ class DefaultPitchEditView(SettingsBaseMixin, AdminRequiredMixin, TemplateView):
 
 # URL patterns for CRM settings
 from django.urls import path
+from django.views.generic import RedirectView
 
 crm_urls = [
-    path('global-stages/', global_stages_view, name='global_stages'),
+    path('global-stages/', RedirectView.as_view(url='/crm/teams/'), name='global_stages'),
     path('sales-pitch/', SalesTeamPitchListView.as_view(), name='sales_team_pitch_list'),
     path('sales-pitch/default/edit/', DefaultPitchEditView.as_view(), name='default_pitch_edit'),
     path('sales-pitch/<int:pk>/edit/', SalesTeamPitchEditView.as_view(), name='sales_team_pitch_edit'),

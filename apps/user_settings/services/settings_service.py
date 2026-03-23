@@ -77,8 +77,8 @@ class SettingsService:
         Raises:
             PermissionDeniedError: If user is not an Owner or staff.
         """
-        if not (user.has_role("Owner") or user.is_staff):
-            raise PermissionDeniedError("Only owners and staff can modify system settings")
+        if not (user.has_role("Owner") or user.has_role("IT Admin") or user.is_staff):
+            raise PermissionDeniedError("Only owners, IT admins, and staff can modify system settings")
         return SystemConfiguration.set_setting(
             key, value, description=description, data_type=data_type, user=user
         )

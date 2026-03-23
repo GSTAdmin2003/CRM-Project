@@ -1,216 +1,256 @@
-# CRM System - Django ERP Foundation
+# CRM System
 
-A lightweight Django-based CRM/ERP system designed as a modular foundation with authentication, role-based access control, and a beautiful dashboard interface.
+A full-featured sales CRM built on Django + Svelte, with VoIP (Asterisk), async task processing (Celery), and AI-assisted call analysis.
 
-## Features
+---
 
-- **Authentication**: Django built-in authentication with invite-only access
-- **Role System**: Dynamic, configurable roles with UI management capability
-- **Modular Architecture**: Support for pluggable Django apps in isolated modules
-- **Beautiful Dashboard**: 6-column grid layout inspired by modern ERP systems
-- **Docker Support**: Full containerized development environment
-- **PostgreSQL**: Production-ready database backend
-- **Tailwind CSS**: Modern, responsive UI framework
+## Tech Stack
 
-## Quick Start
+| Layer | Technology |
+|---|---|
+| Backend | Django 5.1.4, Python 3.12, Django REST Framework 3.15 |
+| Database | PostgreSQL 15 |
+| Cache / Broker | Redis 7 |
+| Async Tasks | Celery 5.3 (worker + beat) |
+| VoIP | Asterisk 20 (ARI WebSocket) |
+| Frontend | Svelte 4 + Vite, Tailwind CSS, Alpine.js, HTMX |
+| AI | Claude (call analysis), ElevenLabs Scribe (transcription) |
+| Containers | Docker Compose |
 
-### Prerequisites
+---
 
-- Docker and Docker Compose
-- Git
+## Architecture
 
-### Setup
-
-1. **Clone and navigate to project**:
-   ```bash
-   cd "/path/to/CRM Project"
-   ```
-
-2. **Build and start containers**:
-   ```bash
-   docker compose build
-   docker compose up -d db
-   ```
-
-3. **Run migrations and setup system**:
-   ```bash
-   docker compose run --rm web python manage.py migrate
-   docker compose run --rm web python manage.py setup_system
-   ```
-
-4. **Create admin user**:
-   ```bash
-   docker compose run --rm web python manage.py createsuperuser
-   ```
-
-5. **Start the application**:
-   ```bash
-   docker compose up
-   ```
-
-6. **Access the application**:
-   - Dashboard: http://localhost:8000
-   - Admin Panel: http://localhost:8000/admin
-
-## Project Structure
+### App Layout
 
 ```
 CRM Project/
-├── core/                      # Main Django project & core functionality
-│   ├── models.py             # User, Role, AppRegistry models
-│   ├── views.py              # Authentication & dashboard views
-│   ├── utils.py              # App discovery utilities
-│   ├── middleware.py         # Role-based access control
-│   └── management/
-│       └── commands/
-│           └── setup_system.py  # System setup command
-├── apps/                     # Directory for modular apps
-│   └── __init__.py
-├── templates/
-│   ├── base.html            # Base layout template
-│   ├── core/
-│   │   └── dashboard.html   # Main dashboard
-│   └── registration/
-│       ├── login.html       # Login page
-│       └── logged_out.html  # Logout page
-├── static/
-│   ├── css/
-│   │   └── dashboard.css    # Dashboard styling
-│   ├── js/
-│   └── icons/               # App icons directory
-├── docker-compose.yml       # Docker services configuration
-├── Dockerfile              # Django app container
-└── requirements.txt        # Python dependencies
+├── core/                        # Shared foundation
+│   ├── models.py                # User, Role, UserRole
+│   ├── permissions.py           # Role-based permission classes
+│   ├── middleware.py            # RoleBasedAccessMiddleware
+│   ├── exceptions.py            # ServiceError hierarchy
+│   └── migrations/
+│
+├── apps/
+│   ├── crm/                     # Leads, opportunities, pipeline (Kanban)
+│   ├── contacts/                # Companies and contacts
+│   ├── activities/              # Tasks, calls, meetings linked to leads
+│   ├── calls/                   # Asterisk call records, recordings, transcription
+│   ├── messaging/               # WhatsApp conversations
+│   └── user_settings/           # Settings UI + user/role management
+│
+├── frontend/
+│   ├── src/
+│   │   ├── components/          # Svelte components (one folder per page/feature)
+│   │   ├── entries/             # Vite entry points (one per page)
+│   │   └── stores/              # Svelte stores (leadStore, uiStore)
+│   └── vite.config.js
+│
+├── templates/                   # Django base templates (Svelte island shells)
+├── static/dist/                 # Compiled Svelte assets (git-ignored, built by Vite)
+├── docker-compose.yml
+├── Makefile                     # All dev commands — see below
+└── requirements.txt
 ```
 
-## Key Models
+### Standard App Structure
 
-### User Model
-- Extended Django User with role support
-- Email-based authentication
-- Timestamps and role checking methods
+Every app under `apps/` follows this layout:
 
-### Role System
-- **Role**: Dynamic role definitions
-- **UserRole**: Many-to-many relationship with assignment tracking
-- **AppRegistry**: App registration for dashboard display
+```
+apps/<app>/
+  models/          # One file per model group; __init__.py re-exports all
+  services/        # Business logic — stateless, no HTTP objects
+  serializers/     # DRF serializers
+  views/
+    <entity>_views.py    # DRF ViewSets / APIViews
+    template_views.py    # Django template views (Svelte island shells)
+  tests/
+    conftest.py          # factory_boy factories
+    test_models.py
+    test_services.py
+    test_api.py
+  migrations/
+```
 
-### App Registry
-- Automatic app discovery
-- Role-based access control
-- Dashboard integration
+### Frontend Pattern — Svelte Islands
 
-## Adding New Apps
+Each page is a minimal Django template containing:
+1. A `<script type="application/json">` tag with serialized init data
+2. A `<div id="svelte-*-root">` mount target
+3. A corresponding Vite entry (`frontend/src/entries/*.js`) that mounts the Svelte component
 
-1. **Create app in apps directory**:
-   ```bash
-   cd apps/
-   django-admin startapp your_app_name
-   ```
+Django serves pre-built assets at `:8000`. Vite HMR at `:5173` proxies everything else to Django.
 
-2. **Add to INSTALLED_APPS** in `core/settings.py`:
-   ```python
-   INSTALLED_APPS = [
-       # ... existing apps
-       'your_app_name',
-   ]
-   ```
+### Docker Services
 
-3. **Create app configuration** in `apps/your_app_name/apps.py`:
-   ```python
-   from django.apps import AppConfig
+| Service | Description |
+|---|---|
+| `web` | Django (uvicorn, `--reload`) — `:8000` |
+| `db` | PostgreSQL 15 — `:5433` (host) / `:5432` (container) |
+| `redis` | Redis 7 — `:6379` |
+| `asterisk` | Asterisk 20 — SIP `:5060/udp`, ARI `:8088`, RTP `:10000-10100/udp` |
+| `celery` | Celery worker |
+| `celery-beat` | Celery periodic task scheduler |
+| `ari-handler` | Long-running ARI WebSocket event handler (`run_ari_handler`) |
+| `autoheal` | Auto-restarts unhealthy containers |
 
-   class YourAppNameConfig(AppConfig):
-       default_auto_field = 'django.db.models.BigAutoField'
-       name = 'your_app_name'
-       verbose_name = 'Your App Display Name'
-       description = 'Description of your app'
-       icon = 'your-app-icon.svg'
-       url_name = 'your_app_name:index'
-   ```
+### Role Hierarchy
 
-4. **Register app in dashboard**:
-   ```bash
-   docker compose run --rm web python manage.py setup_system
-   ```
+Roles are hierarchical — each level includes all levels above it:
 
-## Role-Based Access Control
+```
+Owner
+└── Sales Director   is_sales_director()  — sees and manages everything
+    └── Sales Manager   is_sales_manager()  — manages team(s) and agents
+        └── Sales Agent   is_sales_agent()   — manages own leads
+IT Admin             — access to SIP/VoIP settings
+```
 
-The system includes middleware for role-based access control:
+### Lead / Opportunity Model
 
-- **Public URLs**: Login, admin login
-- **Protected URLs**: All other URLs require authentication
-- **Role-specific access**: Apps can define required roles
+A single `Lead` model uses `status` as the sole discriminator:
 
-### Managing Roles
+| Status | Shown in |
+|---|---|
+| `new` | Lead list (`/crm/leads/`) |
+| `converted` | Kanban board (pipeline opportunities) |
+| `won` | Won deals |
+| `lost` | Lost deals |
 
-1. Access admin panel: http://localhost:8000/admin
-2. Navigate to "Roles" section
-3. Create/modify roles as needed
-4. Assign roles to users via "User roles"
+---
 
-## Dashboard Features
+## Prerequisites
 
-- **Responsive Grid**: 6 columns on desktop, adapts to mobile
-- **App Cards**: Clean design with hover effects
-- **Auto-discovery**: New apps appear automatically
-- **Role filtering**: Users only see permitted apps
-- **Demo Mode**: Shows sample apps when no real apps are configured
+- Docker + Docker Compose
+- Node.js 18+ and npm
 
-## Development
+---
 
-### Hot Reloading
+## First-Time Setup
 
-The development setup includes hot reloading:
 ```bash
-docker compose up  # File changes trigger auto-reload
+# 1. Copy and fill in environment variables
+cp .env.example .env
+
+# 2. One-command setup: starts DB, runs migrations, builds frontend, starts all services
+make setup
 ```
 
-### Database
+The app will be available at **http://localhost:8000**.
 
-- **Service**: PostgreSQL 15
-- **Port**: 5433 (mapped from container's 5432)
-- Credentials are configured via `.env` file (see `.env.example`)
+---
 
-### Management Commands
+## Daily Development
 
-- `python manage.py setup_system`: Initialize roles and apps
-- `python manage.py setup_system --create-admin`: Also create admin user
+### Normal mode (`:8000`)
 
-## Customization
+Django serves pre-compiled Svelte assets. Python changes hot-reload automatically.
 
-### Styling
+```bash
+make run          # build frontend + start all Docker services
+make stop         # stop everything
+```
 
-- **Framework**: Tailwind CSS (CDN)
-- **Custom CSS**: `static/css/dashboard.css`
-- **Icons**: Emoji-based (easily replaceable)
+After editing Python code — no action needed (uvicorn `--reload` picks it up).
 
-### Templates
+After editing Svelte/JS:
 
-- **Base Template**: `templates/base.html`
-- **Dashboard**: `templates/core/dashboard.html`
-- **Auth**: `templates/registration/`
+```bash
+make restart-fe   # rebuild frontend + restart web
+```
 
-## Production Considerations
+After editing Celery tasks or services:
 
-1. **Security**:
-   - Change `SECRET_KEY` in production
-   - Set `DEBUG=False`
-   - Configure proper `ALLOWED_HOSTS`
+```bash
+make restart-workers   # restart celery + celery-beat + ari-handler
+```
 
-2. **Database**:
-   - Use managed PostgreSQL service
-   - Set up backups
-   - Configure SSL
+### HMR dev mode (`:5173`)
 
-3. **Static Files**:
-   - Use CDN for static files
-   - Configure `STATIC_ROOT` properly
+Vite serves assets with hot-reload and proxies everything else to Django.
 
-4. **Environment Variables**:
-   - Copy `.env.example` to `.env`
-   - Set production values
+```bash
+make dev          # switches Django to VITE_DEV_MODE=true + starts Vite HMR
+# → open http://localhost:5173
+# Ctrl+C to stop Vite, then:
+make run          # return to normal mode
+```
 
-## License
+---
 
-This project is a foundation for your ERP/CRM system. Modify as needed for your requirements.
+## All Make Commands
+
+```bash
+make help         # print this list with descriptions
+```
+
+| Command | Description |
+|---|---|
+| `make run` | Build frontend + start all services → `:8000` |
+| `make dev` | HMR mode: Django + Vite → `:5173` |
+| `make stop` | Stop Docker + kill Vite + kill ngrok |
+| `make restart` | Rebuild frontend + restart web + restart workers |
+| `make restart-be` | Restart web + all workers (after env/dep changes) |
+| `make restart-fe` | Rebuild frontend + restart web only |
+| `make restart-workers` | Restart celery + celery-beat + ari-handler |
+| `make logs` | Tail Django (web) logs |
+| `make logs-celery` | Tail celery + ari-handler logs |
+| `make migrate` | `makemigrations` + `migrate` |
+| `make init-db` | `migrate` + `init_settings` |
+| `make reset-db` | **Destructive** — wipe DB, delete migrations, start fresh |
+| `make fe-build` | Build Svelte assets → `static/dist/` |
+| `make fe-watch` | Watch + rebuild on change |
+| `make static` | `fe-build` + `collectstatic` (production prep) |
+| `make docker-build` | Rebuild Docker images |
+| `make ngrok` | Expose `:8000` via ngrok (for webhooks) |
+| `make setup` | First-time: `db-start` + `init-db` + `run` |
+
+---
+
+## Environment Variables
+
+Copy `.env.example` to `.env` and fill in:
+
+| Variable | Description |
+|---|---|
+| `SECRET_KEY` | Django secret key |
+| `DEBUG` | `1` for development, `0` for production |
+| `ALLOWED_HOSTS` | Comma-separated allowed hosts |
+| `POSTGRES_DB` / `POSTGRES_USER` / `POSTGRES_PASSWORD` | Database credentials |
+| `ARI_USER` / `ARI_PASSWORD` | Asterisk ARI credentials |
+| `EXTERNAL_IP` | Server's public IP (for Asterisk NAT) |
+| `TZ` | Timezone (e.g. `Asia/Tbilisi`) |
+
+AI / integration keys are stored in the database via **Settings → Transcription** (ElevenLabs, Anthropic).
+
+---
+
+## Running Tests
+
+Tests run inside Docker against the real database:
+
+```bash
+docker compose run --rm web python -m pytest apps/<app>/tests/ -v
+```
+
+Run all tests:
+
+```bash
+docker compose run --rm web python -m pytest -v
+```
+
+**Note**: Use `api_client.force_login(user)` in API tests — not `force_authenticate` — because `RoleBasedAccessMiddleware` checks `request.user.is_authenticated` at the Django layer before DRF runs.
+
+---
+
+## Useful URLs
+
+| URL | Description |
+|---|---|
+| `http://localhost:8000` | Application |
+| `http://localhost:8000/admin` | Django admin |
+| `http://localhost:8000/settings` | Settings (roles, users, VoIP, AI) |
+| `http://localhost:8000/crm/leads` | Lead list |
+| `http://localhost:8000/crm/kanban` | Opportunity pipeline (Kanban) |

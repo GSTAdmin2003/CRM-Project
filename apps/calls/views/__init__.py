@@ -1,10 +1,7 @@
 from .template_views import (
     active_calls,
     answer_call,
-    call_detail,
-    call_list,
     call_status,
-    dialpad,
     hangup_call,
     initiate_call,
     link_call_to_contact,
@@ -16,9 +13,6 @@ from .template_views import (
 )
 
 __all__ = [
-    "call_list",
-    "call_detail",
-    "dialpad",
     "initiate_call",
     "register_inbound_call",
     "hangup_call",

@@ -7,7 +7,12 @@ has been moved to CallService where appropriate.
 
 from django import forms
 from django.contrib import messages
-from django.contrib.auth.decorators import login_required
+from django.contrib.auth.decorators import login_required, user_passes_test
+
+_it_admin_required = user_passes_test(
+    lambda u: u.has_role('IT Admin') or u.has_role('Owner') or u.is_staff,
+    login_url='/settings/',
+)
 from django.http import HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
@@ -15,85 +20,6 @@ from django.views.decorators.http import require_GET, require_POST
 
 from ..models import Call, CallRecording, SIPSettings
 from ..services import CallService
-
-
-@login_required
-def call_list(request):
-    """Call history list — renders Svelte shell."""
-    import json
-    from django.core.serializers.json import DjangoJSONEncoder
-
-    init_data = {
-        "isManager": request.user.is_sales_manager(),
-        "isExecutive": request.user.is_sales_executive(),
-        "apiUrls": {
-            "calls": "/calls/api/calls/",
-            "callDetail": "/calls/{id}/",
-        },
-    }
-    return render(request, "calls/call_list.html", {
-        "init_data_json": json.dumps(init_data, cls=DjangoJSONEncoder),
-    })
-
-
-@login_required
-def call_detail(request, pk):
-    """Call detail — renders Svelte shell."""
-    import json
-    from django.core.serializers.json import DjangoJSONEncoder
-    from apps.calls.serializers.call import CallDetailSerializer
-
-    call = get_object_or_404(
-        Call.objects.select_related("contact", "opportunity", "user", "recording"),
-        pk=pk,
-    )
-
-    # Preload related objects to avoid lazy-load errors in serializer
-    try:
-        _ = call.transcript
-    except Exception:
-        pass
-    try:
-        _ = call.analysis
-    except Exception:
-        pass
-    try:
-        logs = list(call.logs.order_by("timestamp"))
-    except Exception:
-        logs = []
-
-    serializer_data = CallDetailSerializer(call, context={'request': request}).data
-
-    recording_pk = None
-    if hasattr(call, 'recording') and call.recording is not None:
-        recording_pk = call.recording.pk
-
-    init_data = {
-        "call": dict(serializer_data),
-        "apiUrls": {
-            "callDetail": f"/calls/api/calls/{call.pk}/",
-            "hangup": f"/calls/{call.pk}/hangup/",
-            "startTranscription": f"/calls/{call.pk}/transcript/start/",
-            "cancelTranscription": f"/calls/{call.pk}/transcript/cancel/",
-            "startAnalysis": f"/calls/{call.pk}/analysis/start/",
-            "analysisStatus": f"/calls/{call.pk}/analysis/status/",
-            "updateNotes": f"/calls/{call.pk}/notes/",
-            "linkContact": f"/calls/{call.pk}/link-contact/",
-            "linkOpportunity": f"/calls/{call.pk}/link-opportunity/",
-            "recordingDownload": f"/calls/recording/{recording_pk}/download/" if recording_pk else None,
-            "contacts": "/contacts/api/contacts/",
-            "leads": "/crm/api/leads/",
-        }
-    }
-    return render(request, "calls/call_detail.html", {
-        "init_data_json": json.dumps(init_data, cls=DjangoJSONEncoder),
-    })
-
-
-@login_required
-def dialpad(request):
-    """Redirect to activities dashboard — dialpad is now inline on the lead form."""
-    return redirect("activities:dashboard")
 
 
 @login_required
@@ -133,14 +59,14 @@ def lookup_inbound_call(request):
             leads = list(
                 Lead.objects.filter(
                     contact_id__in=sibling_ids,
-                    lead_type=Lead.TYPE_OPPORTUNITY,
+                    status="converted",
                 ).order_by("-updated_at")
             )
         if not leads:
             leads = list(
                 Lead.objects.filter(
                     contact__in=contacts_qs,
-                    lead_type=Lead.TYPE_OPPORTUNITY,
+                    status="converted",
                 ).order_by("-updated_at")
             )
 
@@ -150,7 +76,7 @@ def lookup_inbound_call(request):
         if normalized and normalized != from_number:
             lead_phone_q |= Q(phone=normalized)
         leads = list(
-            Lead.objects.filter(lead_phone_q, lead_type=Lead.TYPE_OPPORTUNITY)
+            Lead.objects.filter(lead_phone_q, status="converted")
             .order_by("-updated_at")
         )
 
@@ -203,14 +129,14 @@ def register_inbound_call(request):
             leads = list(
                 Lead.objects.filter(
                     contact_id__in=sibling_ids,
-                    lead_type=Lead.TYPE_OPPORTUNITY,
+                    status="converted",
                 ).order_by("-updated_at")
             )
         if not leads:
             leads = list(
                 Lead.objects.filter(
                     contact__in=contacts_qs,
-                    lead_type=Lead.TYPE_OPPORTUNITY,
+                    status="converted",
                 ).order_by("-updated_at")
             )
 
@@ -220,7 +146,7 @@ def register_inbound_call(request):
         if normalized and normalized != from_number:
             lead_phone_q |= Q(phone=normalized)
         leads = list(
-            Lead.objects.filter(lead_phone_q, lead_type=Lead.TYPE_OPPORTUNITY)
+            Lead.objects.filter(lead_phone_q, status="converted")
             .order_by("-updated_at")
         )
 
@@ -229,12 +155,11 @@ def register_inbound_call(request):
         display_name = primary_contact.name if primary_contact else from_number
         new_lead = Lead.objects.create(
             title=f"Inbound call from {display_name}",
-            lead_type=Lead.TYPE_OPPORTUNITY,
             phone=from_number,
             full_name=display_name,
             contact=primary_contact,
             source="cold_call",
-            status="contacted",
+            status="converted",
             assigned_to=request.user,
             created_by=request.user,
         )
@@ -376,13 +301,13 @@ def record_missed_call(request):
             ).values_list("id", flat=True)
             leads = list(
                 Lead.objects.filter(
-                    contact_id__in=sibling_ids, lead_type=Lead.TYPE_OPPORTUNITY
+                    contact_id__in=sibling_ids, status="converted"
                 ).order_by("-updated_at")
             )
         if not leads:
             leads = list(
                 Lead.objects.filter(
-                    contact__in=contacts_qs, lead_type=Lead.TYPE_OPPORTUNITY
+                    contact__in=contacts_qs, status="converted"
                 ).order_by("-updated_at")
             )
     if not leads:
@@ -390,7 +315,7 @@ def record_missed_call(request):
         if normalized and normalized != from_number:
             lead_phone_q |= Q(phone=normalized)
         leads = list(
-            Lead.objects.filter(lead_phone_q, lead_type=Lead.TYPE_OPPORTUNITY).order_by(
+            Lead.objects.filter(lead_phone_q, status="converted").order_by(
                 "-updated_at"
             )
         )
@@ -1325,6 +1250,7 @@ class SIPWorkingHoursForm(forms.ModelForm):
 
 
 @login_required
+@_it_admin_required
 def voip_config_view(request):
     """VoIP Configuration — SIP credentials."""
     from ..asterisk_config import apply_sip_settings, apply_schedule_settings
@@ -1404,6 +1330,7 @@ def voip_config_view(request):
 
 
 @login_required
+@_it_admin_required
 def voip_sounds_view(request):
     """VoIP Sounds — hold music, welcome sound, non-working hours sound."""
     from ..asterisk_config import apply_moh_settings, apply_schedule_settings
@@ -1474,6 +1401,7 @@ def voip_sounds_view(request):
 
 
 @login_required
+@_it_admin_required
 def voip_working_hours_view(request):
     """VoIP Working Hours — schedule and working days."""
     from ..asterisk_config import apply_schedule_settings

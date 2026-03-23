@@ -96,7 +96,7 @@
                                             <div class="ml-2 flex-shrink-0 flex">
                                                 {% if company.contact_type != 'individual' %}
                                                 <p class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-green-100 text-green-800">
-                                                    {{ company.contacts.count }} representative{{ company.contacts.count|pluralize }}
+                                                    {{ company.contacts_count }} representative{{ company.contacts_count|pluralize }}
                                                 </p>
                                                 {% endif %}
                                             </div>
@@ -135,6 +135,43 @@
             {% endfor %}
         </ul>
     </div>
+
+    <!-- Pagination -->
+    {% if page_obj.paginator.num_pages > 1 %}
+    <div class="mt-6 flex items-center justify-between">
+        <p class="text-sm text-gray-700">
+            Showing <span class="font-medium">{{ page_obj.start_index }}</span>–<span class="font-medium">{{ page_obj.end_index }}</span>
+            of <span class="font-medium">{{ page_obj.paginator.count }}</span> contacts
+        </p>
+        <nav class="flex items-center gap-1">
+            {% if page_obj.has_previous %}
+            <a href="?page={{ page_obj.previous_page_number }}{% if search_query %}&search={{ search_query }}{% endif %}"
+               class="px-3 py-1 text-sm rounded border border-gray-300 hover:bg-gray-50">
+                &laquo; Prev
+            </a>
+            {% endif %}
+
+            {% for num in page_obj.paginator.page_range %}
+                {% if num == page_obj.number %}
+                <span class="px-3 py-1 text-sm rounded border border-indigo-500 bg-indigo-600 text-white font-medium">{{ num }}</span>
+                {% elif num == 1 or num == page_obj.paginator.num_pages or num >= page_obj.number|add:"-3" and num <= page_obj.number|add:"3" %}
+                <a href="?page={{ num }}{% if search_query %}&search={{ search_query }}{% endif %}"
+                   class="px-3 py-1 text-sm rounded border border-gray-300 hover:bg-gray-50">{{ num }}</a>
+                {% elif num == page_obj.number|add:"-4" or num == page_obj.number|add:"4" %}
+                <span class="px-2 py-1 text-gray-400">…</span>
+                {% endif %}
+            {% endfor %}
+
+            {% if page_obj.has_next %}
+            <a href="?page={{ page_obj.next_page_number }}{% if search_query %}&search={{ search_query }}{% endif %}"
+               class="px-3 py-1 text-sm rounded border border-gray-300 hover:bg-gray-50">
+                Next &raquo;
+            </a>
+            {% endif %}
+        </nav>
+    </div>
+    {% endif %}
+
     {% else %}
     <!-- Empty State -->
     <div class="bg-white shadow rounded-lg">

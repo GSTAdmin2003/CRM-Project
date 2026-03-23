@@ -23,9 +23,9 @@ help:
 	@echo "  make stop             stop Docker + kill Vite + kill ngrok"
 	@echo ""
 	@echo "Restart  (normal mode)"
-	@echo "  make restart          rebuild frontend + restart workers"
+	@echo "  make restart          rebuild frontend + restart web + restart workers"
 	@echo "  make restart-be       restart web + all workers  (after env/dep changes)"
-	@echo "  make restart-fe       rebuild frontend  (Django auto-reloads via manifest watch)"
+	@echo "  make restart-fe       rebuild frontend + restart web  (runs collectstatic)"
 	@echo "  make restart-workers  restart celery + celery-beat + ari-handler"
 	@echo ""
 	@echo "Logs"
@@ -103,19 +103,21 @@ stop:
 # ari-handler:
 # ─────────────────────────────────────────────────────────────────────────────
 
-# Most common: rebuild frontend + restart workers after code changes.
-restart: restart-workers restart-fe
+# Most common: rebuild frontend + restart web + restart workers after code changes.
+restart: restart-fe restart-workers
 
 # After env var or requirements changes.
 restart-be:
 	docker compose restart web celery celery-beat ari-handler
 
 # After Svelte/JS changes only.
-# Django auto-reloads when static/dist/.vite/manifest.json changes.
+# Must restart web so Docker re-runs collectstatic with the new build.
 restart-fe:
 	@echo "Rebuilding frontend..."
 	npm run build
-	@echo "Done → Django reloading from manifest change  (http://localhost:8000)"
+	@echo "Restarting web (runs collectstatic on startup)..."
+	docker compose restart web
+	@echo "Done → http://localhost:8000"
 
 # After Python task/service code changes only.
 restart-workers:

@@ -44,6 +44,16 @@ class ActivityViewSet(viewsets.ModelViewSet):
         return ActivityDetailSerializer
 
     def get_queryset(self):
+        lead_id = self.request.query_params.get("lead")
+
+        # When filtering by a specific lead, skip date/team filters entirely
+        if lead_id:
+            return ActivityService.get_activities_for_user(
+                user=self.request.user,
+                view_context="personal",
+                date_filter="all",
+            ).filter(lead_id=lead_id)
+
         view_context = self.request.query_params.get("view", "personal")
         team_id = self.request.query_params.get("team")
         date_filter = self.request.query_params.get("filter", "week")

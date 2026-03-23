@@ -45,7 +45,7 @@
     loading = true;
     error = '';
     const params = new URLSearchParams({
-      lead_type: 'opportunity',
+      type: 'opportunity',
       page: String(page),
     });
     if (filters.stage_id) params.set('stage', filters.stage_id);

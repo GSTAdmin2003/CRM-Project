@@ -27,6 +27,16 @@
         dropdownOpen = false;
     }
 
+    function handleMarkWon() {
+        dispatch('markWon', { leadId: lead.id });
+        dropdownOpen = false;
+    }
+
+    function handleMarkLost() {
+        dispatch('markLost', { leadId: lead.id, title: lead.title });
+        dropdownOpen = false;
+    }
+
     function formatValue(val) {
         return parseFloat(val || 0).toLocaleString();
     }
@@ -85,6 +95,18 @@
                         on:click={handleEdit}
                     >
                         <i class="fas fa-edit mr-2"></i>Edit
+                    </button>
+                    <button
+                        class="block w-full px-3 py-2 text-left text-sm text-green-700 hover:bg-green-50"
+                        on:click={handleMarkWon}
+                    >
+                        <i class="fas fa-trophy mr-2"></i>Mark Won
+                    </button>
+                    <button
+                        class="block w-full px-3 py-2 text-left text-sm text-orange-600 hover:bg-orange-50"
+                        on:click={handleMarkLost}
+                    >
+                        <i class="fas fa-times-circle mr-2"></i>Mark Lost
                     </button>
                     <button
                         class="block w-full px-3 py-2 text-left text-sm text-red-600 hover:bg-red-50"

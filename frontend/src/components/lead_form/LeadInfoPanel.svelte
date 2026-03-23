@@ -157,6 +157,7 @@
 <div class="bg-white rounded-lg border border-gray-200 p-4 space-y-3">
   <h3 class="text-sm font-semibold text-gray-700">Lead Details</h3>
 
+  {#if lead.status !== 'new'}
   <!-- Title -->
   <div>
     <label class="block text-xs font-medium text-gray-500 mb-1">Title</label>
@@ -191,8 +192,10 @@
       />
     </div>
   </div>
+  {/if}
 
   <!-- Close date & Source -->
+  {#if lead.status !== 'new'}
   <div class="grid grid-cols-2 gap-2">
     <div>
       <label class="block text-xs font-medium text-gray-500 mb-1">Expected Close Date</label>
@@ -216,6 +219,20 @@
       </select>
     </div>
   </div>
+  {:else}
+  <div>
+    <label class="block text-xs font-medium text-gray-500 mb-1">Source</label>
+    <select
+      bind:value={source}
+      on:change={() => saveField('source', source)}
+      class="w-full border border-gray-200 rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+    >
+      {#each SOURCE_OPTIONS as [val, label]}
+        <option value={val}>{label}</option>
+      {/each}
+    </select>
+  </div>
+  {/if}
 
   <!-- Contact searchable select -->
   <div>

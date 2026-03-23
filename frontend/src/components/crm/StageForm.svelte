@@ -9,7 +9,6 @@
   let name = stage?.name ?? '';
   let color = stage?.color ?? '#6B7280';
   let probability = stage?.probability ?? 0;
-  let isClosedStage = stage?.isClosedStage ?? false;
   let salesTeamId = stage?.salesTeamId ?? teamId ?? '';
   let saving = false;
   let error = '';
@@ -21,7 +20,6 @@
       name,
       color,
       probability,
-      is_closed_stage: isClosedStage,
       sales_team: salesTeamId || null,
     };
     const res = stage
@@ -97,19 +95,6 @@
         class="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
       />
       <p class="mt-1 text-xs text-gray-500">Default win probability for opportunities in this stage (0–100)</p>
-    </div>
-
-    <!-- Is Closed Stage -->
-    <div>
-      <label class="flex items-center gap-2 cursor-pointer">
-        <input
-          type="checkbox"
-          bind:checked={isClosedStage}
-          class="h-4 w-4 text-indigo-600 border-gray-300 rounded focus:ring-indigo-500"
-        />
-        <span class="text-sm font-semibold text-gray-700">This is a closed stage</span>
-      </label>
-      <p class="mt-1 ml-6 text-xs text-gray-500">Mark this stage as closed (e.g., "Closed Won" or "Closed Lost")</p>
     </div>
 
     <!-- Team -->

@@ -13,7 +13,7 @@
   async function search() {
     if (!query.trim()) return;
     searching = true;
-    const res = await fetch(`${apiUrls.leads}?search=${encodeURIComponent(query)}&lead_type=opportunity&limit=10`);
+    const res = await fetch(`${apiUrls.leads}?search=${encodeURIComponent(query)}&type=opportunity&limit=10`);
     if (res.ok) {
       const data = await res.json();
       results = data.results ?? data;

@@ -37,7 +37,7 @@
   async function searchLeads() {
     if (leadSearchQuery.length < 2) { leads = []; return; }
     try {
-      const res = await apiGet(`/crm/api/leads/?search=${encodeURIComponent(leadSearchQuery)}&lead_type=opportunity`);
+      const res = await apiGet(`/crm/api/leads/?search=${encodeURIComponent(leadSearchQuery)}&type=opportunity`);
       if (res.ok) {
         const data = await res.json();
         leads = (data.results || data).slice(0, 8);

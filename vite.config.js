@@ -20,7 +20,6 @@ export default defineConfig({
         opportunity_list: path.resolve(__dirname, 'frontend/src/entries/opportunity_list.js'),
         lead_incoming: path.resolve(__dirname, 'frontend/src/entries/lead_incoming.js'),
         activities: path.resolve(__dirname, 'frontend/src/entries/activities.js'),
-        calls: path.resolve(__dirname, 'frontend/src/entries/calls.js'),
         // Phase 1 — CRM management pages
         crm_dashboard: path.resolve(__dirname, 'frontend/src/entries/crm_dashboard.js'),
         lead_detail: path.resolve(__dirname, 'frontend/src/entries/lead_detail.js'),
@@ -33,16 +32,12 @@ export default defineConfig({
         lead_import: path.resolve(__dirname, 'frontend/src/entries/lead_import.js'),
         activity_form: path.resolve(__dirname, 'frontend/src/entries/activity_form.js'),
         activity_detail: path.resolve(__dirname, 'frontend/src/entries/activity_detail.js'),
-        // Phase 3 — Call detail
-        call_detail: path.resolve(__dirname, 'frontend/src/entries/call_detail.js'),
         // Phase 4 — VoIP/SIP settings
         sip_settings: path.resolve(__dirname, 'frontend/src/entries/sip_settings.js'),
         voip_config: path.resolve(__dirname, 'frontend/src/entries/voip_config.js'),
         voip_sounds: path.resolve(__dirname, 'frontend/src/entries/voip_sounds.js'),
         voip_working_hours: path.resolve(__dirname, 'frontend/src/entries/voip_working_hours.js'),
         // Phase 5 — Profile + user management settings
-        settings_dashboard: path.resolve(__dirname, 'frontend/src/entries/settings_dashboard.js'),
-        profile_overview: path.resolve(__dirname, 'frontend/src/entries/profile_overview.js'),
         profile_personal_info: path.resolve(__dirname, 'frontend/src/entries/profile_personal_info.js'),
         profile_security: path.resolve(__dirname, 'frontend/src/entries/profile_security.js'),
         profile_preferences: path.resolve(__dirname, 'frontend/src/entries/profile_preferences.js'),
@@ -57,10 +52,7 @@ export default defineConfig({
         pitch_manager: path.resolve(__dirname, 'frontend/src/entries/pitch_manager.js'),
         elevenlabs_config: path.resolve(__dirname, 'frontend/src/entries/elevenlabs_config.js'),
         vocabulary_editor: path.resolve(__dirname, 'frontend/src/entries/vocabulary_editor.js'),
-        ai_config: path.resolve(__dirname, 'frontend/src/entries/ai_config.js'),
         team_products: path.resolve(__dirname, 'frontend/src/entries/team_products.js'),
-        // Phase 7 — Global stages
-        global_stages: path.resolve(__dirname, 'frontend/src/entries/global_stages.js'),
         // Phase 8 — Remaining CRM pages
         team_stage_form: path.resolve(__dirname, 'frontend/src/entries/team_stage_form.js'),
         team_stage_confirm_delete: path.resolve(__dirname, 'frontend/src/entries/team_stage_confirm_delete.js'),

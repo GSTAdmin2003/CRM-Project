@@ -1,5 +1,5 @@
 <script>
-  import { apiDelete, apiPost } from '../../utils/api.js';
+  import { apiDelete, apiPost, apiPatch } from '../../utils/api.js';
   import ConfirmModal from '../shared/ConfirmModal.svelte';
   import StatusBadge from '../shared/StatusBadge.svelte';
 
@@ -8,8 +8,12 @@
 
   let showDeleteModal = false;
   let showConvertModal = false;
+  let showRejectModal = false;
   let deleting = false;
   let converting = false;
+  let rejecting = false;
+
+  $: isActioned = lead.status === 'converted' || lead.status === 'rejected';
 
   function formatCurrency(value) {
     if (value == null) return '—';
@@ -47,9 +51,20 @@
     }
   }
 
-  const LEAD_TYPE_MAP = {
-    lead:        { label: 'Lead',        color: 'blue'  },
-    opportunity: { label: 'Opportunity', color: 'green' },
+  async function doReject() {
+    rejecting = true;
+    const res = await apiPatch(apiUrls.lead || `/crm/api/leads/${lead.id}/`, { status: 'rejected' });
+    rejecting = false;
+    showRejectModal = false;
+    if (res.ok) {
+      lead = { ...lead, status: 'rejected' };
+    }
+  }
+
+  const STATUS_MAP = {
+    new:       { label: 'Lead',      color: 'blue'  },
+    converted: { label: 'Converted', color: 'green' },
+    rejected:  { label: 'Lost',      color: 'red'   },
   };
 </script>
 
@@ -59,20 +74,27 @@
     <div>
       <div class="flex items-center gap-3 mb-1">
         <h1 class="text-3xl font-bold tracking-tight text-gray-900">{lead.title || 'Lead Detail'}</h1>
-        <StatusBadge status={lead.leadType} map={LEAD_TYPE_MAP} />
+        <StatusBadge status={lead.status} map={STATUS_MAP} />
       </div>
-      {#if lead.contactName}
-        <p class="text-lg text-gray-600">{lead.contactName}</p>
+      {#if lead.contact_full_name}
+        <p class="text-lg text-gray-600">{lead.contact_full_name}</p>
       {/if}
     </div>
     <div class="flex items-center gap-3">
-      {#if lead.leadType === 'lead'}
+      {#if !isActioned}
         <button
           type="button"
           class="px-4 py-2 text-sm font-medium text-white bg-green-600 hover:bg-green-700 rounded-md transition-colors"
           on:click={() => (showConvertModal = true)}
         >
-          Convert to Opportunity
+          Convert
+        </button>
+        <button
+          type="button"
+          class="px-4 py-2 text-sm font-medium text-white bg-orange-500 hover:bg-orange-600 rounded-md transition-colors"
+          on:click={() => (showRejectModal = true)}
+        >
+          Lost
         </button>
       {/if}
       <a
@@ -99,23 +121,23 @@
       <div class="grid grid-cols-2 gap-4 text-sm">
         <div>
           <p class="text-xs font-medium text-gray-500 uppercase tracking-wide mb-0.5">Contact</p>
-          <p class="text-gray-900">{lead.contactName || '—'}</p>
+          <p class="text-gray-900">{lead.contact_full_name || '—'}</p>
         </div>
         <div>
           <p class="text-xs font-medium text-gray-500 uppercase tracking-wide mb-0.5">Stage</p>
-          <p class="text-gray-900">{lead.stageName || '—'}</p>
+          <p class="text-gray-900">{lead.stage?.name || '—'}</p>
         </div>
         <div>
           <p class="text-xs font-medium text-gray-500 uppercase tracking-wide mb-0.5">Estimated Value</p>
-          <p class="text-green-700 font-medium">{formatCurrency(lead.estimatedValue)}</p>
+          <p class="text-green-700 font-medium">{formatCurrency(lead.estimated_value)}</p>
         </div>
         <div>
           <p class="text-xs font-medium text-gray-500 uppercase tracking-wide mb-0.5">Assigned To</p>
-          <p class="text-gray-900">{lead.assignedToName || '—'}</p>
+          <p class="text-gray-900">{lead.assigned_to_name || '—'}</p>
         </div>
         <div>
           <p class="text-xs font-medium text-gray-500 uppercase tracking-wide mb-0.5">Created</p>
-          <p class="text-gray-900">{formatDate(lead.createdAt)}</p>
+          <p class="text-gray-900">{formatDate(lead.created_at)}</p>
         </div>
       </div>
     </div>
@@ -142,6 +164,18 @@
     danger={true}
     onConfirm={doDelete}
     onCancel={() => { if (!deleting) showDeleteModal = false; }}
+  />
+{/if}
+
+{#if showRejectModal}
+  <ConfirmModal
+    title="Mark as Lost"
+    message="Mark this lead as lost? It will be set to Rejected status."
+    confirmLabel="Mark Lost"
+    loading={rejecting}
+    danger={false}
+    onConfirm={doReject}
+    onCancel={() => { if (!rejecting) showRejectModal = false; }}
   />
 {/if}
 

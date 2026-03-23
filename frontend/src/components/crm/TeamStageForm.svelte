@@ -8,7 +8,6 @@
   let name = stage?.name ?? '';
   let color = stage?.color ?? '#6B7280';
   let probability = stage?.probability ?? 0;
-  let isClosedStage = stage?.is_closed_stage ?? false;
   let saving = false;
   let error = '';
 
@@ -21,7 +20,6 @@
       name,
       color,
       probability,
-      is_closed_stage: isClosedStage,
       sales_team: team.id,
     };
     const res = stage
@@ -87,13 +85,6 @@
         max="100"
         class="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
       />
-    </div>
-
-    <div>
-      <label class="flex items-center gap-2 cursor-pointer">
-        <input type="checkbox" bind:checked={isClosedStage} class="h-4 w-4 text-indigo-600 border-gray-300 rounded" />
-        <span class="text-sm font-semibold text-gray-700">This is a closed stage</span>
-      </label>
     </div>
 
     <div class="flex items-center justify-between pt-2 border-t border-gray-100">

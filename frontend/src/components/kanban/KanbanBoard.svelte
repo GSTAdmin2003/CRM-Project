@@ -57,6 +57,38 @@
         }
     }
 
+    async function handleMarkWon({ detail }) {
+        const { leadId } = detail;
+        try {
+            const res = await apiPost(`/crm/api/leads/${leadId}/mark_won/`, {});
+            if (!res.ok) {
+                const body = await res.json().catch(() => ({}));
+                alert(body.detail || 'Error marking as won.');
+                return;
+            }
+            await loadKanbanData();
+        } catch (e) {
+            console.error('Mark won error:', e);
+        }
+    }
+
+    async function handleMarkLost({ detail }) {
+        const { leadId, title } = detail;
+        const reason = prompt(`Mark "${title}" as lost.\n\nReason (optional):`);
+        if (reason === null) return; // user cancelled
+        try {
+            const res = await apiPost(`/crm/api/leads/${leadId}/mark_lost/`, { reason });
+            if (!res.ok) {
+                const body = await res.json().catch(() => ({}));
+                alert(body.detail || 'Error marking as lost.');
+                return;
+            }
+            await loadKanbanData();
+        } catch (e) {
+            console.error('Mark lost error:', e);
+        }
+    }
+
     async function handleDeleteLead({ detail }) {
         const { leadId, title } = detail;
         if (!confirm(`Are you sure you want to delete the opportunity "${title}"?\n\nThis action cannot be undone.`)) {
@@ -222,6 +254,8 @@
                     {selectedTeamId}
                     on:stageUpdate={handleStageUpdate}
                     on:deleteLead={handleDeleteLead}
+                    on:markWon={handleMarkWon}
+                    on:markLost={handleMarkLost}
                 />
             {/each}
         </div>

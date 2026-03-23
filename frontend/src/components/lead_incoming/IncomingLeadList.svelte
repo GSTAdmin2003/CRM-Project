@@ -6,7 +6,6 @@
   export let isExecutive = false;
   export let isManager = false;
   export let teams = [];
-  export let statusChoices = [];
   export let apiUrls = {};
 
   let leads = [];
@@ -17,7 +16,7 @@
   let pageSize = 25;
 
   // Filters
-  let statusFilter = '';
+  let statusFilter = 'new';
   let teamFilter = '';
   let searchQuery = '';
 
@@ -43,8 +42,7 @@
   async function fetchLeads() {
     loading = true;
     error = '';
-    const params = new URLSearchParams({ lead_type: 'lead', page: String(page) });
-    if (statusFilter) params.set('status', statusFilter);
+    const params = new URLSearchParams({ type: 'lead', status: statusFilter, page: String(page) });
     if (teamFilter) params.set('sales_team', teamFilter);
     if (searchQuery) params.set('search', searchQuery);
 
@@ -138,10 +136,8 @@
       on:change={() => { page = 1; fetchLeads(); }}
       class="border border-gray-200 rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
     >
-      <option value="">All statuses</option>
-      {#each statusChoices as [val, label]}
-        <option value={val}>{label}</option>
-      {/each}
+      <option value="new">New</option>
+      <option value="rejected">Lost</option>
     </select>
     {#if isExecutive && teams.length > 0}
       <select

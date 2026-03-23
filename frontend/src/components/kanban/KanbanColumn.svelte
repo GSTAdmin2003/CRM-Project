@@ -43,6 +43,14 @@
         dispatch('deleteLead', { leadId: detail.leadId, title: detail.title });
     }
 
+    function handleMarkWon({ detail }) {
+        dispatch('markWon', { leadId: detail.leadId });
+    }
+
+    function handleMarkLost({ detail }) {
+        dispatch('markLost', { leadId: detail.leadId, title: detail.title });
+    }
+
     function formatTotal(val) {
         return Math.round(val).toLocaleString();
     }
@@ -76,6 +84,8 @@
                     stageId={stageData.stage.id}
                     on:edit={handleEdit}
                     on:delete={handleDelete}
+                    on:markWon={handleMarkWon}
+                    on:markLost={handleMarkLost}
                 />
             {/each}
         </div>

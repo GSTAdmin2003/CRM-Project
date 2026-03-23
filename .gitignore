@@ -40,3 +40,8 @@ celerybeat.pid
 # Misc
 cookies.txt
 *.sqlite3
+
+# Large data import files
+companies.json
+companies2.json
+companies_full.json
